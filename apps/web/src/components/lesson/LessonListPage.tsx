@@ -18,6 +18,8 @@ const BRANCH_LABEL: Record<string, string> = {
   repertoire: "Repertoire",
 };
 
+const LEVEL_ORDER = ["foundation", "elementary", "intermediate", "late-intermediate", "advanced", "virtuoso"];
+
 function StatusBadge({ status, bestScore }: { status: LessonStatus; bestScore: number | null }) {
   if (status === "completed") {
     return (
@@ -54,11 +56,18 @@ export default function LessonListPage() {
     return <p className="text-slate-500 dark:text-slate-300">Loading lessons…</p>;
   }
 
+  const levelIndices = lessons.map((l) => LEVEL_ORDER.indexOf(l.level)).filter((i) => i >= 0);
+  const lowestLevel = levelIndices.length ? LEVEL_LABEL[LEVEL_ORDER[Math.min(...levelIndices)]] : "";
+  const highestLevel = levelIndices.length ? LEVEL_LABEL[LEVEL_ORDER[Math.max(...levelIndices)]] : "";
+  const levelRange = lowestLevel === highestLevel ? lowestLevel : `${lowestLevel} through ${highestLevel}`;
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Classical Technical Path</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300">Foundation through Elementary — 12 lessons</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          {levelRange} — {lessons.length} lesson{lessons.length === 1 ? "" : "s"}
+        </p>
       </div>
       <ol className="space-y-2">
         {lessons.map((lesson, index) => {
