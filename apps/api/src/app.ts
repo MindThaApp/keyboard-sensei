@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import { readFile } from "node:fs/promises";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import { Prisma, ProgressStatus } from "@prisma/client";
@@ -9,10 +10,13 @@ import { calculateAssessmentPlacement, validateLesson, validateMidiExercise } fr
 import { createAccessToken, requireAuth } from "./auth.js";
 import { prisma } from "./db.js";
 import { env } from "./config.js";
+import { lessons } from "./content.js";
+import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage, TtsLimitError } from "./tts.js";
 
 const credentials=z.object({email:z.string().email(),password:z.string().min(8)});
 const registerSchema=credentials.extend({display_name:z.string().min(1).max(80)});
-const updateProfileSchema=z.object({display_name:z.string().trim().min(1).max(80)});
+const updateProfileSchema=z.object({display_name:z.string().trim().min(1).max(80).optional(),narration_voice_id:z.string().min(1).max(100).nullable().optional()}).refine(value=>value.display_name!==undefined||value.narration_voice_id!==undefined,"Supply at least one profile field");
+const narrationSchema=z.object({voiceId:z.string().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/)});
 const changePasswordSchema=z.object({currentPassword:z.string().min(1),newPassword:z.string().min(8)});
 const rawEventSchema=z.object({note:z.number().int().min(0).max(127),velocity:z.number().int().min(0).max(127),type:z.enum(["noteon","noteoff"]),timestampMs:z.number().nonnegative()});
 const performedSchema=z.object({note:z.number().int().min(0).max(127),velocity:z.number().int().min(0).max(127),startTimestampMs:z.number().nonnegative(),endTimestampMs:z.number().nonnegative().nullable(),durationMs:z.number().nonnegative().nullable()});
@@ -24,15 +28,20 @@ export const app: ReturnType<typeof express>=express();
 app.use(cors({origin:env.CORS_ORIGIN.split(",").map(value=>value.trim())})); app.use(express.json({limit:"1mb"}));
 app.get("/health",(_req,res)=>res.json({status:"ok"}));
 
-app.post("/auth/register",async(req,res,next)=>{try{const input=registerSchema.parse(req.body);const password_hash=await bcrypt.hash(input.password,12);const user=await prisma.user.create({data:{email:input.email.toLowerCase(),display_name:input.display_name,password_hash}});res.status(201).json({accessToken:createAccessToken({sub:user.id,email:user.email}),user:{id:user.id,email:user.email,display_name:user.display_name}})}catch(e){next(e)}});
-app.post("/auth/login",async(req,res,next)=>{try{const input=credentials.parse(req.body);const user=await prisma.user.findUnique({where:{email:input.email.toLowerCase()}});if(!user||!await bcrypt.compare(input.password,user.password_hash)){res.status(401).json({error:{code:"invalid_credentials",message:"Email or password is incorrect"}});return}res.json({accessToken:createAccessToken({sub:user.id,email:user.email}),user:{id:user.id,email:user.email,display_name:user.display_name}})}catch(e){next(e)}});
+app.post("/auth/register",async(req,res,next)=>{try{const input=registerSchema.parse(req.body);const password_hash=await bcrypt.hash(input.password,12);const user=await prisma.user.create({data:{email:input.email.toLowerCase(),display_name:input.display_name,password_hash}});res.status(201).json({accessToken:createAccessToken({sub:user.id,email:user.email}),user:{id:user.id,email:user.email,display_name:user.display_name,narration_voice_id:user.narration_voice_id}})}catch(e){next(e)}});
+app.post("/auth/login",async(req,res,next)=>{try{const input=credentials.parse(req.body);const user=await prisma.user.findUnique({where:{email:input.email.toLowerCase()}});if(!user||!await bcrypt.compare(input.password,user.password_hash)){res.status(401).json({error:{code:"invalid_credentials",message:"Email or password is incorrect"}});return}res.json({accessToken:createAccessToken({sub:user.id,email:user.email}),user:{id:user.id,email:user.email,display_name:user.display_name,narration_voice_id:user.narration_voice_id}})}catch(e){next(e)}});
+
+app.get("/tts/audio/:id",async(req,res,next)=>{try{const narration=await prisma.ttsNarration.findUnique({where:{id:req.params.id}});if(!narration){res.status(404).json({error:{code:"not_found",message:"Narration audio not found"}});return}try{const audio=await readFile(narration.filePath);res.type("audio/mpeg").send(audio)}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT"){res.status(404).json({error:{code:"not_found",message:"Narration audio file not found"}});return}throw error}}catch(e){next(e)}});
 
 app.use(requireAuth);
-app.get("/users/me",async(req,res,next)=>{try{const user=await prisma.user.findUnique({where:{id:userId(req)},select:{id:true,email:true,display_name:true}});if(!user){res.status(404).json({error:{code:"not_found",message:"User not found"}});return}res.json(user)}catch(e){next(e)}});
-app.patch("/users/me",async(req,res,next)=>{try{const input=updateProfileSchema.parse(req.body);const user=await prisma.user.update({where:{id:userId(req)},data:{display_name:input.display_name},select:{id:true,email:true,display_name:true}});res.json(user)}catch(e){next(e)}});
+app.get("/users/me",async(req,res,next)=>{try{const user=await prisma.user.findUnique({where:{id:userId(req)},select:{id:true,email:true,display_name:true,narration_voice_id:true}});if(!user){res.status(404).json({error:{code:"not_found",message:"User not found"}});return}res.json(user)}catch(e){next(e)}});
+app.patch("/users/me",async(req,res,next)=>{try{const input=updateProfileSchema.parse(req.body);const user=await prisma.user.update({where:{id:userId(req)},data:input,select:{id:true,email:true,display_name:true,narration_voice_id:true}});res.json(user)}catch(e){next(e)}});
 app.post("/users/me/password",async(req,res,next)=>{try{const input=changePasswordSchema.parse(req.body);const uid=userId(req);const user=await prisma.user.findUnique({where:{id:uid},select:{password_hash:true}});if(!user||!await bcrypt.compare(input.currentPassword,user.password_hash)){res.status(401).json({error:{code:"invalid_credentials",message:"Current password is incorrect"}});return}const password_hash=await bcrypt.hash(input.newPassword,12);await prisma.user.update({where:{id:uid},data:{password_hash}});res.json({ok:true})}catch(e){next(e)}});
 app.get("/lessons",async(req,res,next)=>{try{const uid=userId(req);const rows=await prisma.lesson.findMany({orderBy:{order:"asc"},include:{progress:{where:{user_id:uid}}}});res.json(rows.map(row=>{const progress=row.progress[0];return {...validateLesson(row.lesson_json),order:row.order,progress:{lessonId:row.id,status:progress?.status??(row.order===1?"unlocked":"locked"),bestScore:progress?.best_score??0,completedAt:progress?.completed_at??null}}}))}catch(e){next(e)}});
 app.get("/lessons/:id",async(req,res,next)=>{try{const row=await prisma.lesson.findUnique({where:{id:req.params.id},include:{progress:{where:{user_id:userId(req)}},exercises:true}});if(!row){res.status(404).json({error:{code:"not_found",message:"Lesson not found"}});return}res.json({lesson:validateLesson(row.lesson_json),progress:row.progress[0]?{lessonId:row.id,status:row.progress[0].status,bestScore:row.progress[0].best_score,completedAt:row.progress[0].completed_at}:null,exercises:row.exercises.map(item=>validateMidiExercise(item.exercise_json))})}catch(e){next(e)}});
+
+app.get("/tts/usage",async(_req,res,next)=>{try{const period=currentTtsPeriod();const usage=await ensureTtsUsage(prisma,period);res.json({period,...summarizeUsage(usage.charactersUsed)})}catch(e){next(e)}});
+app.post("/lessons/:lessonId/sections/:sectionIndex/narrate",async(req,res,next)=>{try{const {voiceId}=narrationSchema.parse(req.body);const lesson=lessons.find(item=>item.id===req.params.lessonId);if(!lesson){res.status(404).json({error:{code:"not_found",message:"Lesson not found"}});return}const sectionIndex=z.coerce.number().int().nonnegative().parse(req.params.sectionIndex);const section=lesson.sections[sectionIndex];if(!section){res.status(404).json({error:{code:"not_found",message:"Lesson section not found"}});return}if(section.type!=="markdown"&&section.type!=="theory-card"){res.status(400).json({error:{code:"invalid_section_type",message:"Only markdown and theory-card sections can be narrated"}});return}const result=await getOrCreateNarration(prisma,{lessonId:lesson.id,sectionIndex,voiceId,text:section.body});res.json({audioUrl:`/tts/audio/${result.narration.id}`,cached:result.cached,usage:result.usage})}catch(e){if(e instanceof TtsLimitError){res.status(402).json({error:{code:"tts_limit_reached",message:e.message}});return}next(e)}});
 
 app.post("/exercises/:id/attempts",async(req,res,next)=>{try{
   const input=performanceSchema.parse(req.body);const row=await prisma.exercise.findUnique({where:{id:req.params.id},include:{lesson:true}});if(!row){res.status(404).json({error:{code:"not_found",message:"Exercise not found"}});return}
