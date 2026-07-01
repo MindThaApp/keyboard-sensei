@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Renderer, Stave, StaveNote, Formatter, Voice, StaveConnector, type RenderContext } from "vexflow";
+import { Renderer, Stave, StaveNote, Formatter, Voice, StaveConnector, Accidental, type RenderContext } from "vexflow";
 
 interface SimpleStaveData {
   clef: string;
@@ -19,6 +19,31 @@ function isGrandStaffData(data: Record<string, unknown>): boolean {
   return data.grandStaff === true && !!data.treble && !!data.bass;
 }
 
+/**
+ * VexFlow key strings like "c#/4" or "bb/3" position the note at the right
+ * pitch, but do NOT automatically draw the sharp/flat glyph — that requires
+ * an explicit Accidental modifier. Extracts the accidental code (if any)
+ * from a key string so the caller can attach it.
+ */
+function accidentalFromKey(key: string): string | null {
+  const match = /^[a-gA-G](#{1,2}|b{1,2}|n)\//.exec(key);
+  return match?.[1] ?? null;
+}
+
+/**
+ * A fixed canvas width was clipping accidentals on longer note runs — a note
+ * late in a 16-note passage could get formatted past the SVG's own right
+ * edge, silently cutting off its sharp/flat glyph (found via a real lesson:
+ * the flat on B in a D-natural-minor scale rendered at all, just off-canvas).
+ * Scale width with note count instead, with overflow-x-auto on the
+ * container as a fallback for anything still too wide to fit comfortably.
+ */
+const NOTE_WIDTH_PX = 34;
+const STAVE_MARGIN_PX = 90;
+function computeStaveWidth(noteCount: number): number {
+  return Math.max(420, noteCount * NOTE_WIDTH_PX + STAVE_MARGIN_PX);
+}
+
 function drawSingleStave(
   context: RenderContext,
   data: SimpleStaveData,
@@ -32,9 +57,14 @@ function drawSingleStave(
   stave.setContext(context).draw();
 
   if (data.notes.length > 0) {
-    const notes = data.notes.map(
-      (n) => new StaveNote({ keys: n.keys, duration: n.duration, clef: data.clef }),
-    );
+    const notes = data.notes.map((n) => {
+      const staveNote = new StaveNote({ keys: n.keys, duration: n.duration, clef: data.clef });
+      n.keys.forEach((key, keyIndex) => {
+        const accidental = accidentalFromKey(key);
+        if (accidental) staveNote.addModifier(new Accidental(accidental), keyIndex);
+      });
+      return staveNote;
+    });
     const voice = new Voice({ num_beats: notes.length, beat_value: 4 });
     voice.setStrict(false);
     voice.addTickables(notes);
@@ -64,11 +94,10 @@ export default function NotationRenderer({
     if (!container) return;
     container.innerHTML = "";
 
-    const width = 420;
-
     try {
       if (isGrandStaffData(data)) {
         const grandStaffData = data as unknown as GrandStaffData;
+        const width = computeStaveWidth(Math.max(grandStaffData.treble.notes.length, grandStaffData.bass.notes.length));
         const height = 230;
         const renderer = new Renderer(container, Renderer.Backends.SVG);
         renderer.resize(width, height);
@@ -86,6 +115,7 @@ export default function NotationRenderer({
         leftLine.setContext(context).draw();
       } else {
         const staveData = data as unknown as SimpleStaveData;
+        const width = computeStaveWidth(staveData.notes.length);
         const height = 150;
         const renderer = new Renderer(container, Renderer.Backends.SVG);
         renderer.resize(width, height);
