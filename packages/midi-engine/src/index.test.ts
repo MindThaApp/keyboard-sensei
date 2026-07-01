@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest";
+import type { ExpectedNoteEvent, MidiExercise, PerformedNote, RawMidiEvent } from "@keyboard-sensei/shared-types";
+import { pairRawMidiEvents, scoreMidiExercise } from "./index.js";
+
+const event = (id: string, note: number, beat: number, chordGroupId: string | null = null, hand: "left" | "right" = "right"): ExpectedNoteEvent => ({ id, note, startBeat: beat, durationBeats: 1, hand, finger: null, chordGroupId, voice: chordGroupId ? "chord" : "melody" });
+const exercise = (expected: ExpectedNoteEvent[]): MidiExercise => ({ exerciseId: "test", tempoBpm: 120, difficulty: "beginner", simultaneityWindowMs: 100, timingToleranceMs: 120, durationTolerancePercent: 20, expected });
+const played = (note: number, startTimestampMs: number, durationMs: number | null = 500): PerformedNote => ({ note, velocity: 100, startTimestampMs, endTimestampMs: durationMs === null ? null : startTimestampMs + durationMs, durationMs });
+const score = (expected: ExpectedNoteEvent[], notes: PerformedNote[]) => scoreMidiExercise({ exercise: exercise(expected), performedNotes: notes });
+
+describe("pairRawMidiEvents", () => {
+  it("pairs notes, tolerates missing noteoff, repeated notes and noisy order", () => {
+    const raw: RawMidiEvent[] = [{note:60,velocity:0,type:"noteoff",timestampMs:500},{note:60,velocity:90,type:"noteon",timestampMs:0},{note:62,velocity:80,type:"noteon",timestampMs:600}];
+    expect(pairRawMidiEvents(raw)).toEqual([{ ...played(60,0,500), velocity: 90 }, { ...played(62,600,null), velocity: 80 }]);
+  });
+});
+
+describe("scoreMidiExercise", () => {
+  it("scores a perfect single-note sequence", () => expect(score([event("a",60,0),event("b",62,1)],[played(60,0),played(62,500)]).score).toBe(100));
+  it("detects timing drift", () => expect(score([event("a",60,0),event("b",62,1)],[played(60,0),played(62,750)]).mistakes.some(x=>x.issue==="late")).toBe(true));
+  it("detects a missed note", () => expect(score([event("a",60,0),event("b",62,1)],[played(60,0)]).mistakes.some(x=>x.issue==="missed")).toBe(true));
+  it("detects an extra note", () => expect(score([event("a",60,0)],[played(60,0),played(70,900)]).mistakes.some(x=>x.issue==="extra")).toBe(true));
+  it("detects a short note", () => expect(score([event("a",60,0)],[played(60,0,100)]).mistakes.some(x=>x.issue==="held-too-short")).toBe(true));
+  it("detects a long note", () => expect(score([event("a",60,0)],[played(60,0,900)]).mistakes.some(x=>x.issue==="held-too-long")).toBe(true));
+  it("detects unknown duration without crashing", () => expect(score([event("a",60,0)],[played(60,0,null)]).mistakes.some(x=>x.issue==="duration-unknown")).toBe(true));
+  const chord = [event("c",60,0,"c1","left"),event("e",64,0,"c1"),event("g",67,0,"c1")];
+  it("scores a correct chord", () => expect(score(chord,[played(60,0),played(64,20),played(67,30)]).chordAccuracy).toBe(100));
+  it("reports wrong chord pitch as missing and extra tones", () => { const result=score(chord,[played(60,0),played(63,10),played(67,20)]); expect(result.mistakes.map(x=>x.issue)).toEqual(expect.arrayContaining(["missing-chord-tone","extra-chord-tone"])) });
+  it("reports a missing chord tone", () => expect(score(chord,[played(60,0),played(64,10)]).mistakes.some(x=>x.issue==="missing-chord-tone")).toBe(true));
+  it("reports an extra chord tone", () => expect(score(chord,[played(60,0),played(64,10),played(67,20),played(70,30)]).mistakes.some(x=>x.issue==="extra-chord-tone")).toBe(true));
+  it("reports uneven chord timing", () => expect(score(chord,[played(60,0),played(64,20),played(67,180)]).mistakes.some(x=>x.issue==="uneven-hand-timing")).toBe(true));
+  it("scores a two-hand sequential exercise", () => expect(score([event("l",48,0,null,"left"),event("r",60,1,null,"right")],[played(48,0),played(60,500)]).score).toBe(100));
+  it("scores a mixed single, interval and triad assessment", () => { const expected=[event("s",60,0),event("i1",62,1,"i"),event("i2",65,1,"i"),event("t1",60,2,"t"),event("t2",64,2,"t"),event("t3",67,2,"t")]; const notes=[played(60,0),played(62,500),played(65,520),played(60,1000),played(64,1010),played(67,1020)]; expect(score(expected,notes).score).toBe(100) });
+});

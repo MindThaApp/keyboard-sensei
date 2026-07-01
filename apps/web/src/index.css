@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html, body, #root { min-height: 100%; }
+body { @apply bg-slate-50 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100; }
+html[data-theme="midnight"] body { background: radial-gradient(circle at top, #172554, #020617 55%); }
+@layer components {
+  .input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white; }
+  .primary-button { @apply rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-500; }
+  .secondary-button { @apply rounded-md border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-600; }
+}

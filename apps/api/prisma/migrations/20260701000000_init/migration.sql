@@ -1,0 +1,17 @@
+CREATE TYPE "ProgressStatus" AS ENUM ('locked', 'unlocked', 'completed');
+CREATE TABLE "User" ("id" TEXT NOT NULL, "email" TEXT NOT NULL, "display_name" TEXT NOT NULL, "password_hash" TEXT NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "User_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "Lesson" ("id" TEXT NOT NULL, "lesson_json" JSONB NOT NULL, "path" TEXT NOT NULL, "level" TEXT NOT NULL, "branch" TEXT NOT NULL, "order" INTEGER NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL, CONSTRAINT "Lesson_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "Exercise" ("id" TEXT NOT NULL, "exercise_json" JSONB NOT NULL, "lesson_id" TEXT NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL, CONSTRAINT "Exercise_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "ExerciseAttempt" ("id" TEXT NOT NULL, "user_id" TEXT NOT NULL, "exercise_id" TEXT NOT NULL, "submitted_events" JSONB NOT NULL, "performed_notes" JSONB NOT NULL, "result" JSONB NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "ExerciseAttempt_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "QuizAttempt" ("id" TEXT NOT NULL, "user_id" TEXT NOT NULL, "lesson_id" TEXT NOT NULL, "question_id" TEXT NOT NULL, "selected_answer" INTEGER NOT NULL, "correct" BOOLEAN NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "QuizAttempt_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "UserProgress" ("id" TEXT NOT NULL, "user_id" TEXT NOT NULL, "lesson_id" TEXT NOT NULL, "status" "ProgressStatus" NOT NULL DEFAULT 'locked', "best_score" DOUBLE PRECISION NOT NULL DEFAULT 0, "completed_at" TIMESTAMP(3), "updated_at" TIMESTAMP(3) NOT NULL, CONSTRAINT "UserProgress_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX "Lesson_order_key" ON "Lesson"("order");
+CREATE UNIQUE INDEX "UserProgress_user_id_lesson_id_key" ON "UserProgress"("user_id", "lesson_id");
+ALTER TABLE "Exercise" ADD CONSTRAINT "Exercise_lesson_id_fkey" FOREIGN KEY ("lesson_id") REFERENCES "Lesson"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ExerciseAttempt" ADD CONSTRAINT "ExerciseAttempt_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ExerciseAttempt" ADD CONSTRAINT "ExerciseAttempt_exercise_id_fkey" FOREIGN KEY ("exercise_id") REFERENCES "Exercise"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "QuizAttempt" ADD CONSTRAINT "QuizAttempt_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "QuizAttempt" ADD CONSTRAINT "QuizAttempt_lesson_id_fkey" FOREIGN KEY ("lesson_id") REFERENCES "Lesson"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "UserProgress" ADD CONSTRAINT "UserProgress_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "UserProgress" ADD CONSTRAINT "UserProgress_lesson_id_fkey" FOREIGN KEY ("lesson_id") REFERENCES "Lesson"("id") ON DELETE CASCADE ON UPDATE CASCADE;

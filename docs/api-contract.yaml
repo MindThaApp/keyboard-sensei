@@ -1,0 +1,172 @@
+openapi: 3.0.3
+info:
+  title: Keyboard Sensei API
+  version: 0.1.0
+  description: Authoritative MVP frontend/backend contract.
+servers:
+  - url: http://localhost:3001
+paths:
+  /auth/register:
+    post:
+      summary: Register a user and return an access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+            example: { email: pianist@example.com, password: strong-password, display_name: Pianist }
+      responses:
+        '201': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      summary: Log in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example: { email: demo@keyboardsensei.local, password: demo-password }
+      responses:
+        '200': { description: Authenticated, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lessons:
+    get:
+      summary: List the 12 lessons with user progress
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Ordered lessons
+          content: { application/json: { schema: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Lesson' }, { type: object, required: [order, progress], properties: { order: { type: integer }, progress: { $ref: '#/components/schemas/LessonProgress' } } }] } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lessons/{id}:
+    get:
+      summary: Get full lesson JSON and progress
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string }, example: lesson-01 }]
+      responses:
+        '200': { description: Lesson detail, content: { application/json: { schema: { type: object, required: [lesson, progress, exercises], properties: { lesson: { $ref: '#/components/schemas/Lesson' }, progress: { nullable: true, allOf: [{ $ref: '#/components/schemas/LessonProgress' }] }, exercises: { type: array, items: { $ref: '#/components/schemas/MidiExercise' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /exercises/{id}/attempts:
+    post:
+      summary: Score and save a lesson exercise attempt
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string }, example: exercise-01 }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PerformanceInput' }
+            example: { rawEvents: [{ note: 48, velocity: 90, type: noteon, timestampMs: 0 }, { note: 48, velocity: 0, type: noteoff, timestampMs: 750 }] }
+      responses:
+        '201': { description: Scored attempt, content: { application/json: { schema: { $ref: '#/components/schemas/ScoringResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /quiz-questions/{id}/answer:
+    post:
+      summary: Answer and save a quiz question
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string }, example: q2-1 }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [selectedAnswer], properties: { selectedAnswer: { type: integer, minimum: 0 } } }, example: { selectedAnswer: 0 } } }
+      responses:
+        '200': { description: Answer result, content: { application/json: { schema: { type: object, required: [correct, explanation], properties: { correct: { type: boolean }, explanation: { type: string } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/me/progress:
+    get:
+      summary: Get lesson statuses and best scores
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: User progress
+          content: { application/json: { schema: { type: object, required: [completedLessonIds, bestScores, lessonStatuses], properties: { completedLessonIds: { type: array, items: { type: string } }, bestScores: { type: object, additionalProperties: { type: number } }, lessonStatuses: { type: array, items: { $ref: '#/components/schemas/LessonProgress' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /practice/score:
+    post:
+      summary: Score an ad-hoc MIDI Practice Gym exercise without saving it
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required: [exercise]
+                  properties: { exercise: { $ref: '#/components/schemas/MidiExercise' } }
+                - $ref: '#/components/schemas/PerformanceInput'
+      responses:
+        '200': { description: Practice score, content: { application/json: { schema: { $ref: '#/components/schemas/ScoringResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    Unauthorized: { description: Authentication failed, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    NotFound: { description: Resource not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    Conflict: { description: Unique value conflict, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties: { error: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string }, details: {} } } }
+    RegisterRequest: { allOf: [{ $ref: '#/components/schemas/LoginRequest' }, { type: object, required: [display_name], properties: { display_name: { type: string } } }] }
+    LoginRequest: { type: object, required: [email, password], properties: { email: { type: string, format: email }, password: { type: string, minLength: 8 } } }
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties: { accessToken: { type: string }, user: { type: object, properties: { id: { type: string }, email: { type: string }, display_name: { type: string } } } }
+    Lesson:
+      type: object
+      required: [id, path, level, branch, title, estimatedMinutes, objectives, sections, unlockCriteria, skillRewards]
+      properties:
+        id: { type: string }
+        path: { type: string, enum: [classical-technical, modern-chords, sightreading-intensive] }
+        level: { type: string, enum: [foundation, elementary, intermediate, late-intermediate, advanced, virtuoso] }
+        branch: { type: string, enum: [technique, theory, repertoire] }
+        title: { type: string }
+        estimatedMinutes: { type: integer }
+        objectives: { type: array, items: { type: string } }
+        sections: { type: array, items: { type: object, required: [type], properties: { type: { type: string, enum: [markdown, theory-card, notation, midi-exercise, quiz] }, contentRights: { $ref: '#/components/schemas/ContentRightsMetadata' } }, additionalProperties: true } }
+        unlockCriteria: { type: object, properties: { requiresLessonIds: { type: array, items: { type: string } }, minScore: { type: number } } }
+        skillRewards: { type: object, additionalProperties: { type: number } }
+    LessonProgress:
+      type: object
+      required: [lessonId, status, bestScore, completedAt]
+      properties:
+        lessonId: { type: string }
+        status: { type: string, enum: [locked, unlocked, completed] }
+        bestScore: { type: number }
+        completedAt: { type: string, format: date-time, nullable: true }
+    RawMidiEvent: { type: object, required: [note, velocity, type, timestampMs], properties: { note: { type: integer, minimum: 0, maximum: 127 }, velocity: { type: integer, minimum: 0, maximum: 127 }, type: { type: string, enum: [noteon, noteoff] }, timestampMs: { type: number } } }
+    ContentRightsMetadata:
+      type: object
+      required: [workTitle, composer, status, copyrightHolder, licenseReference]
+      description: Licensed copyrighted works require non-null copyrightHolder and licenseReference values.
+      properties:
+        workTitle: { type: string }
+        composer: { type: string }
+        status: { type: string, enum: [original, public-domain, licensed-copyright] }
+        copyrightHolder: { type: string, nullable: true }
+        licenseReference: { type: string, nullable: true }
+    PerformedNote: { type: object, required: [note, velocity, startTimestampMs, endTimestampMs, durationMs], properties: { note: { type: integer }, velocity: { type: integer }, startTimestampMs: { type: number }, endTimestampMs: { type: number, nullable: true }, durationMs: { type: number, nullable: true } } }
+    PerformanceInput:
+      oneOf:
+        - type: object
+          required: [rawEvents]
+          properties: { rawEvents: { type: array, items: { $ref: '#/components/schemas/RawMidiEvent' } } }
+        - type: object
+          required: [performedNotes]
+          properties: { performedNotes: { type: array, items: { $ref: '#/components/schemas/PerformedNote' } } }
+    ExpectedNoteEvent: { type: object, required: [id, note, startBeat, durationBeats, hand, finger, chordGroupId, voice], properties: { id: { type: string }, note: { type: integer }, startBeat: { type: number }, durationBeats: { type: number }, hand: { type: string, enum: [left, right, both] }, finger: { type: integer, nullable: true }, chordGroupId: { type: string, nullable: true }, voice: { type: string, nullable: true, enum: [melody, bass, inner, chord] } } }
+    MidiExercise: { type: object, required: [exerciseId, tempoBpm, difficulty, simultaneityWindowMs, timingToleranceMs, durationTolerancePercent, expected], properties: { exerciseId: { type: string }, tempoBpm: { type: number }, difficulty: { type: string, enum: [beginner, intermediate, advanced] }, simultaneityWindowMs: { type: number }, timingToleranceMs: { type: number }, durationTolerancePercent: { type: number }, expected: { type: array, items: { $ref: '#/components/schemas/ExpectedNoteEvent' } } } }
+    ScoringMistake: { type: object, properties: { noteId: { type: string, nullable: true }, expectedNote: { type: integer, nullable: true }, performedNote: { type: integer, nullable: true }, chordGroupId: { type: string, nullable: true }, issue: { type: string, enum: [wrong, missed, extra, early, late, missing-chord-tone, extra-chord-tone, uneven-hand-timing, held-too-short, held-too-long, duration-unknown] } } }
+    ScoringResult: { type: object, required: [score, noteAccuracy, timingAccuracy, rhythmAccuracy, chordAccuracy, feedback, mistakes], properties: { score: { type: number }, noteAccuracy: { type: number }, timingAccuracy: { type: number }, rhythmAccuracy: { type: number }, chordAccuracy: { type: number }, feedback: { type: array, items: { type: string } }, mistakes: { type: array, items: { $ref: '#/components/schemas/ScoringMistake' } } } }

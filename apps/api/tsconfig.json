@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.base.json","compilerOptions":{"rootDir":".","outDir":"dist"},"references":[{"path":"../../packages/shared-types"},{"path":"../../packages/midi-engine"},{"path":"../../packages/music-theory"},{"path":"../../packages/lesson-engine"}],"include":["src","prisma/seed.ts"]}
