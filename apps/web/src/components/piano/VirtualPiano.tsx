@@ -8,6 +8,19 @@ function isBlackKey(note: number): boolean {
   return BLACK_KEY_PITCH_CLASSES.has(((note % 12) + 12) % 12);
 }
 
+const MIDDLE_C = 60;
+/** Classic "typing keyboard as piano" layout, one row of white/black keys starting at C4. */
+const KEY_TO_SEMITONE_OFFSET: Record<string, number> = {
+  a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11,
+  k: 12, o: 13, l: 14, p: 15, ";": 16,
+};
+
+function isTypingIntoFormField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
 export interface VirtualPianoProps {
   lowestNote?: number;
   highestNote?: number;
@@ -68,6 +81,47 @@ export default function VirtualPiano({
     if (disabled) return;
     mockAdapter.triggerNoteOff(note);
   }
+
+  // Computer-keyboard input for when no MIDI keyboard is available. Ignored while
+  // typing into a form field so it doesn't interfere with the Settings page etc.
+  useEffect(() => {
+    const heldKeys = new Set<string>();
+
+    function noteForEvent(e: KeyboardEvent): number | null {
+      const offset = KEY_TO_SEMITONE_OFFSET[e.key.toLowerCase()];
+      if (offset === undefined) return null;
+      const note = MIDDLE_C + offset;
+      if (note < lowestNote || note > highestNote) return null;
+      return note;
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (disabled || e.repeat || isTypingIntoFormField(e.target)) return;
+      const note = noteForEvent(e);
+      if (note === null || heldKeys.has(e.key.toLowerCase())) return;
+      heldKeys.add(e.key.toLowerCase());
+      press(note);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (isTypingIntoFormField(e.target)) return;
+      const note = noteForEvent(e);
+      if (note === null) return;
+      heldKeys.delete(e.key.toLowerCase());
+      release(note);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      for (const key of heldKeys) {
+        const offset = KEY_TO_SEMITONE_OFFSET[key];
+        if (offset !== undefined) release(MIDDLE_C + offset);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled, lowestNote, highestNote]);
 
   function keyColorClasses(note: number, isBlack: boolean): string {
     const feedback = feedbackByNote[note];
@@ -144,6 +198,11 @@ export default function VirtualPiano({
           );
         })}
       </div>
+      {!disabled && (
+        <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+          No MIDI keyboard? Use your computer keyboard: A S D F G H J K (white keys), W E T Y U (black keys).
+        </p>
+      )}
     </div>
   );
 }
