@@ -1,0 +1,1 @@
+{"name":"@keyboard-sensei/lesson-engine","version":"0.1.0","type":"module","exports":"./src/index.ts","scripts":{"build":"tsc -b","typecheck":"tsc -b --pretty false","test":"vitest run"},"dependencies":{"@keyboard-sensei/shared-types":"workspace:*","zod":"^3.25.67"},"devDependencies":{"typescript":"^5.8.3","vitest":"^3.2.4"}}

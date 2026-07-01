@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@keyboard-sensei/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@keyboard-sensei/lesson-engine": ["../../packages/lesson-engine/src/index.ts"],
+      "@keyboard-sensei/midi-engine": ["../../packages/midi-engine/src/index.ts"],
+      "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+

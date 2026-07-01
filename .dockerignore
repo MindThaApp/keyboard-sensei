@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+.git
+.pnpm-store
+**/*.log
+.env
+apps/*/.env
