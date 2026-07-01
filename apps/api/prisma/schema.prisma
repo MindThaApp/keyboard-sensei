@@ -14,28 +14,48 @@ enum ProgressStatus {
 }
 
 model User {
-  id             String            @id @default(cuid())
-  email          String            @unique
-  display_name   String
-  password_hash  String
-  created_at     DateTime          @default(now())
-  attempts       ExerciseAttempt[]
-  quiz_attempts  QuizAttempt[]
-  progress       UserProgress[]
+  id                 String            @id @default(cuid())
+  email              String            @unique
+  display_name       String
+  narration_voice_id String?
+  password_hash      String
+  created_at         DateTime          @default(now())
+  attempts           ExerciseAttempt[]
+  quiz_attempts      QuizAttempt[]
+  progress           UserProgress[]
+}
+
+model TtsUsage {
+  id             String   @id @default(cuid())
+  period         String   @unique
+  charactersUsed Int      @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+model TtsNarration {
+  id             String   @id @default(cuid())
+  lessonId       String
+  sectionIndex   Int
+  voiceId        String
+  filePath       String
+  characterCount Int
+  createdAt      DateTime @default(now())
+
+  @@unique([lessonId, sectionIndex, voiceId])
 }
 
 model Lesson {
-  id          String         @id
-  lesson_json Json
-  path        String
-  level       String
-  branch      String
-  order       Int            @unique
-  created_at  DateTime       @default(now())
-  updated_at  DateTime       @updatedAt
-  exercises   Exercise[]
+  id            String         @id
+  lesson_json   Json
+  path          String
+  level         String
+  branch        String
+  order         Int            @unique
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  exercises     Exercise[]
   quiz_attempts QuizAttempt[]
-  progress    UserProgress[]
+  progress      UserProgress[]
 }
 
 model Exercise {
@@ -49,15 +69,15 @@ model Exercise {
 }
 
 model ExerciseAttempt {
-  id              String   @id @default(cuid())
-  user_id         String
-  exercise_id     String
+  id               String   @id @default(cuid())
+  user_id          String
+  exercise_id      String
   submitted_events Json
   performed_notes  Json
-  result            Json
-  created_at      DateTime @default(now())
-  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  exercise        Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+  result           Json
+  created_at       DateTime @default(now())
+  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exercise         Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {

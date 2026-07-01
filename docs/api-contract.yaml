@@ -84,6 +84,39 @@ paths:
         '200': { description: Lesson detail, content: { application/json: { schema: { type: object, required: [lesson, progress, exercises], properties: { lesson: { $ref: '#/components/schemas/Lesson' }, progress: { nullable: true, allOf: [{ $ref: '#/components/schemas/LessonProgress' }] }, exercises: { type: array, items: { $ref: '#/components/schemas/MidiExercise' } } } } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /lessons/{lessonId}/sections/{sectionIndex}/narrate:
+    post:
+      summary: Generate or reuse narration for an authoritative lesson text section
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: lessonId, in: path, required: true, schema: { type: string }, example: lesson-01 }
+        - { name: sectionIndex, in: path, required: true, schema: { type: integer, minimum: 0 }, example: 0 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [voiceId], properties: { voiceId: { type: string } } }
+            example: { voiceId: 21m00Tcm4TlvDq8ikWAM }
+      responses:
+        '200': { description: Narration generated or reused, content: { application/json: { schema: { $ref: '#/components/schemas/TtsNarrationResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { description: Monthly shared narration allowance exhausted, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tts/usage:
+    get:
+      summary: Get shared narration usage for the current calendar month
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current TTS usage, content: { application/json: { schema: { $ref: '#/components/schemas/TtsUsageWithPeriod' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /tts/audio/{id}:
+    get:
+      summary: Serve a cached narration MP3
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Cached MP3 audio, content: { audio/mpeg: { schema: { type: string, format: binary } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /exercises/{id}/attempts:
     post:
       summary: Score and save a lesson exercise attempt
@@ -155,9 +188,35 @@ components:
       properties: { error: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string }, details: {} } } }
     RegisterRequest: { allOf: [{ $ref: '#/components/schemas/LoginRequest' }, { type: object, required: [display_name], properties: { display_name: { type: string } } }] }
     LoginRequest: { type: object, required: [email, password], properties: { email: { type: string, format: email }, password: { type: string, minLength: 8 } } }
-    UpdateProfileRequest: { type: object, required: [display_name], properties: { display_name: { type: string, minLength: 1, maxLength: 80 } } }
+    UpdateProfileRequest:
+      type: object
+      minProperties: 1
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+        narration_voice_id: { type: string, nullable: true }
     ChangePasswordRequest: { type: object, required: [currentPassword, newPassword], properties: { currentPassword: { type: string, minLength: 1 }, newPassword: { type: string, minLength: 8 } } }
-    AuthUser: { type: object, required: [id, email, display_name], properties: { id: { type: string }, email: { type: string, format: email }, display_name: { type: string } } }
+    AuthUser: { type: object, required: [id, email, display_name, narration_voice_id], properties: { id: { type: string }, email: { type: string, format: email }, display_name: { type: string }, narration_voice_id: { type: string, nullable: true } } }
+    TtsUsage:
+      type: object
+      required: [charactersUsed, limit, remaining, disabled]
+      properties:
+        charactersUsed: { type: integer, minimum: 0 }
+        limit: { type: integer, enum: [10000] }
+        remaining: { type: integer, minimum: 0 }
+        disabled: { type: boolean }
+    TtsUsageWithPeriod:
+      allOf:
+        - $ref: '#/components/schemas/TtsUsage'
+        - type: object
+          required: [period]
+          properties: { period: { type: string, pattern: '^\d{4}-\d{2}$', example: 2026-07 } }
+    TtsNarrationResponse:
+      type: object
+      required: [audioUrl, cached, usage]
+      properties:
+        audioUrl: { type: string, example: /tts/audio/cm123 }
+        cached: { type: boolean }
+        usage: { $ref: '#/components/schemas/TtsUsage' }
     AuthResponse:
       type: object
       required: [accessToken, user]

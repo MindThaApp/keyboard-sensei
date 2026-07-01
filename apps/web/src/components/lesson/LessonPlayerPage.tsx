@@ -72,9 +72,9 @@ export default function LessonPlayerPage() {
         {lesson.sections.map((section, index) => {
           switch (section.type) {
             case "markdown":
-              return <MarkdownSectionView key={index} section={section} />;
+              return <MarkdownSectionView key={index} section={section} lessonId={lesson.id} sectionIndex={index} />;
             case "theory-card":
-              return <TheoryCardSectionView key={index} section={section} />;
+              return <TheoryCardSectionView key={index} section={section} lessonId={lesson.id} sectionIndex={index} />;
             case "notation":
               return <NotationRenderer key={index} data={section.vexflowData} title={section.title} />;
             case "quiz":

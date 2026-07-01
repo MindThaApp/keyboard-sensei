@@ -30,3 +30,16 @@ export const applyAssessmentPlacement = (scores: number[]) => request<Assessment
 export const getCurrentUser = () => request<AuthUser>("/users/me");
 export const updateProfile = (display_name: string) => request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ display_name }) });
 export const changePassword = (currentPassword: string, newPassword: string) => request<{ ok: true }>("/users/me/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+
+export const updateNarrationVoice = (narration_voice_id: string | null) => request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ narration_voice_id }) });
+
+export interface TtsUsage { period: string; charactersUsed: number; limit: number; remaining: number; disabled: boolean }
+export const getTtsUsage = () => request<TtsUsage>("/tts/usage");
+
+export interface NarrateResponse { audioUrl: string; cached: boolean; usage: TtsUsage }
+export const narrateSection = (lessonId: string, sectionIndex: number, voiceId: string) =>
+  request<NarrateResponse>(`/lessons/${encodeURIComponent(lessonId)}/sections/${sectionIndex}/narrate`, {
+    method: "POST",
+    body: JSON.stringify({ voiceId }),
+  });
+export const ttsAudioUrl = (audioUrl: string) => `${API_URL}${audioUrl}`;
