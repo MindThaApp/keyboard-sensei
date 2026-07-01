@@ -21,8 +21,11 @@ services:
     environment:
       DATABASE_URL: postgresql://keyboard_sensei:${POSTGRES_PASSWORD}@postgres:5432/keyboard_sensei
       JWT_SECRET: ${JWT_SECRET}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN}
+    volumes:
+      - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,3 +47,4 @@ services:
 
 volumes:
   keyboard-sensei-postgres-data:
+  keyboard-sensei-tts-cache:
