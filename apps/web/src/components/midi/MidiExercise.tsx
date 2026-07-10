@@ -28,7 +28,20 @@ const vexKey = (note: number) => {
   return `${names[note % 12]}/${Math.floor(note / 12) - 1}`;
 };
 
-const vexDuration = (beats: number) => (beats >= 4 ? "w" : beats >= 2 ? "h" : beats >= 1 ? "q" : "8");
+/**
+ * Maps beats → VexFlow duration codes, including dotted values —
+ * NotationRenderer attaches Dot modifiers for "d"-suffix codes, so the dot
+ * glyphs render correctly.
+ */
+const vexDuration = (beats: number) => {
+  if (beats >= 4) return "w";
+  if (beats >= 3) return "hd";
+  if (beats >= 2) return "h";
+  if (beats >= 1.5) return "qd";
+  if (beats >= 1) return "q";
+  if (beats >= 0.75) return "8d";
+  return "8";
+};
 
 /**
  * Builds notation for an exercise. Notes at or above middle C go on the
@@ -129,6 +142,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     return <section className="card p-4 text-sm">Loading exercise…</section>;
   }
 
+  const untimed = exercise.scoring === "untimed";
+  const hasChords = exercise.expected.some((event) => event.chordGroupId !== null);
   const msPerBeat = 60_000 / exercise.tempoBpm;
   const notes = [...new Set(exercise.expected.map((n) => n.note))];
   // Pad the keyboard to octave boundaries so it reads as an instrument, not a fragment.
@@ -171,6 +186,13 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     setResult(null);
     setError(null);
     setBeat(null);
+    if (untimed) {
+      // No pulse to lock onto — start recording immediately, no count-in, no clicks.
+      start.current = performance.now();
+      active.current = true;
+      setPhase("recording");
+      return;
+    }
     setPhase("counting-in");
     metronome.start({
       bpm: exercise.tempoBpm,
@@ -236,7 +258,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           <p className="text-sm text-slate-600 dark:text-slate-300">{instructions}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">♩ = {exercise.tempoBpm}</span>
+          {untimed ? (
+            <span className="rounded-full border border-slate-300 px-2 py-1 dark:border-slate-600">Untimed — find the right keys</span>
+          ) : (
+            <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">♩ = {exercise.tempoBpm}</span>
+          )}
           {lessonId && <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">{PASS_SCORE} to pass</span>}
         </div>
       </div>
@@ -273,16 +299,18 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         )}
         {(phase === "counting-in" || capturing) && (
           <>
-            <div className="flex items-center gap-1.5" aria-hidden>
-              {Array.from({ length: COUNT_IN_BEATS }, (_, i) => (
-                <span
-                  key={i}
-                  className={`h-2.5 w-2.5 rounded-full transition-colors ${
-                    beat && beat.index >= i ? (beat.isCountIn ? "bg-felt-500" : "bg-brass-500") : "bg-slate-300 dark:bg-slate-600"
-                  }`}
-                />
-              ))}
-            </div>
+            {!untimed && (
+              <div className="flex items-center gap-1.5" aria-hidden>
+                {Array.from({ length: COUNT_IN_BEATS }, (_, i) => (
+                  <span
+                    key={i}
+                    className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                      beat && beat.index >= i ? (beat.isCountIn ? "bg-felt-500" : "bg-brass-500") : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
             <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
               {phase === "counting-in" ? `Count-in… ${beat ? beat.index + 1 : ""}` : "Recording — play, then submit."}
             </span>
@@ -295,16 +323,20 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           </>
         )}
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
-        <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
-          Metronome while playing
-        </label>
+        {!untimed && (
+          <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
+            Metronome while playing
+          </label>
+        )}
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
       {result && (
         <div
+          role="status"
+          aria-live="polite"
           className={`rounded-lg border p-4 ${
             passed
               ? "border-brass-400/60 bg-brass-100/60 dark:border-brass-600/50 dark:bg-brass-700/10"
@@ -319,9 +351,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           </div>
           <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
             <SubmetricBar label="Notes" value={result.noteAccuracy} />
-            <SubmetricBar label="Timing" value={result.timingAccuracy} />
-            <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />
-            <SubmetricBar label="Chords" value={result.chordAccuracy} />
+            {!untimed && <SubmetricBar label="Timing" value={result.timingAccuracy} />}
+            {!untimed && <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />}
+            {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
           </div>
           {result.feedback.length > 0 && (
             <ul className="mt-3 space-y-1 text-sm text-slate-700 dark:text-slate-200">

@@ -1,4 +1,4 @@
-import type { AssessmentPlacement, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
+import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const TOKEN_KEY = "keyboard-sensei-access-token";
@@ -23,6 +23,7 @@ export const register = (email: string, password: string, display_name: string) 
 export const getLessons = () => request<LessonListItem[]>("/lessons");
 export const getLesson = (id: string) => request<LessonDetail>(`/lessons/${encodeURIComponent(id)}`);
 export const getProgress = () => request<UserProgress>("/users/me/progress");
+export const getAttempts = () => request<AttemptsResponse>("/users/me/attempts");
 export const submitExerciseAttempt = (exerciseId: string, payload: ExerciseAttemptPayload) => request<ScoringResult>(`/exercises/${encodeURIComponent(exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
 export const submitQuizAnswer = (questionId: string, payload: QuizAnswerPayload) => request<QuizAnswerResponse>(`/quiz-questions/${encodeURIComponent(questionId)}/answer`, { method: "POST", body: JSON.stringify(payload) });
 export const submitPracticeGymAttempt = (exercise: MidiExercise, payload: ExerciseAttemptPayload) => request<ScoringResult>("/practice/score", { method: "POST", body: JSON.stringify({ exercise, ...payload }) });

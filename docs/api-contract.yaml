@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Keyboard Sensei API
-  version: 0.1.0
-  description: Authoritative MVP frontend/backend contract.
+  version: 0.2.0
+  description: Authoritative frontend/backend contract.
 servers:
   - url: http://localhost:3001
 paths:
@@ -68,7 +68,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /lessons:
     get:
-      summary: List the 12 lessons with user progress
+      summary: List all lessons with user progress
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -142,7 +142,7 @@ paths:
         required: true
         content: { application/json: { schema: { type: object, required: [selectedAnswer], properties: { selectedAnswer: { type: integer, minimum: 0 } } }, example: { selectedAnswer: 0 } } }
       responses:
-        '200': { description: Answer result, content: { application/json: { schema: { type: object, required: [correct, explanation], properties: { correct: { type: boolean }, explanation: { type: string } } } } } }
+        '200': { description: Answer result, content: { application/json: { schema: { type: object, required: [correct, correctIndex, explanation], properties: { correct: { type: boolean }, correctIndex: { type: integer, minimum: 0 }, explanation: { type: string } } } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -154,6 +154,15 @@ paths:
         '200':
           description: User progress
           content: { application/json: { schema: { type: object, required: [completedLessonIds, bestScores, lessonStatuses], properties: { completedLessonIds: { type: array, items: { type: string } }, bestScores: { type: object, additionalProperties: { type: number } }, lessonStatuses: { type: array, items: { $ref: '#/components/schemas/LessonProgress' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /users/me/attempts:
+    get:
+      summary: List the user's saved exercise attempts, newest first (max 100)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Recent exercise attempts
+          content: { application/json: { schema: { type: object, required: [attempts], properties: { attempts: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/ExerciseAttemptSummary' } } } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /practice/score:
     post:
@@ -232,7 +241,7 @@ components:
         title: { type: string }
         estimatedMinutes: { type: integer }
         objectives: { type: array, items: { type: string } }
-        sections: { type: array, items: { type: object, required: [type], properties: { type: { type: string, enum: [markdown, theory-card, notation, midi-exercise, quiz] }, contentRights: { $ref: '#/components/schemas/ContentRightsMetadata' } }, additionalProperties: true } }
+        sections: { type: array, description: 'Quiz questions in lesson payloads never include correctIndex; answers are validated server-side via POST /quiz-questions/{id}/answer, whose response returns the correct index.', items: { type: object, required: [type], properties: { type: { type: string, enum: [markdown, theory-card, notation, midi-exercise, quiz] }, contentRights: { $ref: '#/components/schemas/ContentRightsMetadata' } }, additionalProperties: true } }
         unlockCriteria: { type: object, properties: { requiresLessonIds: { type: array, items: { type: string } }, minScore: { type: number } } }
         skillRewards: { type: object, additionalProperties: { type: number } }
     LessonProgress:
@@ -264,6 +273,16 @@ components:
           required: [performedNotes]
           properties: { performedNotes: { type: array, items: { $ref: '#/components/schemas/PerformedNote' } } }
     ExpectedNoteEvent: { type: object, required: [id, note, startBeat, durationBeats, hand, finger, chordGroupId, voice], properties: { id: { type: string }, note: { type: integer }, startBeat: { type: number }, durationBeats: { type: number }, hand: { type: string, enum: [left, right, both] }, finger: { type: integer, nullable: true }, chordGroupId: { type: string, nullable: true }, voice: { type: string, nullable: true, enum: [melody, bass, inner, chord] } } }
-    MidiExercise: { type: object, required: [exerciseId, tempoBpm, difficulty, simultaneityWindowMs, timingToleranceMs, durationTolerancePercent, expected], properties: { exerciseId: { type: string }, tempoBpm: { type: number }, difficulty: { type: string, enum: [beginner, intermediate, advanced] }, simultaneityWindowMs: { type: number }, timingToleranceMs: { type: number }, durationTolerancePercent: { type: number }, expected: { type: array, items: { $ref: '#/components/schemas/ExpectedNoteEvent' } } } }
+    MidiExercise: { type: object, required: [exerciseId, tempoBpm, difficulty, simultaneityWindowMs, timingToleranceMs, durationTolerancePercent, expected], properties: { exerciseId: { type: string }, tempoBpm: { type: number }, difficulty: { type: string, enum: [beginner, intermediate, advanced] }, scoring: { type: string, enum: [timed, untimed], description: 'Optional; untimed exercises skip timing scoring. Defaults to timed when omitted.' }, simultaneityWindowMs: { type: number }, timingToleranceMs: { type: number }, durationTolerancePercent: { type: number }, expected: { type: array, items: { $ref: '#/components/schemas/ExpectedNoteEvent' } } } }
     ScoringMistake: { type: object, properties: { noteId: { type: string, nullable: true }, expectedNote: { type: integer, nullable: true }, performedNote: { type: integer, nullable: true }, chordGroupId: { type: string, nullable: true }, issue: { type: string, enum: [wrong, missed, extra, early, late, missing-chord-tone, extra-chord-tone, uneven-hand-timing, held-too-short, held-too-long, duration-unknown] } } }
     ScoringResult: { type: object, required: [score, noteAccuracy, timingAccuracy, rhythmAccuracy, chordAccuracy, feedback, mistakes], properties: { score: { type: number }, noteAccuracy: { type: number }, timingAccuracy: { type: number }, rhythmAccuracy: { type: number }, chordAccuracy: { type: number }, feedback: { type: array, items: { type: string } }, mistakes: { type: array, items: { $ref: '#/components/schemas/ScoringMistake' } } } }
+    ExerciseAttemptSummary:
+      type: object
+      required: [id, exerciseId, lessonId, lessonTitle, score, createdAt]
+      properties:
+        id: { type: string }
+        exerciseId: { type: string }
+        lessonId: { type: string }
+        lessonTitle: { type: string }
+        score: { type: number }
+        createdAt: { type: string, format: date-time }

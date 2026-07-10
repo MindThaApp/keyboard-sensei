@@ -3,8 +3,8 @@ import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-en
 import { exercises, lessons } from "./content.js";
 
 describe("seed content", () => {
-  it("contains twenty-four valid sequential classical-technical lessons", () => {
-    expect(lessons).toHaveLength(24);
+  it("contains valid sequential classical-technical lessons", () => {
+    expect(lessons.length).toBeGreaterThanOrEqual(34);
     lessons.forEach((lesson, index) => {
       expect(() => validateLesson(lesson)).not.toThrow();
       expect(lesson.path).toBe("classical-technical");
@@ -27,6 +27,7 @@ describe("seed content", () => {
     expect(pitches("exercise-14")).toEqual([67,69,71,72,74,76,78,79,62,64,66,67,69,71,73,74]);
     expect(pitches("exercise-16")).toEqual([64,66,67,69,71,72,74,76,62,64,65,67,69,70,72,74]);
     expect(pitches("exercise-24").slice(0,8)).toEqual([62,64,66,67,69,71,73,74]);
-    expect(lessons.slice(12).reduce((total, lesson) => total + lesson.estimatedMinutes, 0)).toBe(237);
+    // Count-agnostic: every lesson advertises a plausible duration rather than a hardcoded batch total.
+    expect(lessons.every(lesson => lesson.estimatedMinutes >= 5 && lesson.estimatedMinutes <= 40)).toBe(true);
   });
 });

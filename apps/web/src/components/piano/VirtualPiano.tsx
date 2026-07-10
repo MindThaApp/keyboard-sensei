@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 
@@ -82,6 +82,66 @@ export default function VirtualPiano({
     mockAdapter.triggerNoteOff(note);
   }
 
+  // Glissando via Pointer Events: each active pointer maps to the note it is
+  // currently sounding (null while the pointer has slid off the keys but is
+  // still down). Visual pressed state comes from the subscribed event stream,
+  // so a ref (no re-render) is all we need here.
+  const activePointersRef = useRef<Map<number, number | null>>(new Map());
+
+  function handlePointerDown(note: number, e: ReactPointerEvent<HTMLButtonElement>) {
+    if (disabled) return;
+    e.preventDefault();
+    // Touch pointers get implicitly captured by the element they went down on,
+    // which would pin all subsequent events to this key and stop pointerenter
+    // from ever firing on sibling keys — release the capture so drags can
+    // glissando across the keyboard.
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    activePointersRef.current.set(e.pointerId, note);
+    press(note);
+  }
+
+  function handlePointerEnter(note: number, e: ReactPointerEvent<HTMLButtonElement>) {
+    const active = activePointersRef.current;
+    if (!active.has(e.pointerId)) return; // plain hover, no press in progress
+    const prev = active.get(e.pointerId);
+    if (prev === note) return;
+    if (prev != null) release(prev);
+    active.set(e.pointerId, note);
+    press(note);
+  }
+
+  function handlePointerLeave(note: number, e: ReactPointerEvent<HTMLButtonElement>) {
+    const active = activePointersRef.current;
+    if (active.get(e.pointerId) !== note) return;
+    release(note);
+    // Keep the drag alive: the next key the pointer enters will press again.
+    active.set(e.pointerId, null);
+  }
+
+  // pointerup/pointercancel can land anywhere (off the key, off the page),
+  // so the drag has to end from window-level listeners.
+  useEffect(() => {
+    const active = activePointersRef.current;
+    function endDrag(e: PointerEvent) {
+      const note = active.get(e.pointerId);
+      if (note === undefined) return;
+      active.delete(e.pointerId);
+      if (note !== null) mockAdapter.triggerNoteOff(note);
+    }
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+    return () => {
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+      for (const note of active.values()) {
+        if (note !== null) mockAdapter.triggerNoteOff(note);
+      }
+      active.clear();
+    };
+  }, [mockAdapter]);
+
   // Computer-keyboard input for when no MIDI keyboard is available. Ignored while
   // typing into a form field so it doesn't interfere with the Settings page etc.
   useEffect(() => {
@@ -149,23 +209,22 @@ export default function VirtualPiano({
               key={note}
               type="button"
               aria-label={midiNoteToName(note)}
-              className={`relative h-40 flex items-end justify-center pb-2 rounded-b-md border border-slate-300 transition-colors ${keyColorClasses(
+              aria-pressed={pressedNotes.has(note)}
+              className={`relative h-40 flex items-end justify-center pb-2 rounded-b-md border border-slate-300 transition-colors touch-none ${keyColorClasses(
                 note,
                 false,
               )} ${disabled ? "opacity-50" : "cursor-pointer active:brightness-95"}`}
               style={{ width: WHITE_KEY_WIDTH_PX }}
-              onMouseDown={() => press(note)}
-              onMouseUp={() => release(note)}
-              onMouseLeave={() => pressedNotes.has(note) && release(note)}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                press(note);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                release(note);
-              }}
+              onPointerDown={(e) => handlePointerDown(note, e)}
+              onPointerEnter={(e) => handlePointerEnter(note, e)}
+              onPointerLeave={(e) => handlePointerLeave(note, e)}
             >
+              {note === MIDDLE_C && (
+                <span
+                  aria-hidden="true"
+                  className="absolute bottom-7 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-400/70"
+                />
+              )}
               {showLabels && <span className="text-[10px] text-slate-500">{midiNoteToName(note)}</span>}
             </button>
           ))}
@@ -178,22 +237,15 @@ export default function VirtualPiano({
               key={note}
               type="button"
               aria-label={midiNoteToName(note)}
-              className={`absolute top-0 h-24 rounded-b-md border border-slate-900 z-10 transition-colors ${keyColorClasses(
+              aria-pressed={pressedNotes.has(note)}
+              className={`absolute top-0 h-24 rounded-b-md border border-slate-900 z-10 transition-colors touch-none ${keyColorClasses(
                 note,
                 true,
               )} ${disabled ? "opacity-50" : "cursor-pointer active:brightness-95"}`}
               style={{ width: BLACK_KEY_WIDTH_PX, left }}
-              onMouseDown={() => press(note)}
-              onMouseUp={() => release(note)}
-              onMouseLeave={() => pressedNotes.has(note) && release(note)}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                press(note);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                release(note);
-              }}
+              onPointerDown={(e) => handlePointerDown(note, e)}
+              onPointerEnter={(e) => handlePointerEnter(note, e)}
+              onPointerLeave={(e) => handlePointerLeave(note, e)}
             />
           );
         })}

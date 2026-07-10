@@ -6,6 +6,7 @@ export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNote
 const round = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
 
 export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent }: ScoreMidiExerciseParams): ScoringResult {
+  const untimed = exercise.scoring === "untimed";
   const msPerBeat = 60_000 / exercise.tempoBpm;
   const expected = [...exercise.expected].sort((a, b) => a.startBeat - b.startBeat);
   const performed = [...performedNotes].sort((a, b) => a.startTimestampMs - b.startTimestampMs);
@@ -42,41 +43,46 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
 
   for (const exp of singles) {
     let index = performed.map((got, i) => ({ got, i })).filter(({got,i}) => !used.has(i) && got.note === exp.note).sort((a,b) => Math.abs(a.got.startTimestampMs-targetTime(exp))-Math.abs(b.got.startTimestampMs-targetTime(exp)))[0]?.i ?? -1;
-    if (index < 0) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= exercise.timingToleranceMs);
+    if (index < 0 && !untimed) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= exercise.timingToleranceMs);
     if (index < 0) { add(exp, null, "missed"); feedback.add(`You missed ${midiNoteToName(exp.note)}.`); continue }
     used.add(index); const got = performed[index]!;
     if (got.note === exp.note) pitchHits++; else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
-    scoreTiming(exp, got); scoreDuration(exp, got);
+    if (!untimed) { scoreTiming(exp, got); scoreDuration(exp, got) }
   }
 
   for (const [groupId, chord] of groups) {
     const target = targetTime(chord[0]!);
-    const candidates = performed.map((note, index) => ({ note, index })).filter(({ note, index }) => !used.has(index) && Math.abs(note.startTimestampMs - target) <= exercise.timingToleranceMs * 2);
+    const candidates = performed.map((note, index) => ({ note, index })).filter(({ note, index }) => !used.has(index) && (untimed || Math.abs(note.startTimestampMs - target) <= exercise.timingToleranceMs * 2));
     const selected: { note: PerformedNote; index: number }[] = [];
     for (const exp of chord) {
       const match = candidates.find(({ note, index }) => !selected.some((item) => item.index === index) && note.note === exp.note);
-      if (match) { selected.push(match); used.add(match.index); pitchHits++; scoreDuration(exp, match.note) }
+      if (match) { selected.push(match); used.add(match.index); pitchHits++; if (!untimed) scoreDuration(exp, match.note) }
       else { add(exp, null, "missing-chord-tone", groupId); feedback.add(`The chord was missing ${midiNoteToName(exp.note)}.`) }
     }
-    const extras = candidates.filter(({ index }) => !selected.some((item) => item.index === index));
+    const extras = untimed ? [] : candidates.filter(({ index }) => !selected.some((item) => item.index === index));
     for (const extra of extras) { used.add(extra.index); add(null, extra.note, "extra-chord-tone", groupId); feedback.add(`The chord contained extra ${midiNoteToName(extra.note.note)}.`) }
     const attacks = selected.map(({ note }) => note.startTimestampMs);
     const spread = attacks.length ? Math.max(...attacks) - Math.min(...attacks) : 0;
     const delta = attacks.length ? attacks.reduce((sum, value) => sum + value, 0) / attacks.length - target : Infinity;
-    if (Math.abs(delta) <= exercise.timingToleranceMs) timingHits += selected.length;
-    else if (selected.length) { const issue = delta < 0 ? "early" : "late"; add(chord[0]!, selected[0]!.note, issue, groupId); feedback.add(`The chord was ${issue}.`) }
+    if (!untimed) {
+      if (Math.abs(delta) <= exercise.timingToleranceMs) timingHits += selected.length;
+      else if (selected.length) { const issue = delta < 0 ? "early" : "late"; add(chord[0]!, selected[0]!.note, issue, groupId); feedback.add(`The chord was ${issue}.`) }
+    }
     if (spread > exercise.simultaneityWindowMs) { add(chord[0]!, selected[0]?.note ?? null, "uneven-hand-timing", groupId); feedback.add("The chord was uneven; play its notes together.") }
-    if (selected.length === chord.length && extras.length === 0 && spread <= exercise.simultaneityWindowMs && Math.abs(delta) <= exercise.timingToleranceMs) chordHits++;
+    if (selected.length === chord.length && extras.length === 0 && spread <= exercise.simultaneityWindowMs && (untimed || Math.abs(delta) <= exercise.timingToleranceMs)) chordHits++;
   }
 
   performed.forEach((note, index) => { if (!used.has(index)) { add(null, note, "extra"); feedback.add(`Extra note: ${midiNoteToName(note.note)}.`) } });
   const expectedCount = expected.length || 1;
   const noteAccuracy = round((pitchHits / Math.max(expectedCount, expectedCount + performed.length - used.size)) * 100);
-  const timingAccuracy = round((timingHits / expectedCount) * 100);
-  const rhythmAccuracy = durationKnown === 0 ? (expected.length ? 0 : 100) : round((durationHits / durationKnown) * 100);
+  const timingAccuracy = untimed ? 100 : round((timingHits / expectedCount) * 100);
+  const rhythmAccuracy = untimed ? 100 : durationKnown === 0 ? (expected.length ? 0 : 100) : round((durationHits / durationKnown) * 100);
   const chordAccuracy = groups.size === 0 ? 100 : round((chordHits / groups.size) * 100);
   const weights = resolveScoreWeights();
-  const score = round(noteAccuracy * weights.noteAccuracy + timingAccuracy * weights.timingAccuracy + rhythmAccuracy * weights.rhythmAccuracy + chordAccuracy * weights.chordAccuracy);
-  if (!feedback.size && expected.length) feedback.add("Excellent accuracy and timing.");
+  const hasChordGroups = groups.size > 0;
+  const score = untimed
+    ? round(noteAccuracy * (hasChordGroups ? 0.7 : 1) + chordAccuracy * (hasChordGroups ? 0.3 : 0))
+    : round(noteAccuracy * weights.noteAccuracy + timingAccuracy * weights.timingAccuracy + rhythmAccuracy * weights.rhythmAccuracy + chordAccuracy * weights.chordAccuracy);
+  if (!feedback.size && expected.length) feedback.add(untimed ? "Every note found — well done." : "Excellent accuracy and timing.");
   return { score, noteAccuracy, timingAccuracy, rhythmAccuracy, chordAccuracy, feedback: [...feedback], mistakes };
 }

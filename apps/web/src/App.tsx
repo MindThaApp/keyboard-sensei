@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
 import PracticeGymPage from "./components/midi/PracticeGymPage";
+import PracticeHistoryPage from "./components/progress/PracticeHistoryPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage, { RegistrationForm } from "./components/auth/AuthPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
@@ -93,6 +94,7 @@ export default function App() {
           <nav className="flex items-center gap-1 text-sm">
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
+            <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
             <label className="sr-only" htmlFor="theme">Theme</label>
             <select
@@ -117,6 +119,7 @@ export default function App() {
           <Route path="/" element={<LessonListPage />} />
           <Route path="/lessons/:lessonId" element={<LessonPlayerPage />} />
           <Route path="/practice-gym" element={<PracticeGymPage />} />
+          <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
