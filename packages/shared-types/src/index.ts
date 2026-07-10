@@ -39,7 +39,7 @@ export interface UserProgress {
 }
 export interface LessonListItem extends Lesson { order: number; progress: LessonProgress }
 export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[] }
-export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null }
+export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin" }
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }
