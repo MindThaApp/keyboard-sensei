@@ -44,3 +44,22 @@ export const narrateSection = (lessonId: string, sectionIndex: number, voiceId: 
     body: JSON.stringify({ voiceId }),
   });
 export const ttsAudioUrl = (audioUrl: string) => `${API_URL}${audioUrl}`;
+
+// --- Feedback ---
+export type FeedbackType = "bug" | "idea" | "other";
+export interface FeedbackItem {
+  id: string;
+  type: FeedbackType;
+  message: string;
+  page_path: string;
+  user_agent: string;
+  status: "open" | "resolved";
+  created_at: string;
+  user: { email: string; display_name: string } | null;
+}
+export const submitFeedback = (type: FeedbackType, message: string, page_path: string) =>
+  request<{ ok: true }>("/feedback", { method: "POST", body: JSON.stringify({ type, message, page_path }) });
+export const getAdminFeedback = (status: "open" | "resolved" | "all") =>
+  request<{ feedback: FeedbackItem[] }>(`/admin/feedback?status=${status}`);
+export const setFeedbackStatus = (id: string, status: "open" | "resolved") =>
+  request<{ id: string; status: string }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
