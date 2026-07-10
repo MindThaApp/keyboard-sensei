@@ -7,3 +7,4 @@ coverage
 .pnpm-store
 .env.deploy
 apps/api/data/tts-cache
+apps/api/data/midi-library
