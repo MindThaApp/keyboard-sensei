@@ -20,6 +20,7 @@ import { env } from "./config.js";
 import { lessons } from "./content.js";
 import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage, TtsLimitError } from "./tts.js";
 import { feedbackRouter } from "./feedback.js";
+import { adminUsersRouter } from "./admin-users.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -197,6 +198,7 @@ app.get("/tts/audio/:id", async (req, res, next) => {
 app.use(requireAuth);
 
 app.use(feedbackRouter);
+app.use(adminUsersRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
@@ -656,7 +658,7 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(409).json({ error: { code: "conflict", message: "A record with that unique value already exists" } });
     return;
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
     res.status(404).json({ error: { code: "not_found", message: "Record not found" } });
     return;
   }

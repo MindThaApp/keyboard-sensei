@@ -63,3 +63,32 @@ export const getAdminFeedback = (status: "open" | "resolved" | "all") =>
   request<{ feedback: FeedbackItem[] }>(`/admin/feedback?status=${status}`);
 export const setFeedbackStatus = (id: string, status: "open" | "resolved") =>
   request<{ id: string; status: string }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+
+// --- Admin: users ---
+export interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "user" | "admin";
+  created_at: string;
+  completed_lessons: number;
+  total_lessons: number;
+}
+export interface AdminUserProgressRow {
+  lesson_id: string;
+  title: string;
+  order: number;
+  status: "locked" | "unlocked" | "completed";
+  best_score: number;
+}
+export const getAdminUsers = () => request<{ users: AdminUser[] }>("/admin/users");
+export const updateAdminUser = (id: string, fields: Partial<{ email: string; display_name: string; role: "user" | "admin"; password: string }>) =>
+  request<Pick<AdminUser, "id" | "email" | "display_name" | "role">>(`/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export const deleteAdminUser = (id: string) => request<{ ok: true }>(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const getAdminUserProgress = (id: string) =>
+  request<{ progress: AdminUserProgressRow[] }>(`/admin/users/${encodeURIComponent(id)}/progress`);
+export const setAdminUserProgress = (id: string, lessonId: string, status: AdminUserProgressRow["status"], best_score?: number) =>
+  request<{ lesson_id: string; status: string; best_score: number }>(
+    `/admin/users/${encodeURIComponent(id)}/progress/${encodeURIComponent(lessonId)}`,
+    { method: "PUT", body: JSON.stringify({ status, ...(best_score !== undefined ? { best_score } : {}) }) },
+  );
