@@ -23,7 +23,7 @@ function QuestionView({ question }: { question: QuizQuestion }) {
       <div className="space-y-2">
         {question.options.map((option, index) => {
           const isSelected = selectedIndex === index;
-          const isCorrectOption = index === question.correctIndex;
+          const isCorrectOption = result !== null && index === result.correctIndex;
 
           let optionClasses = "border-slate-300 hover:border-slate-400 dark:border-slate-600 dark:hover:border-slate-400";
           if (result) {

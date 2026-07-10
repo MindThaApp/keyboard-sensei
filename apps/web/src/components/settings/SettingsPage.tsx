@@ -62,9 +62,9 @@ function AccountSection() {
   }
 
   return (
-    <section className="space-y-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <section className="card space-y-6 p-5">
       <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Account</h2>
+        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Account</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{user?.email}</p>
       </div>
 
@@ -78,45 +78,54 @@ function AccountSection() {
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="input flex-1"
           />
-          <button
-            type="submit"
-            disabled={savingName || !displayName.trim()}
-            className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
-          >
+          <button type="submit" disabled={savingName || !displayName.trim()} className="primary-button">
             Save
           </button>
         </div>
         {nameStatus && <p className="text-sm text-emerald-700 dark:text-emerald-400">{nameStatus}</p>}
-        {nameError && <p className="text-sm text-rose-700 dark:text-rose-400">{nameError}</p>}
+        {nameError && (
+          <p role="alert" className="text-sm text-rose-700 dark:text-rose-400">
+            {nameError}
+          </p>
+        )}
       </form>
 
-      <form onSubmit={(e) => void handleChangePassword(e)} className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+      <form
+        onSubmit={(e) => void handleChangePassword(e)}
+        className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-700"
+      >
         <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Change password</p>
         <input
+          aria-label="Current password"
           type="password"
           placeholder="Current password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="input"
         />
         <input
+          aria-label="New password"
           type="password"
           placeholder="New password (8+ characters)"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="input"
         />
         <button
           type="submit"
           disabled={savingPassword || !currentPassword || newPassword.length < 8}
-          className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
+          className="primary-button"
         >
           Update password
         </button>
         {passwordStatus && <p className="text-sm text-emerald-700 dark:text-emerald-400">{passwordStatus}</p>}
-        {passwordError && <p className="text-sm text-rose-700 dark:text-rose-400">{passwordError}</p>}
+        {passwordError && (
+          <p role="alert" className="text-sm text-rose-700 dark:text-rose-400">
+            {passwordError}
+          </p>
+        )}
       </form>
     </section>
   );
@@ -134,7 +143,7 @@ function UsageBar({ usage }: { usage: api.TtsUsage }) {
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
         <div
-          className={`h-full rounded-full ${usage.disabled ? "bg-rose-500" : "bg-sky-500"}`}
+          className={`h-full rounded-full ${usage.disabled ? "bg-rose-500" : "bg-felt-500"}`}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -207,7 +216,11 @@ function NarrationSection() {
     setTestLoading(true);
     setTestError(null);
     try {
-      const response = await api.narrateSection(TEST_NARRATION_LESSON_ID, TEST_NARRATION_SECTION_INDEX, user.narration_voice_id);
+      const response = await api.narrateSection(
+        TEST_NARRATION_LESSON_ID,
+        TEST_NARRATION_SECTION_INDEX,
+        user.narration_voice_id,
+      );
       const el = new Audio(api.ttsAudioUrl(response.audioUrl));
       el.onended = () => setTestPlaying(false);
       testAudioRef.current = el;
@@ -222,9 +235,9 @@ function NarrationSection() {
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <section className="card space-y-4 p-5">
       <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Narration voice</h2>
+        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Narration voice</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Pick a voice to have lesson text read aloud. Previews are free; actually narrating lesson content
           uses a shared monthly allowance across everyone using the app.
@@ -241,7 +254,7 @@ function NarrationSection() {
               key={voice.id}
               className={`flex items-center justify-between gap-2 rounded-md border p-3 ${
                 isSelected
-                  ? "border-sky-500 bg-sky-50 dark:border-sky-500 dark:bg-sky-950"
+                  ? "border-felt-400 bg-felt-50 ring-1 ring-felt-400/50 dark:border-felt-600 dark:bg-felt-900/30 dark:ring-felt-600/50"
                   : "border-slate-200 dark:border-slate-700"
               }`}
             >
@@ -253,7 +266,7 @@ function NarrationSection() {
                 <button
                   type="button"
                   onClick={() => playPreview(voice.id, voice.previewUrl)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:border-slate-400 dark:border-slate-600 dark:text-slate-200"
+                  className="secondary-button px-2 py-1 text-xs"
                 >
                   {playingPreviewId === voice.id ? "⏸" : "▶"} Sample
                 </button>
@@ -261,11 +274,11 @@ function NarrationSection() {
                   type="button"
                   onClick={() => void selectVoice(voice.id)}
                   disabled={savingVoiceId === voice.id || isSelected}
-                  className={`rounded px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+                  className={
                     isSelected
-                      ? "bg-sky-600 text-white"
-                      : "bg-slate-800 text-white hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600"
-                  }`}
+                      ? "rounded-md bg-felt-600 px-2 py-1 text-xs font-medium text-white"
+                      : "primary-button px-2 py-1 text-xs"
+                  }
                 >
                   {isSelected ? "Selected" : "Select"}
                 </button>
@@ -274,7 +287,11 @@ function NarrationSection() {
           );
         })}
       </div>
-      {voiceError && <p className="text-sm text-rose-700 dark:text-rose-400">{voiceError}</p>}
+      {voiceError && (
+        <p role="alert" className="text-sm text-rose-700 dark:text-rose-400">
+          {voiceError}
+        </p>
+      )}
 
       {user?.narration_voice_id && (
         <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
@@ -282,11 +299,15 @@ function NarrationSection() {
             type="button"
             onClick={() => void handleTestNarration()}
             disabled={testLoading || usage?.disabled}
-            className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
+            className="primary-button"
           >
             {testLoading ? "Generating…" : testPlaying ? "⏸ Pause test narration" : "🔊 Test my selected voice on a real lesson"}
           </button>
-          {testError && <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">{testError}</p>}
+          {testError && (
+            <p role="alert" className="mt-2 text-sm text-rose-700 dark:text-rose-400">
+              {testError}
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -304,9 +325,9 @@ function MidiSection() {
   }, [subscribe]);
 
   return (
-    <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <section className="card space-y-4 p-5">
       <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">MIDI device</h2>
+        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">MIDI device</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Connect a real MIDI keyboard, or test with the on-screen piano below — both work the same
           way in every lesson.
@@ -324,7 +345,7 @@ function MidiSection() {
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
+      <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <AccountSection />
       <NarrationSection />
       <MidiSection />

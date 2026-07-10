@@ -2,7 +2,7 @@ import type { Lesson, MidiExercise } from "@keyboard-sensei/shared-types";
 import { quiz, midiSection, note, ex, intermediateEx, rewards, lesson } from "./helpers.js";
 
 export const coreExercises: MidiExercise[] = [
-  ex("exercise-01",[note("c3",48,0,1,"left"),note("c4",60,1),note("c5",72,2)]),
+  {...ex("exercise-01",[note("c3",48,0,1,"left"),note("c4",60,1),note("c5",72,2)]), scoring: "untimed" as const},
   ex("exercise-05",[60,62,64,65,67].map((n,i)=>note(`rh-${i}`,n,i,1,"right",i+1))),
   ex("exercise-06",[48,47,45,43,41].map((n,i)=>note(`lh-${i}`,n,i,1,"left",i+1,"", "bass")).map(n=>({...n,chordGroupId:null}))),
   ex("exercise-07",[note("l-c",48,0,1,"left",5,null,"bass"),note("r-c",60,1,1,"right",1),note("l-g",43,2,1,"left",5,null,"bass"),note("r-g",67,3,1,"right",5)]),

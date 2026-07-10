@@ -31,3 +31,44 @@ describe("scoreMidiExercise", () => {
   it("scores a two-hand sequential exercise", () => expect(score([event("l",48,0,null,"left"),event("r",60,1,null,"right")],[played(48,0),played(60,500)]).score).toBe(100));
   it("scores a mixed single, interval and triad assessment", () => { const expected=[event("s",60,0),event("i1",62,1,"i"),event("i2",65,1,"i"),event("t1",60,2,"t"),event("t2",64,2,"t"),event("t3",67,2,"t")]; const notes=[played(60,0),played(62,500),played(65,520),played(60,1000),played(64,1010),played(67,1020)]; expect(score(expected,notes).score).toBe(100) });
 });
+
+describe("scoreMidiExercise (untimed)", () => {
+  const untimedScore = (expected: ExpectedNoteEvent[], notes: PerformedNote[]) => scoreMidiExercise({ exercise: { ...exercise(expected), scoring: "untimed" }, performedNotes: notes });
+
+  it("scores 100 with wildly wrong timing and durations when every pitch is found", () => {
+    const result = untimedScore([event("a",48,0,null,"left"),event("b",60,1),event("c",72,2)],[played(48,0,3000),played(60,4200,40),played(72,11000,2500)]);
+    expect(result.score).toBe(100);
+    expect(result.timingAccuracy).toBe(100);
+    expect(result.rhythmAccuracy).toBe(100);
+    expect(result.mistakes).toEqual([]);
+    expect(result.feedback).toContain("Every note found — well done.");
+  });
+
+  it("scores below 70 with a missed mistake when a pitch is missing, timing still 100", () => {
+    const result = untimedScore([event("a",48,0,null,"left"),event("b",60,1),event("c",72,2)],[played(48,0),played(72,900)]);
+    expect(result.score).toBeLessThan(70);
+    expect(result.mistakes.some(x=>x.issue==="missed")).toBe(true);
+    expect(result.timingAccuracy).toBe(100);
+  });
+
+  it("scores 100 for a chord played together but far off the tempo grid", () => {
+    const expected=[event("s",55,0),event("c",60,2,"c1"),event("e",64,2,"c1"),event("g",67,2,"c1")];
+    const result = untimedScore(expected,[played(55,0),played(60,5000),played(64,5010),played(67,5020)]);
+    expect(result.score).toBe(100);
+    expect(result.chordAccuracy).toBe(100);
+    expect(result.mistakes.some(x=>x.issue==="late"||x.issue==="early")).toBe(false);
+  });
+
+  it("still flags uneven chord attacks beyond the simultaneity window", () => {
+    const chord=[event("c",60,0,"c1"),event("e",64,0,"c1"),event("g",67,0,"c1")];
+    const result = untimedScore(chord,[played(60,0),played(64,20),played(67,180)]);
+    expect(result.mistakes.some(x=>x.issue==="uneven-hand-timing")).toBe(true);
+    expect(result.score).toBeLessThan(100);
+    expect(result.chordAccuracy).toBe(0);
+  });
+
+  it("timed regression: a late note is still detected when scoring is not untimed", () => {
+    const result = score([event("a",60,0),event("b",62,1)],[played(60,0),played(62,750)]);
+    expect(result.mistakes.some(x=>x.issue==="late")).toBe(true);
+  });
+});
