@@ -21,6 +21,7 @@ import { lessons } from "./content.js";
 import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage, TtsLimitError } from "./tts.js";
 import { feedbackRouter } from "./feedback.js";
 import { adminUsersRouter } from "./admin-users.js";
+import { songsRouter } from "./songs.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -199,6 +200,7 @@ app.use(requireAuth);
 
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
+app.use(songsRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
