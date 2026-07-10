@@ -1,11 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 html, body, #root { min-height: 100%; }
 body { @apply bg-slate-50 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100; }
 html[data-theme="midnight"] body { background: radial-gradient(circle at top, #172554, #020617 55%); }
+
+@layer base {
+  h1, h2, h3 { @apply font-display; }
+  :focus-visible { @apply outline-none ring-2 ring-felt-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950; }
+}
+
 @layer components {
-  .input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white; }
-  .primary-button { @apply rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-sky-600 dark:hover:bg-sky-500; }
-  .secondary-button { @apply rounded-md border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-600; }
+  .input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-white; }
+  .primary-button { @apply rounded-md bg-felt-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-felt-500 disabled:cursor-not-allowed disabled:opacity-50; }
+  .secondary-button { @apply rounded-md border border-slate-300 px-4 py-2 text-sm font-medium transition-colors hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:hover:border-slate-400; }
+  .card { @apply rounded-xl border border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900; }
+  /* The felt strip: the thin crimson rule that runs behind a piano's keys. */
+  .felt-strip { @apply h-[3px] w-full bg-gradient-to-r from-felt-700 via-felt-500 to-felt-700; }
 }
