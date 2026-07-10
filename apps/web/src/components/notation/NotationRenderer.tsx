@@ -130,9 +130,11 @@ export default function NotationRenderer({
   }, [data]);
 
   return (
-    <div className="rounded-md bg-white p-2 text-slate-900">
-      {title && <h3 className="mb-2 text-sm font-semibold text-slate-700">{title}</h3>}
-      <div ref={containerRef} className="overflow-x-auto" />
+    <div className="max-w-full overflow-x-auto">
+      <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-3 text-slate-900 shadow-sm">
+        {title && <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h3>}
+        <div ref={containerRef} className="overflow-x-auto" />
+      </div>
     </div>
   );
 }

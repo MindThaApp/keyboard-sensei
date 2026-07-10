@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import type { LessonStatus } from "@keyboard-sensei/shared-types";
+import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
 
 const LEVEL_LABEL: Record<string, string> = {
@@ -20,26 +20,73 @@ const BRANCH_LABEL: Record<string, string> = {
 
 const LEVEL_ORDER = ["foundation", "elementary", "intermediate", "late-intermediate", "advanced", "virtuoso"];
 
-function StatusBadge({ status, bestScore }: { status: LessonStatus; bestScore: number | null }) {
-  if (status === "completed") {
-    return (
-      <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
-        Completed{bestScore != null ? ` · ${bestScore}` : ""}
-      </span>
-    );
-  }
-  if (status === "unlocked") {
-    return (
-      <span className="whitespace-nowrap rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900 dark:text-sky-200">
-        {bestScore != null ? `Best: ${bestScore}` : "Unlocked"}
-      </span>
-    );
-  }
+function CheckIcon() {
   return (
-    <span className="whitespace-nowrap rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-      Locked
-    </span>
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
+      <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.79 6.8-6.8a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
+    </svg>
   );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+      <path fillRule="evenodd" d="M10 2a4 4 0 0 0-4 4v2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1V6a4 4 0 0 0-4-4Zm2 6V6a2 2 0 1 0-4 0v2h4Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function ProgressBar({ value, className = "" }: { value: number; className?: string }) {
+  return (
+    <div className={`h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700 ${className}`}>
+      <div className="h-full rounded-full bg-brass-500 transition-all" style={{ width: `${Math.round(value * 100)}%` }} />
+    </div>
+  );
+}
+
+function LessonRow({ lesson, index, status, bestScore, isNext }: { lesson: LessonListItem; index: number; status: LessonStatus; bestScore: number | null; isNext: boolean }) {
+  const locked = status === "locked";
+  const completed = status === "completed";
+
+  const inner = (
+    <div
+      className={`flex items-center gap-4 rounded-lg border p-3.5 transition-colors ${
+        locked
+          ? "border-slate-200/70 bg-slate-100/60 opacity-60 dark:border-slate-800 dark:bg-slate-900/40"
+          : isNext
+            ? "border-felt-400 bg-white ring-1 ring-felt-400/50 hover:border-felt-500 dark:border-felt-600 dark:bg-slate-900 dark:ring-felt-600/50"
+            : "border-slate-200 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
+      }`}
+    >
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium tabular-nums ${
+          completed
+            ? "bg-brass-100 text-brass-700 dark:bg-brass-700/20 dark:text-brass-300"
+            : isNext
+              ? "bg-felt-50 text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
+              : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+        }`}
+      >
+        {completed ? <CheckIcon /> : locked ? <LockIcon /> : index + 1}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-slate-900 dark:text-slate-100">{lesson.title}</p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {BRANCH_LABEL[lesson.branch]} · {lesson.estimatedMinutes} min
+        </p>
+      </div>
+      <div className="shrink-0 text-right text-xs">
+        {completed && <span className="font-medium tabular-nums text-brass-700 dark:text-brass-300">Best {bestScore}</span>}
+        {!completed && !locked && (
+          <span className="rounded-full bg-felt-50 px-2 py-0.5 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300">
+            {isNext ? "Up next" : bestScore ? `Best ${bestScore}` : "Unlocked"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  return <li>{locked ? inner : <Link to={`/lessons/${lesson.id}`}>{inner}</Link>}</li>;
 }
 
 export default function LessonListPage() {
@@ -56,47 +103,83 @@ export default function LessonListPage() {
     return <p className="text-slate-500 dark:text-slate-300">Loading lessons…</p>;
   }
 
-  const levelIndices = lessons.map((l) => LEVEL_ORDER.indexOf(l.level)).filter((i) => i >= 0);
-  const lowestLevel = levelIndices.length ? LEVEL_LABEL[LEVEL_ORDER[Math.min(...levelIndices)]] : "";
-  const highestLevel = levelIndices.length ? LEVEL_LABEL[LEVEL_ORDER[Math.max(...levelIndices)]] : "";
-  const levelRange = lowestLevel === highestLevel ? lowestLevel : `${lowestLevel} through ${highestLevel}`;
+  const statuses = lessons.map((lesson) => getLessonStatus(progress, lesson));
+  const completedCount = statuses.filter((s) => s === "completed").length;
+  const nextLesson = lessons.find((_, i) => statuses[i] === "unlocked") ?? lessons.find((_, i) => statuses[i] !== "completed") ?? null;
+  const nextIndex = nextLesson ? lessons.indexOf(nextLesson) : -1;
+  const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
+
+  const levels = LEVEL_ORDER.filter((level) => lessons.some((l) => l.level === level));
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Classical Technical Path</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          {levelRange} — {lessons.length} lesson{lessons.length === 1 ? "" : "s"}
-        </p>
-      </div>
-      <ol className="space-y-2">
-        {lessons.map((lesson, index) => {
-          const status: LessonStatus = getLessonStatus(progress, lesson);
-          const bestScore = getLessonBestScore(progress, lesson);
-          const isLocked = status === "locked";
-
-          const content = (
-            <div
-              className={`flex items-center justify-between gap-4 rounded-lg border p-4 transition-colors ${
-                isLocked
-                  ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"
-                  : "border-slate-200 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
-              }`}
-            >
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Lesson {index + 1}</p>
-                <p className="font-medium text-slate-900 dark:text-slate-100">{lesson.title}</p>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                  {LEVEL_LABEL[lesson.level]} · {BRANCH_LABEL[lesson.branch]} · {lesson.estimatedMinutes} min
-                </p>
-              </div>
-              <StatusBadge status={status} bestScore={bestScore} />
+    <div className="space-y-8">
+      {nextLesson && (
+        <section className="card relative overflow-hidden p-5 sm:p-6">
+          <div className="felt-strip absolute inset-x-0 top-0" />
+          <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
+            {nextLesson.progress.bestScore > 0 ? "Continue practicing" : "Up next"}
+          </p>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{nextLesson.title}</h1>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Lesson {nextIndex + 1} of {lessons.length} · {LEVEL_LABEL[nextLesson.level]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
+                {nextLesson.estimatedMinutes} min
+                {nextLesson.progress.bestScore > 0 && <> · Best {nextLesson.progress.bestScore}</>}
+              </p>
             </div>
-          );
+            <Link to={`/lessons/${nextLesson.id}`} className="primary-button">
+              {nextLesson.progress.bestScore > 0 ? "Continue lesson" : "Start lesson"}
+            </Link>
+          </div>
+          <div className="mt-5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span className="shrink-0 tabular-nums">
+              {completedCount} of {lessons.length} lessons · {minutesCompleted} min completed
+            </span>
+            <ProgressBar value={lessons.length ? completedCount / lessons.length : 0} className="flex-1" />
+          </div>
+        </section>
+      )}
 
-          return <li key={lesson.id}>{isLocked ? content : <Link to={`/lessons/${lesson.id}`}>{content}</Link>}</li>;
-        })}
-      </ol>
+      {!nextLesson && (
+        <section className="card p-6 text-center">
+          <h1 className="text-2xl font-semibold">Path complete</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            You've completed every lesson in the Classical Technical Path. Keep your hands warm in the Practice Gym.
+          </p>
+        </section>
+      )}
+
+      {levels.map((level) => {
+        const levelLessons = lessons.filter((l) => l.level === level);
+        const levelCompleted = levelLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
+        return (
+          <section key={level}>
+            <div className="mb-3 flex items-center gap-3">
+              <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{LEVEL_LABEL[level]}</h2>
+              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                {levelCompleted}/{levelLessons.length}
+              </span>
+              <ProgressBar value={levelLessons.length ? levelCompleted / levelLessons.length : 0} className="w-24" />
+            </div>
+            <ol className="space-y-2">
+              {levelLessons.map((lesson) => {
+                const index = lessons.indexOf(lesson);
+                return (
+                  <LessonRow
+                    key={lesson.id}
+                    lesson={lesson}
+                    index={index}
+                    status={getLessonStatus(progress, lesson)}
+                    bestScore={getLessonBestScore(progress, lesson)}
+                    isNext={index === nextIndex}
+                  />
+                );
+              })}
+            </ol>
+          </section>
+        );
+      })}
     </div>
   );
 }

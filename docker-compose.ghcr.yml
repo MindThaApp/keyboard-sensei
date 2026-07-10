@@ -1,0 +1,50 @@
+# Deploy variant that pulls CI-built images from GHCR instead of building on the
+# server. Requires a one-time `docker login ghcr.io` on the server with a PAT that
+# has read:packages (images are private). Usage:
+#   docker compose --env-file .env.deploy -f docker-compose.ghcr.yml pull
+#   docker compose --env-file .env.deploy -f docker-compose.ghcr.yml up -d
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: keyboard_sensei
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: keyboard_sensei
+    volumes:
+      - keyboard-sensei-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keyboard_sensei"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/ramin-azizi/keyboard-sensei-api:latest
+    environment:
+      DATABASE_URL: postgresql://keyboard_sensei:${POSTGRES_PASSWORD}@postgres:5432/keyboard_sensei
+      JWT_SECRET: ${JWT_SECRET}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      PORT: 3001
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    volumes:
+      - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3101:3001"
+    restart: unless-stopped
+
+  web:
+    # VITE_API_URL is baked into this image at CI build time (see .github/workflows/ci.yml).
+    image: ghcr.io/ramin-azizi/keyboard-sensei-web:latest
+    ports:
+      - "8181:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  keyboard-sensei-postgres-data:
+  keyboard-sensei-tts-cache:
