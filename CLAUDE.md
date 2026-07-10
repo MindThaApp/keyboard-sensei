@@ -30,7 +30,36 @@ CI (`.github/workflows/ci.yml`) typechecks, tests, builds, and pushes Docker ima
 of building on the server, use `docker-compose.ghcr.yml`; the server must first
 `docker login ghcr.io` with a PAT that has `read:packages` (repo and images are private).
 
-## Last update — 2026-07-10: design-engineer review + overhaul
+## Last update — 2026-07-10 (later): 10-parallel-worker batch
+
+Ten parallel Fable workers (disjoint file ownership; content pre-split into `apps/api/src/content/*` batch
+files) delivered, all integrated and verified locally in-browser; CI green; images on GHCR:
+
+- **Content 24 → 34 lessons**: repertoire 25–27 (Ode to Joy, Mozart "Ah! vous dirai-je, maman" two-hands,
+  Minuet in G/Petzold — all public-domain `contentRights`, notation and MIDI generated from one source
+  array), ear training 28–30 (hear-then-play via the ▶ Listen button, deliberately no notation), technique
+  II 31–34 (A major, F major/first flat, A harmonic minor, broken-chord accompaniment).
+- **Untimed scoring** end-to-end (`MidiExercise.scoring: "untimed"`): pitch-only scoring, no count-in,
+  timing/rhythm UI hidden; exercise-01 flagged untimed. Verified: sloppy-timing correct notes = 100.
+- **Quiz integrity**: `correctIndex` stripped from lesson payloads, returned in the answer response;
+  verified no leak via live API probe.
+- **GET /users/me/attempts** + Practice History page (stats tiles + attempt list, /history nav).
+- **Notation**: key signatures with redundant-accidental suppression (verified: Minuet shows key-sig F♯,
+  no inline sharp), `measures` + barlines support, dotted-note glyphs (Dot.buildAndAttach); player's
+  derived notation now emits `hd/qd/8d`.
+- **Virtual piano**: pointer-event glissando (drag across keys, multi-touch), middle-C marker dot.
+- **Auth/assessment/settings pages** restyled to the felt/brass system; `app.ts` de-minified; README and
+  docs/api-contract.yaml refreshed; content tests made count-agnostic.
+
+**Deploy state**: build-on-server deploys are now blocked by policy (user chose GitHub-built images).
+Live server still runs the morning's 24-lesson build. To ship this batch the server needs a ONE-TIME
+`docker login ghcr.io` (PAT with `read:packages`, done by Ramin), then:
+`docker compose --env-file .env.deploy -f docker-compose.ghcr.yml pull && docker compose --env-file .env.deploy -f docker-compose.ghcr.yml up -d`
+then reseed (`docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'`).
+Roadmap items 1 (first batch), 2, 3, 4 (first batch), 6 (quiz part), 8 are now DONE; still open: sampled
+piano, refresh tokens/TTS auth, de-minify content files, stale duplicate root copy deletion, more content.
+
+## Previous update — 2026-07-10: design-engineer review + overhaul
 
 A full chief-design-engineer review (UI/UX/design/engineering/content) was done against the live app,
 followed by a same-day overhaul. All changes verified locally in-browser AND live post-deploy.
