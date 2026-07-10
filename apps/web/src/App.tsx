@@ -8,6 +8,7 @@ import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage, { RegistrationForm } from "./components/auth/AuthPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
 import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
+import AdminUsersPage from "./components/admin/AdminUsersPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
@@ -107,7 +108,7 @@ export default function App() {
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
-            {auth.user?.role === "admin" && <NavLink to="/admin/feedback" className={navLinkClasses}>Admin</NavLink>}
+            {auth.user?.role === "admin" && <NavLink to="/admin/users" className={navLinkClasses}>Admin</NavLink>}
             <label className="sr-only" htmlFor="theme">Theme</label>
             <select
               id="theme"
@@ -133,6 +134,7 @@ export default function App() {
           <Route path="/practice-gym" element={<PracticeGymPage />} />
           <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>

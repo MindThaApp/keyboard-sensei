@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAdminFeedback, setFeedbackStatus, type FeedbackItem } from "../../services/api";
+import AdminNav from "./AdminNav";
 
 const TYPE_BADGE: Record<string, string> = {
   bug: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
@@ -29,6 +30,7 @@ export default function AdminFeedbackPage() {
 
   return (
     <div className="space-y-4">
+      <AdminNav />
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-semibold">Feedback</h1>
         <div className="flex gap-1 text-sm">
