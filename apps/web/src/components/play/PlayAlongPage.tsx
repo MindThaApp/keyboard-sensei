@@ -20,6 +20,7 @@ import {
   WATERFALL_COLORS_DARK,
   WATERFALL_COLORS_LIGHT,
 } from "./waterfall";
+import NotationPreviewStrip, { quantizeToBeats } from "./NotationPreviewStrip";
 
 const TEMPOS: PlayAlongTempoPct[] = [25, 50, 75, 100];
 const LOOKAHEADS = [
@@ -76,6 +77,7 @@ export default function PlayAlongPage() {
   const [waitingNotes, setWaitingNotes] = useState<number[]>([]);
   const [result, setResult] = useState<PlayAlongResult | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [songTimeS, setSongTimeS] = useState(0);
 
   const engineRef = useRef<PlayAlongEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -112,6 +114,7 @@ export default function PlayAlongPage() {
 
   const range = useMemo(() => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : null), [parsed]);
   const geometry = useMemo(() => (range ? keyboardGeometry(range.lowestNote, range.highestNote) : null), [range]);
+  const quantizedNotes = useMemo(() => (parsed ? quantizeToBeats(parsed.notes, parsed.bpm) : []), [parsed]);
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
 
   const stop = useCallback(() => {
@@ -201,6 +204,7 @@ export default function PlayAlongPage() {
         setCountdown(songTime < 0 ? Math.ceil(-songTime) : null);
         setWaiting(active.isWaiting);
         setWaitingNotes(active.isWaiting ? active.waitingMidis : []);
+        setSongTimeS(songTime);
       }
       if (!finished) rafRef.current = requestAnimationFrame(loop);
     };
@@ -350,6 +354,8 @@ export default function PlayAlongPage() {
           </div>
         </section>
       )}
+
+      <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
 
       {/* Waterfall + piano, sharing one horizontal scroll context */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
