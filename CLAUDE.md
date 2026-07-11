@@ -30,7 +30,41 @@ CI (`.github/workflows/ci.yml`) typechecks, tests, builds, and pushes Docker ima
 of building on the server, use `docker-compose.ghcr.yml`; the server must first
 `docker login ghcr.io` with a PAT that has `read:packages` (repo and images are private).
 
-## Last update — 2026-07-10 (later): 10-parallel-worker batch
+## Last update — 2026-07-11: play-along mode, song library, admin, feedback
+
+Built inline (spec → plan → 10 tasks, superpowers flow) on `feature/playalong-admin-feedback`, merged to
+master. Spec/plan in `docs/superpowers/{specs,plans}/2026-07-11-*`. All verified locally in-browser
+(chrome-devtools MCP) + curl against real Postgres; 56 tests green.
+
+- **Admin role**: `User.role` enum, seeded `admin@keyboardsensei.local` (password from `ADMIN_PASSWORD`,
+  dev fallback `admin-sensei-dev`), `requireAdmin` middleware (DB-checked, not JWT), read-time unlock of
+  ALL lessons for admins (completed stays completed). Verified: admin sees 34/34 unlocked, demo unchanged.
+- **Admin area** (`/admin/*`, role-gated nav + routes): Users (edit email/name/role/password, delete
+  with self-delete guard, per-lesson progress editor), Feedback queue (filter, resolve), Songs (edit
+  metadata, delete).
+- **Feedback widget** on every page incl. auth (floating pill, bug/idea/other, captures route+UA, 10/hr
+  rate limit, admin queue round-trip verified in-browser).
+- **Song library**: `Song` model + raw `.mid` files in `apps/api/data/midi-library/` (gitignored,
+  volume-mounted in both deploy composes like tts-cache). **305 curated songs seeded** (212 public-domain
+  classical/ragtime, 93 pop/film covers) from the ADL Piano MIDI dataset via
+  `apps/api/scripts/fetch-midi-library.ts` + committed `midi-manifest.json` (piano-midi.de blocks
+  non-browser clients — 418). Difficulty heuristic calibrated (Für Elise d2, Clair de Lune d4,
+  Entertainer d5; spread 5/74/100/67/59). Upload endpoint (raw bytes + query params, 422 on invalid,
+  byte-identical roundtrip verified); uploads private to uploader, seeded songs public.
+- **Play-along game** (`/play`, `/play/:songId`): searchable/filterable browser with difficulty dots and
+  personal bests; canvas waterfall aligned to VirtualPiano geometry (left hand brass, right felt,
+  hit/miss flashes, octave guides); engine on performance.now clock scaled by tempo; settings = tempo
+  25/50/75/100%, look-ahead 6/4/2.5/1.5s, wait mode (freezes on due notes, highlights required keys,
+  unscored), guide audio; live HUD (score/accuracy/combo); scoring in
+  `packages/midi-engine/src/playalong.ts` (judgePlayAlong greedy nearest-match, windows 60/120/200ms,
+  combo bonus ≤10%, wrong-press penalty, tempo × look-ahead multipliers, S/A/B/C/D grades, max 120);
+  attempts persisted (`PlayAlongAttempt`), History page grew an Exercises|Play-along tab switcher.
+- **Deploy note**: the library files are NOT in git/images — after deploying, run the fetch script once
+  server-side (`docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx
+  scripts/fetch-midi-library.ts'`) then reseed; files persist in the `keyboard-sensei-midi-library`
+  volume.
+
+## Previous update — 2026-07-10 (later): 10-parallel-worker batch
 
 Ten parallel Fable workers (disjoint file ownership; content pre-split into `apps/api/src/content/*` batch
 files) delivered, all integrated and verified locally in-browser; CI green; images on GHCR:
