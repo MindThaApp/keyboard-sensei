@@ -7,6 +7,7 @@ import VirtualPiano from "../piano/VirtualPiano";
 import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
+import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
@@ -23,54 +24,56 @@ interface Props {
 
 type Phase = "idle" | "listening" | "counting-in" | "recording" | "submitting" | "scored";
 
-const vexKey = (note: number) => {
-  const names = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"];
-  return `${names[note % 12]}/${Math.floor(note / 12) - 1}`;
-};
-
 /**
- * Maps beats → VexFlow duration codes, including dotted values —
- * NotationRenderer attaches Dot modifiers for "d"-suffix codes, so the dot
- * glyphs render correctly.
- */
-const vexDuration = (beats: number) => {
-  if (beats >= 4) return "w";
-  if (beats >= 3) return "hd";
-  if (beats >= 2) return "h";
-  if (beats >= 1.5) return "qd";
-  if (beats >= 1) return "q";
-  if (beats >= 0.75) return "8d";
-  return "8";
-};
-
-/**
- * Builds notation for an exercise. Notes at or above middle C go on the
- * treble staff, notes below on the bass staff — as a grand staff when the
- * exercise spans both registers (single-clef rendering used to strand C5 on
- * ledger lines above a bass staff).
+ * Builds barred notation for an exercise. Notes at or above middle C go on
+ * the treble staff, notes below on the bass staff — as a grand staff when
+ * the exercise spans both registers (single-clef rendering used to strand
+ * C5 on ledger lines above a bass staff). Notes are grouped into measures
+ * (with rest-filling for under-filled bars) using the exercise's
+ * beatsPerBar/beatUnit, defaulting to 4/4 for older content predating those
+ * fields.
  */
 function notationFor(exercise: MidiExerciseDef) {
-  const beatsFor = (events: typeof exercise.expected) => {
+  const beatsPerBar = exercise.beatsPerBar ?? 4;
+  const beatUnit = exercise.beatUnit ?? 4;
+  const timeSignature = `${beatsPerBar}/${beatUnit}`;
+
+  const beatEventsFor = (events: typeof exercise.expected): BeatEvent[] => {
     const groups = new Map<number, typeof exercise.expected>();
     for (const event of events) groups.set(event.startBeat, [...(groups.get(event.startBeat) ?? []), event]);
     return [...groups.entries()]
       .sort(([a], [b]) => a - b)
-      .map(([, group]) => ({
-        keys: group.map((event) => vexKey(event.note)),
-        duration: vexDuration(Math.max(...group.map((event) => event.durationBeats))),
+      .map(([startBeat, group]) => ({
+        ids: group.map((event) => event.id),
+        keys: group.map((event) => midiToVexKey(event.note)),
+        startBeat,
+        durationBeats: Math.max(...group.map((event) => event.durationBeats)),
       }));
   };
+
   const treble = exercise.expected.filter((event) => event.note >= 60);
   const bass = exercise.expected.filter((event) => event.note < 60);
   if (treble.length > 0 && bass.length > 0) {
     return {
       grandStaff: true,
-      treble: { clef: "treble", notes: beatsFor(treble) },
-      bass: { clef: "bass", notes: beatsFor(bass) },
+      treble: {
+        clef: "treble",
+        timeSignature,
+        measures: groupIntoMeasures(beatEventsFor(treble), beatsPerBar).map((notes) => ({ notes })),
+      },
+      bass: {
+        clef: "bass",
+        timeSignature,
+        measures: groupIntoMeasures(beatEventsFor(bass), beatsPerBar).map((notes) => ({ notes })),
+      },
     };
   }
   const events = treble.length > 0 ? treble : bass;
-  return { clef: treble.length > 0 ? "treble" : "bass", notes: beatsFor(events) };
+  return {
+    clef: treble.length > 0 ? "treble" : "bass",
+    timeSignature,
+    measures: groupIntoMeasures(beatEventsFor(events), beatsPerBar).map((notes) => ({ notes })),
+  };
 }
 
 function SubmetricBar({ label, value }: { label: string; value: number }) {
@@ -258,6 +261,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           <p className="text-sm text-slate-600 dark:text-slate-300">{instructions}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          {!untimed && (
+            <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">
+              {exercise.beatsPerBar ?? 4}/{exercise.beatUnit ?? 4}
+            </span>
+          )}
           {untimed ? (
             <span className="rounded-full border border-slate-300 px-2 py-1 dark:border-slate-600">Untimed — find the right keys</span>
           ) : (
