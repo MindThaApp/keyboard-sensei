@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AttemptSummary } from "@keyboard-sensei/shared-types";
-import { getAttempts } from "../../services/api";
+import { getAttempts, getMyPlayAlongAttempts, type PlayAlongAttemptSummary } from "../../services/api";
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -12,8 +12,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const passing = score >= 70;
+function ScoreBadge({ score, passThreshold = 70 }: { score: number; passThreshold?: number }) {
+  const passing = score >= passThreshold;
   return (
     <span
       className={`rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${
@@ -45,7 +45,27 @@ function AttemptRow({ attempt }: { attempt: AttemptSummary }) {
   );
 }
 
-export default function PracticeHistoryPage() {
+function PlayAlongRow({ attempt }: { attempt: PlayAlongAttemptSummary }) {
+  return (
+    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900">
+      <div className="min-w-0 flex-1">
+        <Link
+          to={`/play/${attempt.song_id}`}
+          className="truncate font-medium text-slate-900 hover:text-felt-700 dark:text-slate-100 dark:hover:text-felt-300"
+        >
+          {attempt.title}
+        </Link>
+        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+          {attempt.artist} · {attempt.tempo_pct}% tempo · {attempt.lookahead_s}s visibility · accuracy {Math.round(attempt.accuracy)}%
+        </p>
+      </div>
+      <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{new Date(attempt.created_at).toLocaleString()}</span>
+      <ScoreBadge score={Math.round(attempt.score)} />
+    </li>
+  );
+}
+
+function ExerciseHistory() {
   const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,18 +77,12 @@ export default function PracticeHistoryPage() {
     return () => { cancelled = true; };
   }, []);
 
-  if (error) {
-    return <p role="alert" className="text-rose-700 dark:text-rose-300">{error}</p>;
-  }
-
-  if (!attempts) {
-    return <p className="text-slate-500 dark:text-slate-300">Loading practice history…</p>;
-  }
-
+  if (error) return <p role="alert" className="text-rose-700 dark:text-rose-300">{error}</p>;
+  if (!attempts) return <p className="text-slate-500 dark:text-slate-300">Loading practice history…</p>;
   if (attempts.length === 0) {
     return (
       <section className="card p-6 text-center">
-        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">No practice yet</h1>
+        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">No practice yet</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Your exercise attempts will show up here. Start a lesson to log your first one.
         </p>
@@ -82,8 +96,7 @@ export default function PracticeHistoryPage() {
   const bestScore = attempts.reduce((best, a) => Math.max(best, a.score), 0);
 
   return (
-    <div className="space-y-6">
-      <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice history</h1>
+    <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile label="Total attempts" value={String(total)} />
         <StatTile label="Average score" value={String(averageScore)} />
@@ -94,6 +107,82 @@ export default function PracticeHistoryPage() {
           <AttemptRow key={attempt.id} attempt={attempt} />
         ))}
       </ol>
+    </div>
+  );
+}
+
+function PlayAlongHistory() {
+  const [recent, setRecent] = useState<PlayAlongAttemptSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMyPlayAlongAttempts()
+      .then((response) => { if (!cancelled) setRecent(response.recent); })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Unable to load play-along history"); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (error) return <p role="alert" className="text-rose-700 dark:text-rose-300">{error}</p>;
+  if (!recent) return <p className="text-slate-500 dark:text-slate-300">Loading play-along history…</p>;
+  if (recent.length === 0) {
+    return (
+      <section className="card p-6 text-center">
+        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">No play-along runs yet</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Pick a song and play along with the falling notes — your scores land here.
+        </p>
+        <Link to="/play" className="primary-button mt-4 inline-block">Browse songs</Link>
+      </section>
+    );
+  }
+
+  const total = recent.length;
+  const best = Math.round(recent.reduce((max, a) => Math.max(max, a.score), 0));
+  const averageAccuracy = Math.round(recent.reduce((sum, a) => sum + a.accuracy, 0) / total);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile label="Recent runs" value={String(total)} />
+        <StatTile label="Best score" value={String(best)} />
+        <StatTile label="Average accuracy" value={`${averageAccuracy}%`} />
+      </div>
+      <ol className="space-y-2">
+        {recent.map((attempt) => (
+          <PlayAlongRow key={attempt.id} attempt={attempt} />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+export default function PracticeHistoryPage() {
+  const [tab, setTab] = useState<"exercises" | "playalong">("exercises");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice history</h1>
+        <div className="ml-auto flex gap-1 text-sm" role="tablist" aria-label="History type">
+          {([["exercises", "Exercises"], ["playalong", "Play-along"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => setTab(value)}
+              className={`rounded-md px-2.5 py-1 transition-colors ${
+                tab === value
+                  ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === "exercises" ? <ExerciseHistory /> : <PlayAlongHistory />}
     </div>
   );
 }
