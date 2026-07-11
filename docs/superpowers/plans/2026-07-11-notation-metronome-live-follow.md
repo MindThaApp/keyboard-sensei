@@ -1128,9 +1128,11 @@ git commit -m "feat(web): metronome selectable sounds (click/wood/beep/cowbell) 
 
 ### Task 6: `MetronomeControls` component + Settings integration
 
+> **Amended during execution (2026-07-11):** Ramin asked that metronome sound/volume controls live only inline on the page they're used (the exercise itself, wired in Task 7), not duplicated in a global Settings section. The Settings-page integration described below (`MetronomeSection`, its render in `SettingsPage.tsx`) was implemented per this task's original text, then reverted in a follow-up commit (`fix(web): remove metronome Settings section per product feedback`). `MetronomeControls.tsx` and its `localStorage` persistence (`loadMetronomeSettings`/`saveMetronomeSettings`) are unaffected and still used exactly as Task 7 describes — persistence just isn't surfaced through a dedicated Settings section anymore. Treat the "Modify: SettingsPage.tsx" file and its steps below as historical (not present in the final tree).
+
 **Files:**
 - Create: `apps/web/src/components/midi/MetronomeControls.tsx`
-- Modify: `apps/web/src/components/settings/SettingsPage.tsx` (add `MetronomeSection`, render it)
+- ~~Modify: `apps/web/src/components/settings/SettingsPage.tsx` (add `MetronomeSection`, render it)~~ — reverted, see amendment above.
 
 **Interfaces:**
 - Consumes: `metronome`, `MetronomeSound` from Task 5's `metronome.ts`.
