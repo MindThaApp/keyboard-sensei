@@ -1,5 +1,6 @@
 import {
   JUDGE_WINDOWS_S,
+  judgeNextPress,
   judgePlayAlong,
   type PlayAlongJudgment,
   type PlayAlongNote,
@@ -190,26 +191,14 @@ export class PlayAlongEngine {
 
     this.presses.push({ midi, songTimeS: songTimeAtPress });
 
-    // Live judgment: nearest unjudged same-pitch note within the ok window.
-    let best = -1;
-    let bestDelta = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < notes.length; i++) {
-      if (this.judgments[i] !== undefined || notes[i].midi !== midi) continue;
-      const delta = Math.abs(songTimeAtPress - notes[i].startS);
-      if (delta <= JUDGE_WINDOWS_S.ok && delta < bestDelta) {
-        bestDelta = delta;
-        best = i;
-      }
-    }
-    if (best === -1) {
+    const match = judgeNextPress(notes, this.judgments, midi, songTimeAtPress);
+    if (!match) {
       this.stats = { ...this.stats, wrongPressCount: this.stats.wrongPressCount + 1 };
       this.combo = 0;
       this.stats.combo = 0;
       return;
     }
-    const judgment: PlayAlongJudgment =
-      bestDelta <= JUDGE_WINDOWS_S.perfect ? "perfect" : bestDelta <= JUDGE_WINDOWS_S.good ? "good" : "ok";
-    this.recordJudgment(best, judgment);
+    this.recordJudgment(match.index, match.judgment);
   }
 
   private recordJudgment(index: number, judgment: PlayAlongJudgment): void {
