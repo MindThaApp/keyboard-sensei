@@ -74,20 +74,30 @@ function notationFor(exercise: MidiExerciseDef) {
       }));
   };
 
+  // How many measures a hand's events naturally span, from measure 0 through
+  // the last measure containing a note (mirrors groupIntoMeasures' own
+  // measureIndex arithmetic).
+  const measureCountFor = (events: typeof exercise.expected): number =>
+    events.length === 0 ? 0 : Math.floor(Math.max(...events.map((event) => event.startBeat)) / beatsPerBar) + 1;
+
   const treble = exercise.expected.filter((event) => event.note >= 60);
   const bass = exercise.expected.filter((event) => event.note < 60);
   if (treble.length > 0 && bass.length > 0) {
+    // Both hands are grouped independently, so a hand that rests for a full
+    // measure needs a shared minMeasureCount to keep array position aligned
+    // with absolute bar number between the two staves (see groupIntoMeasures).
+    const sharedMeasureCount = Math.max(measureCountFor(treble), measureCountFor(bass));
     return {
       grandStaff: true,
       treble: {
         clef: "treble",
         timeSignature,
-        measures: groupIntoMeasures(beatEventsFor(treble), beatsPerBar).map((notes) => ({ notes })),
+        measures: groupIntoMeasures(beatEventsFor(treble), beatsPerBar, sharedMeasureCount).map((notes) => ({ notes })),
       },
       bass: {
         clef: "bass",
         timeSignature,
-        measures: groupIntoMeasures(beatEventsFor(bass), beatsPerBar).map((notes) => ({ notes })),
+        measures: groupIntoMeasures(beatEventsFor(bass), beatsPerBar, sharedMeasureCount).map((notes) => ({ notes })),
       },
     };
   }

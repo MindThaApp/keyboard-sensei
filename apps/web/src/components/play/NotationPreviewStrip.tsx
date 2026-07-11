@@ -74,11 +74,20 @@ export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bp
       notes.filter((n) => n.startBeat <= currentBeat && currentBeat < n.startBeat + n.durationBeats).map((n) => n.id),
     );
 
+    const right = toBeatEvents("right");
+    const left = toBeatEvents("left");
+    // Each hand is grouped into measures independently, so a hand resting for
+    // a full bar within the window needs a shared minMeasureCount to keep the
+    // treble/bass arrays aligned bar-for-bar (see groupIntoMeasures' docstring).
+    const measureCountFor = (events: BeatEvent[]): number =>
+      events.length === 0 ? 0 : Math.floor(Math.max(...events.map((e) => e.startBeat)) / beatsPerBar) + 1;
+    const sharedMeasureCount = Math.max(measureCountFor(right), measureCountFor(left));
+
     return {
       data: {
         grandStaff: true,
-        treble: { clef: "treble", measures: groupIntoMeasures(toBeatEvents("right"), beatsPerBar).map((noteList) => ({ notes: noteList })) },
-        bass: { clef: "bass", measures: groupIntoMeasures(toBeatEvents("left"), beatsPerBar).map((noteList) => ({ notes: noteList })) },
+        treble: { clef: "treble", measures: groupIntoMeasures(right, beatsPerBar, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
+        bass: { clef: "bass", measures: groupIntoMeasures(left, beatsPerBar, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
       },
       activeNoteIds: active,
     };
