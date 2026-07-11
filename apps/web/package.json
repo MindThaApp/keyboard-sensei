@@ -11,10 +11,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@keyboard-sensei/shared-types": "workspace:*",
     "@keyboard-sensei/lesson-engine": "workspace:*",
     "@keyboard-sensei/midi-engine": "workspace:*",
     "@keyboard-sensei/music-theory": "workspace:*",
+    "@keyboard-sensei/shared-types": "workspace:*",
+    "@tonejs/midi": "^2.0.28",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
