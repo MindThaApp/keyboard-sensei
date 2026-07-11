@@ -1,0 +1,144 @@
+import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
+
+/** Must match VirtualPiano's key layout so notes land on their keys. */
+export const WHITE_KEY_WIDTH_PX = 40;
+export const BLACK_KEY_WIDTH_PX = 26;
+
+const BLACK_KEY_PITCH_CLASSES = new Set([1, 3, 6, 8, 10]);
+export const isBlackKey = (note: number): boolean => BLACK_KEY_PITCH_CLASSES.has(((note % 12) + 12) % 12);
+
+export interface KeyboardGeometry {
+  lowestNote: number;
+  highestNote: number;
+  widthPx: number;
+  /** x/width of each MIDI note's key, matching VirtualPiano rendering. */
+  xFor: (note: number) => { x: number; width: number };
+}
+
+/** Octave-aligned range containing the song, ≥ 2 octaves, clamped to the 88 keys. */
+export function pianoRangeFor(pitchMin: number, pitchMax: number): { lowestNote: number; highestNote: number } {
+  let low = Math.floor(pitchMin / 12) * 12; // down to a C
+  let high = Math.ceil((pitchMax + 1) / 12) * 12 - 1; // up to a B
+  while (high - low < 24) {
+    if (low >= 12 + 12) low -= 12;
+    else high += 12;
+  }
+  return { lowestNote: Math.max(21, low), highestNote: Math.min(108, high) };
+}
+
+export function keyboardGeometry(lowestNote: number, highestNote: number): KeyboardGeometry {
+  const whiteNotes: number[] = [];
+  for (let note = lowestNote; note <= highestNote; note++) {
+    if (!isBlackKey(note)) whiteNotes.push(note);
+  }
+  const whiteIndex = new Map(whiteNotes.map((note, index) => [note, index]));
+  const xFor = (note: number): { x: number; width: number } => {
+    if (!isBlackKey(note)) {
+      return { x: (whiteIndex.get(note) ?? 0) * WHITE_KEY_WIDTH_PX, width: WHITE_KEY_WIDTH_PX };
+    }
+    const whiteKeysBefore = whiteNotes.filter((white) => white < note).length;
+    return { x: whiteKeysBefore * WHITE_KEY_WIDTH_PX - BLACK_KEY_WIDTH_PX / 2, width: BLACK_KEY_WIDTH_PX };
+  };
+  return { lowestNote, highestNote, widthPx: whiteNotes.length * WHITE_KEY_WIDTH_PX, xFor };
+}
+
+export interface WaterfallColors {
+  right: string;
+  left: string;
+  hit: string;
+  missed: string;
+  lane: string;
+  hitLine: string;
+}
+
+export const WATERFALL_COLORS_LIGHT: WaterfallColors = {
+  right: "#b4323e", // felt-600
+  left: "#c9a227", // brass-500
+  hit: "#059669", // emerald-600
+  missed: "#fb7185", // rose-400
+  lane: "rgba(15, 23, 42, 0.04)",
+  hitLine: "rgba(180, 50, 62, 0.55)",
+};
+
+export const WATERFALL_COLORS_DARK: WaterfallColors = {
+  right: "#cf5260", // felt-400
+  left: "#d1ad3d", // brass-400
+  hit: "#34d399",
+  missed: "#fb7185",
+  lane: "rgba(255, 255, 255, 0.04)",
+  hitLine: "rgba(207, 82, 96, 0.6)",
+};
+
+export interface WaterfallFrame {
+  notes: PlayAlongNote[];
+  judgments: readonly (PlayAlongJudgment | undefined)[];
+  songTimeS: number;
+  lookaheadS: number;
+  geometry: KeyboardGeometry;
+  heightPx: number;
+  colors: WaterfallColors;
+  waitingPitches?: Set<number>;
+}
+
+/**
+ * Draw one frame. y = bottom edge is "now" (the hit line sits there, keys
+ * directly below); a note occupies the vertical span of its duration and
+ * slides down as songTime advances.
+ */
+export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFrame): void {
+  const { notes, judgments, songTimeS, lookaheadS, geometry, heightPx, colors } = frame;
+  const width = geometry.widthPx;
+  ctx.clearRect(0, 0, width, heightPx);
+
+  // Octave lane guides on the C lines.
+  ctx.fillStyle = frame.colors.lane;
+  for (let note = geometry.lowestNote; note <= geometry.highestNote; note++) {
+    if (note % 12 === 0) {
+      const { x } = geometry.xFor(note);
+      ctx.fillRect(x, 0, 1.5, heightPx);
+    }
+  }
+
+  const pxPerSecond = heightPx / lookaheadS;
+  // Recently passed notes remain briefly visible below the hit line…no,
+  // the hit line IS the bottom; passed portions simply slide out of view.
+  for (let i = 0; i < notes.length; i++) {
+    const note = notes[i];
+    const timeToStart = note.startS - songTimeS;
+    if (timeToStart > lookaheadS) continue; // not yet visible
+    if (timeToStart + note.durationS < 0) continue; // fully past
+    const { x, width: keyWidth } = geometry.xFor(note.midi);
+    const bottomY = heightPx - timeToStart * pxPerSecond;
+    const noteHeight = Math.max(6, note.durationS * pxPerSecond);
+    const topY = bottomY - noteHeight;
+
+    const judgment = judgments[i];
+    let fill = note.hand === "left" ? colors.left : colors.right;
+    if (judgment === "perfect" || judgment === "good" || judgment === "ok") fill = colors.hit;
+    else if (judgment === "miss") fill = colors.missed;
+
+    const visibleTop = Math.max(0, topY);
+    const visibleBottom = Math.min(heightPx, bottomY);
+    if (visibleBottom <= visibleTop) continue;
+    ctx.fillStyle = fill;
+    ctx.globalAlpha = judgment === undefined ? 0.92 : 0.75;
+    roundRect(ctx, x + 1.5, visibleTop, keyWidth - 3, visibleBottom - visibleTop, 4);
+    ctx.globalAlpha = 1;
+  }
+
+  // Hit line.
+  ctx.fillStyle = colors.hitLine;
+  ctx.fillRect(0, heightPx - 2, width, 2);
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  const radius = Math.min(r, w / 2, Math.max(0, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+  ctx.fill();
+}

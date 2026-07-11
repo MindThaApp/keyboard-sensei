@@ -11,6 +11,7 @@ import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
 import AdminUsersPage from "./components/admin/AdminUsersPage";
 import AdminSongsPage from "./components/admin/AdminSongsPage";
 import SongBrowserPage from "./components/play/SongBrowserPage";
+import PlayAlongPage from "./components/play/PlayAlongPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
@@ -138,6 +139,7 @@ export default function App() {
           <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play" element={<SongBrowserPage />} />
+          <Route path="/play/:songId" element={<PlayAlongPage />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
