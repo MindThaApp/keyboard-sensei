@@ -2183,7 +2183,9 @@ Replace with:
 
 - [ ] **Step 7: Highlight the due note(s) on the piano and notation, and add the live HUD**
 
-Add a derived list of currently-due MIDI numbers, just above the component's `return (`:
+> **Correction found during execution (2026-07-11):** the original text below placed this `useMemo` call "just above the component's `return (`" — after the `if (!exercise) return ...` early return. Since `useMemo` is a hook, calling it conditionally (skipped on the loading render, reached on a later one) is a Rules-of-Hooks violation, the same class of bug found and fixed in Task 10. `liveNotesRef` and `activeNoteIds` are both available before the early return too, so this hook must move there instead — add it to Step 3's block of `useState`/`useRef` declarations (alongside the other hooks), not near the final `return (`.
+
+Add a derived list of currently-due MIDI numbers, **alongside the other `useState`/`useRef` declarations from Step 3** (before the `if (!exercise) return ...` early return):
 
 ```tsx
   const liveDueMidis = useMemo(
