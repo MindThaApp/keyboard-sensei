@@ -9,6 +9,8 @@ import AuthPage, { RegistrationForm } from "./components/auth/AuthPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
 import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
 import AdminUsersPage from "./components/admin/AdminUsersPage";
+import AdminSongsPage from "./components/admin/AdminSongsPage";
+import SongBrowserPage from "./components/play/SongBrowserPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
@@ -106,6 +108,7 @@ export default function App() {
           <nav className="flex items-center gap-1 text-sm">
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
+            <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
             {auth.user?.role === "admin" && <NavLink to="/admin/users" className={navLinkClasses}>Admin</NavLink>}
@@ -134,7 +137,9 @@ export default function App() {
           <Route path="/practice-gym" element={<PracticeGymPage />} />
           <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/play" element={<SongBrowserPage />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
+          <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>
