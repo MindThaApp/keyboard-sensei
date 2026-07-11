@@ -6,11 +6,6 @@ import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
-import MetronomeControls, {
-  loadMetronomeSettings,
-  saveMetronomeSettings,
-  type MetronomeSettings,
-} from "../midi/MetronomeControls";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
@@ -319,28 +314,6 @@ function NarrationSection() {
   );
 }
 
-function MetronomeSection() {
-  const [settings, setSettings] = useState<MetronomeSettings>(loadMetronomeSettings);
-
-  function update(next: MetronomeSettings) {
-    setSettings(next);
-    saveMetronomeSettings(next);
-  }
-
-  return (
-    <section className="card space-y-4 p-5">
-      <div>
-        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Metronome</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Default click sound and volume for lesson and Practice Gym exercises. Can still be changed per
-          session from the exercise itself.
-        </p>
-      </div>
-      <MetronomeControls settings={settings} onChange={update} />
-    </section>
-  );
-}
-
 function MidiSection() {
   const { subscribe } = useMidiContext();
   const [lastNote, setLastNote] = useState<string | null>(null);
@@ -375,7 +348,6 @@ export default function SettingsPage() {
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <AccountSection />
       <NarrationSection />
-      <MetronomeSection />
       <MidiSection />
     </div>
   );
