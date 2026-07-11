@@ -48,15 +48,27 @@ export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bp
 
   const { data, activeNoteIds } = useMemo(() => {
     const windowed = notes.filter((n) => n.startBeat >= windowStart && n.startBeat < windowStart + windowBeats);
-    const toBeatEvents = (hand: "left" | "right"): BeatEvent[] =>
-      windowed
-        .filter((n) => n.hand === hand)
-        .map((n) => ({
-          ids: [n.id],
-          keys: [midiToVexKey(n.midi)],
-          startBeat: n.startBeat - windowStart,
-          durationBeats: n.durationBeats,
+    // Combine simultaneous notes (chords / both hands' overlapping notes within one hand's
+    // part) that share a quantized startBeat into a single BeatEvent before calling
+    // groupIntoMeasures — see that function's docstring for why: it counts one
+    // durationBeats per BeatEvent toward a measure's beat total, so emitting one BeatEvent
+    // per note (instead of per distinct startBeat) would double/triple-count elapsed beats
+    // for chords and break trailing-rest calculation. Mirrors MidiExercise.tsx's beatEventsFor.
+    const toBeatEvents = (hand: "left" | "right"): BeatEvent[] => {
+      const groups = new Map<number, QuantizedSongNote[]>();
+      for (const n of windowed.filter((n) => n.hand === hand)) {
+        const startBeat = n.startBeat - windowStart;
+        groups.set(startBeat, [...(groups.get(startBeat) ?? []), n]);
+      }
+      return [...groups.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([startBeat, group]) => ({
+          ids: group.map((n) => n.id),
+          keys: group.map((n) => midiToVexKey(n.midi)),
+          startBeat,
+          durationBeats: Math.max(...group.map((n) => n.durationBeats)),
         }));
+    };
 
     const active = new Set(
       notes.filter((n) => n.startBeat <= currentBeat && currentBeat < n.startBeat + n.durationBeats).map((n) => n.id),
