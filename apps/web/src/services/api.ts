@@ -92,3 +92,59 @@ export const setAdminUserProgress = (id: string, lessonId: string, status: Admin
     `/admin/users/${encodeURIComponent(id)}/progress/${encodeURIComponent(lessonId)}`,
     { method: "PUT", body: JSON.stringify({ status, ...(best_score !== undefined ? { best_score } : {}) }) },
   );
+
+// --- Songs / play-along ---
+export type SongGenre = "classical" | "pop" | "film" | "game" | "jazz" | "other";
+export interface Song {
+  id: string;
+  title: string;
+  artist: string;
+  genre: SongGenre;
+  difficulty: number;
+  duration_sec: number;
+  note_count: number;
+  content_rights: string;
+  mine: boolean;
+}
+export interface PlayAlongAttemptSummary {
+  id: string;
+  song_id: string;
+  title: string;
+  artist: string;
+  score: number;
+  accuracy: number;
+  tempo_pct: number;
+  lookahead_s: number;
+  wait_mode: boolean;
+  created_at: string;
+}
+export const getSongs = () => request<{ songs: Song[] }>("/songs");
+export const deleteSong = (id: string) => request<{ ok: true }>(`/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const adminUpdateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre; difficulty: number }>) =>
+  request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export const getMyPlayAlongAttempts = () =>
+  request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
+export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; lookahead_s: number; wait_mode: boolean }) =>
+  request<{ id: string; score: number; accuracy: number }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
+
+export const getSongFile = async (id: string): Promise<ArrayBuffer> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/songs/${encodeURIComponent(id)}/file`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Could not load song file (${response.status})`);
+  return response.arrayBuffer();
+};
+
+export const uploadSong = async (file: File, meta: { title: string; artist: string; genre: SongGenre }): Promise<Song> => {
+  const token = getToken();
+  const params = new URLSearchParams({ title: meta.title, artist: meta.artist, genre: meta.genre });
+  const response = await fetch(`${API_URL}/songs/upload?${params}`, {
+    method: "POST",
+    headers: { "content-type": "audio/midi", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const body = await response.json().catch(() => null) as (Song & { error?: { message?: string } }) | null;
+  if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
+  return body as Song;
+};
