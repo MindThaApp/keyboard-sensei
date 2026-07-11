@@ -63,6 +63,13 @@ master. Spec/plan in `docs/superpowers/{specs,plans}/2026-07-11-*`. All verified
   server-side (`docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx
   scripts/fetch-midi-library.ts'`) then reseed; files persist in the `keyboard-sensei-midi-library`
   volume.
+- **DEPLOYED 2026-07-11**: live at 192.168.4.4 (this batch, master 3097a2f + compose ADMIN_PASSWORD
+  passthrough). Deployed via `docker-compose.deploy.yml` build-on-server as a one-off: GHCR pulls
+  still 403 because no PAT with `read:packages` exists on the server (the local `gh` token lacks that
+  scope — run `gh auth refresh -s read:packages` or mint a PAT to restore the GHCR flow). MIDI library
+  copied into the `keyboard-sensei-midi-library` volume (305 files) and reseeded. Server admin password
+  is set via `ADMIN_PASSWORD` in the server's `.env.deploy` (gitignored). Verified live: admin login,
+  305 songs listed + file streaming, all 34 lessons unlocked for admin, web 200 on :8181.
 
 ## Previous update — 2026-07-10 (later): 10-parallel-worker batch
 
