@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgresql://keyboard_sensei:${POSTGRES_PASSWORD}@postgres:5432/keyboard_sensei
       JWT_SECRET: ${JWT_SECRET}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN}
     volumes:
