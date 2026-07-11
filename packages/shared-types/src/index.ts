@@ -21,7 +21,8 @@ export interface Lesson { id: string; path: LearningPathId; level: LevelId; bran
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** scoring "untimed" = only pitches (and chord togetherness) are scored — for find-the-notes drills with no pulse. Default "timed". */
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; expected: ExpectedNoteEvent[] }
+export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; expected: ExpectedNoteEvent[] }
+export type ExerciseTempoPct = 25 | 50 | 75 | 100;
 export interface RawMidiEvent { note: number; velocity: number; type: "noteon" | "noteoff"; timestampMs: number }
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
 export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown";
@@ -43,7 +44,7 @@ export interface AuthUser { id: string; email: string; display_name: string; nar
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }
-export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[] }
+export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct }
 export interface QuizAnswerPayload { selectedAnswer: number }
 export interface QuizAnswerResponse { correct: boolean; explanation: string; correctIndex: number }
 export interface AttemptSummary { id: string; exerciseId: string; lessonId: string; lessonTitle: string; score: number; createdAt: string }
