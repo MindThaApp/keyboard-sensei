@@ -59,38 +59,54 @@ function restsForGap(beats: number): NoteData[] {
  * calling this) into measures of `beatsPerBar` beats each, filling any
  * leading or trailing gap in a measure with rests so barlines land at their
  * correct visual position even when a phrase doesn't fully fill every bar.
+ *
+ * Every measure index from 0 through the highest occupied measure (or
+ * through `minMeasureCount - 1`, if that's higher) gets an entry in the
+ * returned array, including fully silent measures — a full-bar rest is
+ * emitted for those — so "array position" always equals "absolute bar
+ * number". This matters most when two independently-grouped parts (e.g. a
+ * grand staff's right/left hand) need to line up bar-for-bar: pass the
+ * shared, larger of the two parts' natural measure counts as
+ * `minMeasureCount` to both calls so a hand that rests for a full bar
+ * doesn't fall out of alignment with the other hand.
  */
-export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: number): NoteData[][] {
+export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: number, minMeasureCount?: number): NoteData[][] {
   const sorted = [...events].sort((a, b) => a.startBeat - b.startBeat);
-  const measures: NoteData[][] = [];
-  let currentMeasureIndex = -1;
-  let currentMeasure: NoteData[] = [];
-  let beatsUsedInMeasure = 0;
 
-  const closeMeasure = () => {
-    if (currentMeasureIndex === -1) return;
-    const gap = beatsPerBar - beatsUsedInMeasure;
-    if (gap > 1e-6) currentMeasure.push(...restsForGap(gap));
-    measures.push(currentMeasure);
-  };
-
+  const eventsByMeasure = new Map<number, BeatEvent[]>();
+  let highestMeasureIndex = -1;
   for (const event of sorted) {
     const measureIndex = Math.floor(event.startBeat / beatsPerBar);
-    if (measureIndex !== currentMeasureIndex) {
-      closeMeasure();
-      currentMeasureIndex = measureIndex;
-      currentMeasure = [];
-      beatsUsedInMeasure = 0;
-      const measureStartBeat = measureIndex * beatsPerBar;
-      const leadGap = event.startBeat - measureStartBeat;
-      if (leadGap > 1e-6) {
-        currentMeasure.push(...restsForGap(leadGap));
-        beatsUsedInMeasure += leadGap;
-      }
-    }
-    currentMeasure.push({ ids: event.ids, keys: event.keys, duration: beatsToVexDuration(event.durationBeats) });
-    beatsUsedInMeasure += event.durationBeats;
+    eventsByMeasure.set(measureIndex, [...(eventsByMeasure.get(measureIndex) ?? []), event]);
+    highestMeasureIndex = Math.max(highestMeasureIndex, measureIndex);
   }
-  closeMeasure();
+
+  const lastMeasureIndex = Math.max(highestMeasureIndex, (minMeasureCount ?? 0) - 1);
+  const measures: NoteData[][] = [];
+
+  for (let measureIndex = 0; measureIndex <= lastMeasureIndex; measureIndex++) {
+    const measureEvents = eventsByMeasure.get(measureIndex);
+    if (!measureEvents) {
+      measures.push(restsForGap(beatsPerBar));
+      continue;
+    }
+
+    const measure: NoteData[] = [];
+    let beatsUsedInMeasure = 0;
+    const measureStartBeat = measureIndex * beatsPerBar;
+    const leadGap = measureEvents[0].startBeat - measureStartBeat;
+    if (leadGap > 1e-6) {
+      measure.push(...restsForGap(leadGap));
+      beatsUsedInMeasure += leadGap;
+    }
+    for (const event of measureEvents) {
+      measure.push({ ids: event.ids, keys: event.keys, duration: beatsToVexDuration(event.durationBeats) });
+      beatsUsedInMeasure += event.durationBeats;
+    }
+    const trailingGap = beatsPerBar - beatsUsedInMeasure;
+    if (trailingGap > 1e-6) measure.push(...restsForGap(trailingGap));
+    measures.push(measure);
+  }
+
   return measures;
 }
