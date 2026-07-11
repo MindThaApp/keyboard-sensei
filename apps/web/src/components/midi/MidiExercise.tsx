@@ -106,6 +106,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
+  const [tempoPct, setTempoPct] = useState<25 | 50 | 75 | 100>(100);
 
   const raw = useRef<RawMidiEvent[]>([]);
   const start = useRef(0);
@@ -152,6 +153,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const untimed = exercise.scoring === "untimed";
   const hasChords = exercise.expected.some((event) => event.chordGroupId !== null);
   const msPerBeat = 60_000 / exercise.tempoBpm;
+  const effectiveBpm = exercise.tempoBpm * (tempoPct / 100);
   const notes = [...new Set(exercise.expected.map((n) => n.note))];
   // Pad the keyboard to octave boundaries so it reads as an instrument, not a fragment.
   const low = Math.max(36, Math.min(...notes) - 2);
@@ -202,7 +204,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     }
     setPhase("counting-in");
     metronome.start({
-      bpm: exercise.tempoBpm,
+      bpm: effectiveBpm,
       countInBeats: COUNT_IN_BEATS,
       sound: metronomeSettingsRef.current.sound,
       volume: metronomeSettingsRef.current.volume,
@@ -231,8 +233,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     try {
       const performedNotes = pairRawMidiEvents(raw.current);
       const scored = lessonId
-        ? await submitExercise(exerciseId, { performedNotes })
-        : await submitPractice(exercise, { performedNotes });
+        ? await submitExercise(exerciseId, { performedNotes, tempoPct })
+        : await submitPractice(exercise, { performedNotes, tempoPct });
       setResult(scored);
       setPhase("scored");
       onCompleted?.(scored);
@@ -339,6 +341,26 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
         {!untimed && (
           <div className="ml-auto flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1" role="radiogroup" aria-label="Practice tempo">
+              <span className="mr-1 text-xs text-slate-500">Tempo</span>
+              {([25, 50, 75, 100] as const).map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  role="radio"
+                  aria-checked={tempoPct === pct}
+                  disabled={capturing || phase === "counting-in"}
+                  onClick={() => setTempoPct(pct)}
+                  className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                    tempoPct === pct
+                      ? "bg-felt-600 font-medium text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  } disabled:opacity-50`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
               Metronome while playing
