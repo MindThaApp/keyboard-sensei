@@ -72,3 +72,25 @@ describe("scoreMidiExercise (untimed)", () => {
     expect(result.mistakes.some(x=>x.issue==="late")).toBe(true);
   });
 });
+
+describe("scoreMidiExercise (tempoPct)", () => {
+  it("scores perfectly when performed at half the authored tempo with tempoPct 50", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const result = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 1000), played(62, 1000, 1000)],
+      tempoPct: 50,
+    });
+    expect(result.score).toBe(100);
+  });
+
+  it("penalizes the same performance as mistimed when scored at full tempo", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const result = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 1000), played(62, 1000, 1000)],
+      tempoPct: 100,
+    });
+    expect(result.mistakes.some((m) => m.issue === "late")).toBe(true);
+  });
+});
