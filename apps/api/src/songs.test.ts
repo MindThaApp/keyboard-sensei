@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { extractSongMetadata, InvalidMidiError } from "./songs.js";
+// Import from midi-metadata directly: songs.ts pulls in auth/db/config, whose
+// env parsing fails in CI where no .env exists.
+import { extractSongMetadata, InvalidMidiError } from "./midi-metadata.js";
 
 /** Build a valid in-range MIDI file: `count` quarter notes at 120bpm starting at C4. */
 function buildMidi(count: number, options: { midi?: number; durationEach?: number } = {}): Uint8Array {
