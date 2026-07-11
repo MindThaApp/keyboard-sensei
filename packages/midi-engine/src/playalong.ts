@@ -45,6 +45,39 @@ const judgmentFor = (deltaS: number): PlayAlongJudgment => {
   return "miss";
 };
 
+export interface NextPressMatch {
+  index: number;
+  judgment: PlayAlongJudgment;
+}
+
+/**
+ * Finds the nearest unjudged same-pitch note for an incoming press, inside
+ * the ok window. Shared by PlayAlongEngine's live judging (falling notes)
+ * and the lesson/gym live-follow overlay, so both features use one tested
+ * definition of "was this press a hit."
+ */
+export function judgeNextPress(
+  notes: PlayAlongNote[],
+  judgments: readonly (PlayAlongJudgment | undefined)[],
+  midi: number,
+  songTimeS: number,
+): NextPressMatch | null {
+  let best = -1;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < notes.length; i++) {
+    if (judgments[i] !== undefined || notes[i].midi !== midi) continue;
+    const delta = Math.abs(songTimeS - notes[i].startS);
+    if (delta <= JUDGE_WINDOWS_S.ok && delta < bestDelta) {
+      bestDelta = delta;
+      best = i;
+    }
+  }
+  if (best === -1) return null;
+  const judgment: PlayAlongJudgment =
+    bestDelta <= JUDGE_WINDOWS_S.perfect ? "perfect" : bestDelta <= JUDGE_WINDOWS_S.good ? "good" : "ok";
+  return { index: best, judgment };
+}
+
 /**
  * Match notes (in start order) to presses greedily: each note takes the
  * unconsumed same-pitch press with the smallest |Δt| inside the ok window.

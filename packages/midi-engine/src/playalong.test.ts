@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   finalScore,
+  judgeNextPress,
   judgePlayAlong,
   lookaheadMultiplier,
   tempoMultiplier,
@@ -84,6 +85,26 @@ describe("judgePlayAlong", () => {
     const notes = [note(60, 1), note(64, 1)];
     const result = judgePlayAlong(notes, [press(60, 1)]);
     expect(result.judgments).toEqual(["perfect", "miss"]);
+  });
+});
+
+describe("judgeNextPress", () => {
+  it("matches the nearest unjudged same-pitch note within the ok window", () => {
+    const notes = [note(60, 1), note(60, 1.3)];
+    const match = judgeNextPress(notes, [undefined, undefined], 60, 1.22);
+    expect(match).toEqual({ index: 1, judgment: "good" });
+  });
+
+  it("returns null when no unjudged note of that pitch is within the ok window", () => {
+    const notes = [note(60, 1)];
+    const match = judgeNextPress(notes, [undefined], 60, 2);
+    expect(match).toBeNull();
+  });
+
+  it("skips notes that are already judged", () => {
+    const notes = [note(60, 1), note(60, 2)];
+    const match = judgeNextPress(notes, ["perfect", undefined], 60, 2.01);
+    expect(match).toEqual({ index: 1, judgment: "perfect" });
   });
 });
 
