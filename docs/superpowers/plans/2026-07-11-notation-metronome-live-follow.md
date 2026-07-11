@@ -1635,14 +1635,19 @@ git commit -m "feat(api): thread tempoPct through exercise and practice scoring 
 
 - [ ] **Step 1: Add tempo state and `effectiveBpm`**
 
-Alongside the other `useState` declarations in the component, add:
+> **Correction found during execution (2026-07-11):** this step's original text bundled a hook call and a derived const into one snippet with contradictory placement guidance ("alongside the other useState declarations" — which are before the component's early return — while also describing the second line as sitting "after" that same early return). Taken literally this is a Rules-of-Hooks violation (a `useState` call skipped on the loading render, then reached on a later one). The implementer caught this and split the snippet correctly; the corrected placement is below.
+
+Add `tempoPct` state **alongside the other `useState` declarations** (i.e. before the `if (!exercise) { return ...; }` early return):
 
 ```tsx
 const [tempoPct, setTempoPct] = useState<25 | 50 | 75 | 100>(100);
-const effectiveBpm = exercise.tempoBpm * (tempoPct / 100);
 ```
 
-(`exercise` is guaranteed non-null at this point in the function body — this line sits after the `if (!exercise) { return ...; }` early return, same as the existing `untimed`/`msPerBeat` lines just above it.)
+Add `effectiveBpm` as a plain derived `const` **after** the early return, alongside the existing `untimed`/`msPerBeat` lines (where `exercise` is guaranteed non-null):
+
+```tsx
+const effectiveBpm = exercise.tempoBpm * (tempoPct / 100);
+```
 
 - [ ] **Step 2: Use `effectiveBpm` for the count-in/recording metronome, not `listen()`**
 
