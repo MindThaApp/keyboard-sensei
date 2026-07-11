@@ -36,13 +36,15 @@ interface LiveNote extends PlayAlongNote {
 function liveNotesFor(exercise: MidiExerciseDef, effectiveBpm: number): LiveNote[] {
   const msPerBeat = 60_000 / effectiveBpm;
   const firstBeat = Math.min(...exercise.expected.map((n) => n.startBeat));
-  return exercise.expected.map((event) => ({
-    id: event.id,
-    midi: event.note,
-    startS: ((event.startBeat - firstBeat) * msPerBeat) / 1000,
-    durationS: (event.durationBeats * msPerBeat) / 1000,
-    hand: "right",
-  }));
+  return exercise.expected
+    .map((event) => ({
+      id: event.id,
+      midi: event.note,
+      startS: ((event.startBeat - firstBeat) * msPerBeat) / 1000,
+      durationS: (event.durationBeats * msPerBeat) / 1000,
+      hand: "right" as const,
+    }))
+    .sort((a, b) => a.startS - b.startS);
 }
 
 /**
