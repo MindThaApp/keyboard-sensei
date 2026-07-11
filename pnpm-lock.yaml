@@ -90,6 +90,9 @@ importers:
       '@keyboard-sensei/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@tonejs/midi':
+        specifier: ^2.0.28
+        version: 2.0.28
       react:
         specifier: ^18.3.1
         version: 18.3.1
