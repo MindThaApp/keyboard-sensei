@@ -3,6 +3,7 @@ import type { MidiExercise as MidiExerciseDef, RawMidiEvent, ScoringResult } fro
 import { pairRawMidiEvents } from "@keyboard-sensei/midi-engine";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "./MidiContext";
+import MetronomeControls, { loadMetronomeSettings, saveMetronomeSettings, type MetronomeSettings } from "./MetronomeControls";
 import VirtualPiano from "../piano/VirtualPiano";
 import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
@@ -101,6 +102,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [phase, setPhase] = useState<Phase>("idle");
   const [beat, setBeat] = useState<{ index: number; isCountIn: boolean } | null>(null);
   const [metronomeOn, setMetronomeOn] = useState(true);
+  const [metronomeSettings, setMetronomeSettings] = useState<MetronomeSettings>(loadMetronomeSettings);
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
@@ -112,6 +114,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const previewSounding = useRef<Set<number>>(new Set());
   const metronomeOnRef = useRef(metronomeOn);
   metronomeOnRef.current = metronomeOn;
+  const metronomeSettingsRef = useRef(metronomeSettings);
+  metronomeSettingsRef.current = metronomeSettings;
 
   useEffect(
     () =>
@@ -200,6 +204,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     metronome.start({
       bpm: exercise.tempoBpm,
       countInBeats: COUNT_IN_BEATS,
+      sound: metronomeSettingsRef.current.sound,
+      volume: metronomeSettingsRef.current.volume,
       onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
       onGo: () => {
         start.current = performance.now();
@@ -332,10 +338,19 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         )}
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
         {!untimed && (
-          <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
-            Metronome while playing
-          </label>
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
+              Metronome while playing
+            </label>
+            <MetronomeControls
+              settings={metronomeSettings}
+              onChange={(next) => {
+                setMetronomeSettings(next);
+                saveMetronomeSettings(next);
+              }}
+            />
+          </div>
         )}
       </div>
 
