@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MidiExercise as MidiExerciseDef, RawMidiEvent, ScoringResult } from "@keyboard-sensei/shared-types";
-import { pairRawMidiEvents } from "@keyboard-sensei/midi-engine";
+import { JUDGE_WINDOWS_S, judgeNextPress, pairRawMidiEvents, type PlayAlongJudgment, type PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "./MidiContext";
 import MetronomeControls, { loadMetronomeSettings, saveMetronomeSettings, type MetronomeSettings } from "./MetronomeControls";
@@ -24,6 +24,26 @@ interface Props {
 }
 
 type Phase = "idle" | "listening" | "counting-in" | "recording" | "submitting" | "scored";
+
+const LIVE_POINTS: Record<PlayAlongJudgment, number> = { perfect: 10, good: 7, ok: 4, miss: -3 };
+const WRONG_PRESS_PENALTY = 2;
+
+interface LiveNote extends PlayAlongNote {
+  id: string;
+}
+
+/** Converts an exercise's beat-based expected notes into song-second-based notes for the live-follow overlay, using whatever tempo is actually being practiced at. */
+function liveNotesFor(exercise: MidiExerciseDef, effectiveBpm: number): LiveNote[] {
+  const msPerBeat = 60_000 / effectiveBpm;
+  const firstBeat = Math.min(...exercise.expected.map((n) => n.startBeat));
+  return exercise.expected.map((event) => ({
+    id: event.id,
+    midi: event.note,
+    startS: ((event.startBeat - firstBeat) * msPerBeat) / 1000,
+    durationS: (event.durationBeats * msPerBeat) / 1000,
+    hand: "right",
+  }));
+}
 
 /**
  * Builds barred notation for an exercise. Notes at or above middle C go on
@@ -107,6 +127,10 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
   const [tempoPct, setTempoPct] = useState<25 | 50 | 75 | 100>(100);
+  const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set());
+  const [liveScore, setLiveScore] = useState(0);
+  const [liveCombo, setLiveCombo] = useState(0);
+  const [lastDelta, setLastDelta] = useState<{ value: number; key: number } | null>(null);
 
   const raw = useRef<RawMidiEvent[]>([]);
   const start = useRef(0);
@@ -117,15 +141,40 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   metronomeOnRef.current = metronomeOn;
   const metronomeSettingsRef = useRef(metronomeSettings);
   metronomeSettingsRef.current = metronomeSettings;
+  const liveNotesRef = useRef<LiveNote[]>([]);
+  const liveJudgmentsRef = useRef<(PlayAlongJudgment | undefined)[]>([]);
+  const liveMissCursorRef = useRef(0);
+  const liveRafRef = useRef(0);
+  const activeNoteIdsRef = useRef<string>("");
+  const lastDeltaTimeoutRef = useRef<number | null>(null);
+
+  const liveDueMidis = useMemo(
+    () => liveNotesRef.current.filter((n) => activeNoteIds.has(n.id)).map((n) => n.midi),
+    [activeNoteIds],
+  );
 
   useEffect(
     () =>
       subscribe((event) => {
         if (!active.current) return;
         raw.current.push({ ...event, timestampMs: event.timestampMs - start.current });
-        if (event.type === "noteon") setPlayed(true);
+        if (event.type !== "noteon") return;
+        setPlayed(true);
+        if (exercise?.scoring === "untimed") return;
+        const songTimeS = (event.timestampMs - start.current) / 1000;
+        const match = judgeNextPress(liveNotesRef.current, liveJudgmentsRef.current, event.note, songTimeS);
+        if (match) {
+          liveJudgmentsRef.current[match.index] = match.judgment;
+          setLiveCombo((c) => (match.judgment === "perfect" || match.judgment === "good" ? c + 1 : 0));
+          setLiveScore((s) => s + LIVE_POINTS[match.judgment]);
+          flashLiveDelta(LIVE_POINTS[match.judgment]);
+        } else {
+          setLiveCombo(0);
+          setLiveScore((s) => s - WRONG_PRESS_PENALTY);
+          flashLiveDelta(-WRONG_PRESS_PENALTY);
+        }
       }),
-    [subscribe],
+    [subscribe, exercise],
   );
 
   const stopPreview = () => {
@@ -135,11 +184,12 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     previewSounding.current.clear();
   };
 
-  // Cancel any sound/clicks when the exercise unmounts.
+  // Cancel any sound/clicks/live-follow loop when the exercise unmounts.
   useEffect(
     () => () => {
       stopPreview();
       metronome.stop();
+      cancelAnimationFrame(liveRafRef.current);
     },
     [],
   );
@@ -188,6 +238,64 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     previewTimeouts.current.push(window.setTimeout(() => setPhase((p) => (p === "listening" ? "idle" : p)), lastEnd + 150));
   };
 
+  const flashLiveDelta = (value: number) => {
+    setLastDelta({ value, key: Date.now() });
+    if (lastDeltaTimeoutRef.current !== null) window.clearTimeout(lastDeltaTimeoutRef.current);
+    lastDeltaTimeoutRef.current = window.setTimeout(() => setLastDelta(null), 700);
+  };
+
+  const stopLiveFollow = () => {
+    cancelAnimationFrame(liveRafRef.current);
+    activeNoteIdsRef.current = "";
+    setActiveNoteIds(new Set());
+  };
+
+  const startLiveFollow = () => {
+    liveNotesRef.current = liveNotesFor(exercise, effectiveBpm);
+    liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
+    liveMissCursorRef.current = 0;
+    setLiveScore(0);
+    setLiveCombo(0);
+    setLastDelta(null);
+    activeNoteIdsRef.current = "";
+    setActiveNoteIds(new Set());
+
+    const tick = () => {
+      if (!active.current) return;
+      const songTimeS = (performance.now() - start.current) / 1000;
+      const notes = liveNotesRef.current;
+      const judgments = liveJudgmentsRef.current;
+
+      while (liveMissCursorRef.current < notes.length) {
+        const note = notes[liveMissCursorRef.current];
+        if (note.startS + JUDGE_WINDOWS_S.ok > songTimeS) break;
+        if (judgments[liveMissCursorRef.current] === undefined) {
+          judgments[liveMissCursorRef.current] = "miss";
+          setLiveCombo(0);
+          setLiveScore((s) => s + LIVE_POINTS.miss);
+          flashLiveDelta(LIVE_POINTS.miss);
+        }
+        liveMissCursorRef.current += 1;
+      }
+
+      const due = notes
+        .map((note, index) => ({ note, index }))
+        .filter(
+          ({ note, index }) =>
+            judgments[index] === undefined && note.startS <= songTimeS && songTimeS < note.startS + note.durationS,
+        )
+        .map(({ note }) => note.id)
+        .join(",");
+      if (due !== activeNoteIdsRef.current) {
+        activeNoteIdsRef.current = due;
+        setActiveNoteIds(new Set(due ? due.split(",") : []));
+      }
+
+      liveRafRef.current = requestAnimationFrame(tick);
+    };
+    liveRafRef.current = requestAnimationFrame(tick);
+  };
+
   const begin = () => {
     stopPreview();
     raw.current = [];
@@ -214,6 +322,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         active.current = true;
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
+        startLiveFollow();
       },
     });
   };
@@ -221,6 +330,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const cancel = () => {
     metronome.stop();
     active.current = false;
+    stopLiveFollow();
     setBeat(null);
     setPhase("idle");
   };
@@ -228,6 +338,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const submit = async () => {
     metronome.stop();
     active.current = false;
+    stopLiveFollow();
     setBeat(null);
     setPhase("submitting");
     try {
@@ -283,7 +394,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         </div>
       </div>
 
-      {notation && <NotationRenderer data={notation} title="Read and play" />}
+      {notation && <NotationRenderer data={notation} title="Read and play" activeNoteIds={capturing ? activeNoteIds : undefined} />}
 
       <div className="flex flex-wrap gap-2">
         {[...new Map(exercise.expected.map((e) => [e.startBeat, exercise.expected.filter((n) => n.startBeat === e.startBeat)])).values()].map(
@@ -298,7 +409,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       <VirtualPiano
         lowestNote={lowestNote}
         highestNote={highestNote}
-        expectedNotes={phase !== "scored" ? notes : []}
+        expectedNotes={capturing && !untimed ? liveDueMidis : phase !== "scored" ? notes : []}
         feedbackByNote={feedback}
       />
 
@@ -330,6 +441,27 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
               {phase === "counting-in" ? `Count-in… ${beat ? beat.index + 1 : ""}` : "Recording — play, then submit."}
             </span>
+            {capturing && !untimed && (
+              <div className="flex items-center gap-3 text-xs">
+                <span className="tabular-nums">
+                  <span className="text-slate-500">Live </span>
+                  <strong className={liveScore >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}>
+                    {liveScore}
+                  </strong>
+                </span>
+                {liveCombo >= 3 && (
+                  <span className="tabular-nums text-felt-600 dark:text-felt-400">combo ×{liveCombo}</span>
+                )}
+                {lastDelta && (
+                  <span
+                    key={lastDelta.key}
+                    className={lastDelta.value >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}
+                  >
+                    {lastDelta.value >= 0 ? `+${lastDelta.value}` : lastDelta.value}
+                  </span>
+                )}
+              </div>
+            )}
             {capturing && (
               <button className="primary-button" disabled={!played} onClick={() => void submit()}>
                 Submit Attempt
