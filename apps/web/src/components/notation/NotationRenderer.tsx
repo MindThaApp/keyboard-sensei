@@ -13,6 +13,7 @@ import {
 } from "vexflow";
 
 interface NoteData {
+  ids?: string[];
   keys: string[];
   duration: string;
 }
@@ -89,6 +90,8 @@ function keySignatureAccidentals(keySignature?: string): Record<string, string> 
  * as VexFlow's Note.parseDuration (vexflow/src/note.ts), which handles the
  * tick math for "d" suffixes but does NOT draw the dot glyph — that requires
  * an explicit Dot modifier (Dot.buildAndAttach), same story as accidentals.
+ * Also matches rest codes ("hr", "qr") via the trailing [nrhms] group, so
+ * rests fall through this unaffected (0 dots).
  */
 function dotsFromDuration(duration: string): number {
   const match = /^(\d*\/?\d+|[a-z])(d*)([nrhms]|$)/.exec(duration);
@@ -105,8 +108,19 @@ function measuresOf(data: SimpleStaveData): NoteData[][] {
   return data.notes && data.notes.length > 0 ? [data.notes] : [];
 }
 
-function buildStaveNote(n: NoteData, clef: string, sigAccidentals: Record<string, string>): StaveNote {
+/** Felt-crimson (matches the app's accent color) used to tint note(s) currently due to be played. */
+const ACTIVE_NOTE_COLOR = "#b4323e";
+
+function buildStaveNote(
+  n: NoteData,
+  clef: string,
+  sigAccidentals: Record<string, string>,
+  activeNoteIds?: Set<string>,
+): StaveNote {
   const staveNote = new StaveNote({ keys: n.keys, duration: n.duration, clef });
+  if (activeNoteIds && n.ids?.some((id) => activeNoteIds.has(id))) {
+    staveNote.setStyle({ fillStyle: ACTIVE_NOTE_COLOR, strokeStyle: ACTIVE_NOTE_COLOR });
+  }
   n.keys.forEach((key, keyIndex) => {
     const accidental = accidentalFromKey(key);
     if (!accidental) return;
@@ -136,38 +150,106 @@ function computeStaveWidth(noteCount: number): number {
   return Math.max(420, noteCount * NOTE_WIDTH_PX + STAVE_MARGIN_PX);
 }
 
-/** Width for a stave's full content: all notes across measures, plus a little per barline and per key-signature accidental. */
-function staveWidthFor(data: SimpleStaveData): number {
-  const measures = measuresOf(data);
+/** Width for one system's content: its own notes/rests, plus a little per barline and per key-signature accidental. */
+function systemWidth(measures: NoteData[][], keySignature?: string): number {
   const noteCount = measures.reduce((sum, m) => sum + m.length, 0);
   const barlineCount = Math.max(measures.length - 1, 0);
-  const keySigCount = Math.abs(KEY_SIG_FIFTHS[data.keySignature ?? ""] ?? 0);
+  const keySigCount = Math.abs(KEY_SIG_FIFTHS[keySignature ?? ""] ?? 0);
   return computeStaveWidth(noteCount) + barlineCount * BARLINE_WIDTH_PX + keySigCount * KEY_SIG_ACCIDENTAL_PX;
 }
 
-function drawSingleStave(
+/** Rough per-measure width used only to decide where a line should wrap — not the final rendered width. */
+function measureWidthPx(measure: NoteData[]): number {
+  return measure.length * NOTE_WIDTH_PX + BARLINE_WIDTH_PX;
+}
+
+/** Longest a single staff system (line) is allowed to get before wrapping to a new row — mirrors printed sheet music instead of one long horizontally-scrolling line. */
+const MAX_SYSTEM_WIDTH_PX = 900;
+const SINGLE_STAVE_HEIGHT_PX = 150;
+const SYSTEM_GAP_PX = 30;
+const GRAND_STAVE_HEIGHT_PX = 230;
+const GRAND_SYSTEM_GAP_PX = 40;
+
+/** Chunks measures into systems (lines), never splitting a single measure across two lines. */
+function chunkMeasuresIntoSystems(measures: NoteData[][], maxWidthPx: number): NoteData[][][] {
+  const systems: NoteData[][][] = [];
+  let current: NoteData[][] = [];
+  let currentWidth = STAVE_MARGIN_PX;
+  for (const measure of measures) {
+    const width = measureWidthPx(measure);
+    if (current.length > 0 && currentWidth + width > maxWidthPx) {
+      systems.push(current);
+      current = [];
+      currentWidth = STAVE_MARGIN_PX;
+    }
+    current.push(measure);
+    currentWidth += width;
+  }
+  if (current.length > 0) systems.push(current);
+  return systems;
+}
+
+/** Same wrapping decision as chunkMeasuresIntoSystems, but for a treble/bass pair that must break at the same measure boundaries. */
+function chunkGrandStaffIntoSystems(
+  trebleMeasures: NoteData[][],
+  bassMeasures: NoteData[][],
+  maxWidthPx: number,
+): { treble: NoteData[][]; bass: NoteData[][] }[] {
+  const measureCount = Math.max(trebleMeasures.length, bassMeasures.length);
+  const systems: { treble: NoteData[][]; bass: NoteData[][] }[] = [];
+  let currentTreble: NoteData[][] = [];
+  let currentBass: NoteData[][] = [];
+  let currentWidth = STAVE_MARGIN_PX;
+  for (let i = 0; i < measureCount; i++) {
+    const treble = trebleMeasures[i] ?? [];
+    const bass = bassMeasures[i] ?? [];
+    const width = Math.max(measureWidthPx(treble), measureWidthPx(bass));
+    if (currentTreble.length > 0 && currentWidth + width > maxWidthPx) {
+      systems.push({ treble: currentTreble, bass: currentBass });
+      currentTreble = [];
+      currentBass = [];
+      currentWidth = STAVE_MARGIN_PX;
+    }
+    currentTreble.push(treble);
+    currentBass.push(bass);
+    currentWidth += width;
+  }
+  if (currentTreble.length > 0) systems.push({ treble: currentTreble, bass: currentBass });
+  return systems;
+}
+
+/**
+ * Draws one staff system (line): a Stave plus its notes/rests. Clef is
+ * always drawn; key signature is drawn whenever the caller passes one (real
+ * engraving repeats the key signature on every system); time signature is
+ * only passed by the caller for the first system of a piece.
+ */
+function drawStaveSystem(
   context: RenderContext,
-  data: SimpleStaveData,
+  measures: NoteData[][],
+  clef: string,
   x: number,
   y: number,
   width: number,
+  keySignature: string | undefined,
+  timeSignature: string | undefined,
+  activeNoteIds: Set<string> | undefined,
 ): Stave {
   const stave = new Stave(x, y, width);
-  stave.addClef(data.clef);
-  if (data.timeSignature) stave.addTimeSignature(data.timeSignature);
-  if (data.keySignature) stave.addKeySignature(data.keySignature);
+  stave.addClef(clef);
+  if (timeSignature) stave.addTimeSignature(timeSignature);
+  if (keySignature) stave.addKeySignature(keySignature);
   stave.setContext(context).draw();
 
-  const sigAccidentals = keySignatureAccidentals(data.keySignature);
-  const measures = measuresOf(data);
+  const sigAccidentals = keySignatureAccidentals(keySignature);
   const tickables: (StaveNote | BarNote)[] = [];
   let noteCount = 0;
   measures.forEach((measure, measureIndex) => {
-    // One voice for the whole stave; BarNote tickables (tick-free by design)
-    // render the barlines between measure groups.
+    // One voice for the whole system; BarNote tickables (tick-free by
+    // design) render the barlines between measure groups.
     if (measureIndex > 0) tickables.push(new BarNote());
     measure.forEach((n) => {
-      tickables.push(buildStaveNote(n, data.clef, sigAccidentals));
+      tickables.push(buildStaveNote(n, clef, sigAccidentals, activeNoteIds));
       noteCount += 1;
     });
   });
@@ -188,15 +270,19 @@ function drawSingleStave(
 
 /**
  * Renders lesson vexflowData with VexFlow. Handles the simple single-staff
- * shape and the grand-staff (treble+bass+brace) shape used in the MVP
- * lessons. Keeps notation intentionally simple per MVP scope.
+ * shape and the grand-staff (treble+bass+brace) shape used in lessons. Long
+ * pieces automatically wrap into multiple staff systems (like printed sheet
+ * music) instead of one long horizontally-scrolling line.
  */
 export default function NotationRenderer({
   data,
   title,
+  activeNoteIds,
 }: {
   data: Record<string, unknown>;
   title?: string;
+  /** ExpectedNoteEvent ids (or play-along note ids) currently due to be played — tinted on the stave. */
+  activeNoteIds?: Set<string>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -208,37 +294,69 @@ export default function NotationRenderer({
     try {
       if (isGrandStaffData(data)) {
         const grandStaffData = data as unknown as GrandStaffData;
-        const width = Math.max(staveWidthFor(grandStaffData.treble), staveWidthFor(grandStaffData.bass));
-        const height = 230;
+        const trebleMeasures = measuresOf(grandStaffData.treble);
+        const bassMeasures = measuresOf(grandStaffData.bass);
+        const systems = chunkGrandStaffIntoSystems(trebleMeasures, bassMeasures, MAX_SYSTEM_WIDTH_PX);
+        const widths = systems.map(({ treble, bass }) =>
+          Math.max(
+            systemWidth(treble, grandStaffData.treble.keySignature),
+            systemWidth(bass, grandStaffData.bass.keySignature),
+          ),
+        );
+        const width = Math.max(...widths, 420);
+        const totalHeight =
+          systems.length * GRAND_STAVE_HEIGHT_PX + Math.max(systems.length - 1, 0) * GRAND_SYSTEM_GAP_PX;
+
         const renderer = new Renderer(container, Renderer.Backends.SVG);
-        renderer.resize(width, height);
+        renderer.resize(width + 40, totalHeight + 40);
         const context = renderer.getContext();
 
-        const trebleStave = drawSingleStave(context, grandStaffData.treble, 20, 20, width - 40);
-        const bassStave = drawSingleStave(context, grandStaffData.bass, 20, 110, width - 40);
-
-        const brace = new StaveConnector(trebleStave, bassStave);
-        brace.setType("brace");
-        brace.setContext(context).draw();
-
-        const leftLine = new StaveConnector(trebleStave, bassStave);
-        leftLine.setType("singleLeft");
-        leftLine.setContext(context).draw();
+        systems.forEach((system, i) => {
+          const y = 20 + i * (GRAND_STAVE_HEIGHT_PX + GRAND_SYSTEM_GAP_PX);
+          const trebleStave = drawStaveSystem(
+            context, system.treble, grandStaffData.treble.clef, 20, y, widths[i] - 40,
+            grandStaffData.treble.keySignature, i === 0 ? grandStaffData.treble.timeSignature : undefined,
+            activeNoteIds,
+          );
+          const bassStave = drawStaveSystem(
+            context, system.bass, grandStaffData.bass.clef, 20, y + 90, widths[i] - 40,
+            grandStaffData.bass.keySignature, i === 0 ? grandStaffData.bass.timeSignature : undefined,
+            activeNoteIds,
+          );
+          const brace = new StaveConnector(trebleStave, bassStave);
+          brace.setType("brace");
+          brace.setContext(context).draw();
+          const leftLine = new StaveConnector(trebleStave, bassStave);
+          leftLine.setType("singleLeft");
+          leftLine.setContext(context).draw();
+        });
       } else {
         const staveData = data as unknown as SimpleStaveData;
-        const width = staveWidthFor(staveData);
-        const height = 150;
+        const measures = measuresOf(staveData);
+        const chunks = chunkMeasuresIntoSystems(measures, MAX_SYSTEM_WIDTH_PX);
+        const widths = chunks.map((chunk) => systemWidth(chunk, staveData.keySignature));
+        const width = Math.max(...widths, 420);
+        const totalHeight = chunks.length * SINGLE_STAVE_HEIGHT_PX + Math.max(chunks.length - 1, 0) * SYSTEM_GAP_PX;
+
         const renderer = new Renderer(container, Renderer.Backends.SVG);
-        renderer.resize(width, height);
+        renderer.resize(width + 20, totalHeight + 20);
         const context = renderer.getContext();
-        drawSingleStave(context, staveData, 10, 20, width - 20);
+
+        chunks.forEach((chunk, i) => {
+          const y = 20 + i * (SINGLE_STAVE_HEIGHT_PX + SYSTEM_GAP_PX);
+          drawStaveSystem(
+            context, chunk, staveData.clef, 10, y, widths[i] - 20,
+            staveData.keySignature, i === 0 ? staveData.timeSignature : undefined,
+            activeNoteIds,
+          );
+        });
       }
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
         '<p class="text-sm text-rose-600">Notation could not be rendered.</p>';
     }
-  }, [data]);
+  }, [data, activeNoteIds]);
 
   return (
     <div className="max-w-full overflow-x-auto">
