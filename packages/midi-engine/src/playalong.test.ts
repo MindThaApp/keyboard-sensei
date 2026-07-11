@@ -90,9 +90,12 @@ describe("judgePlayAlong", () => {
 
 describe("judgeNextPress", () => {
   it("matches the nearest unjudged same-pitch note within the ok window", () => {
-    const notes = [note(60, 1), note(60, 1.3)];
-    const match = judgeNextPress(notes, [undefined, undefined], 60, 1.22);
-    expect(match).toEqual({ index: 1, judgment: "good" });
+    // Both notes are inside the 0.2s ok window (deltas 0.05 and 0.10), so this
+    // genuinely exercises the tie-break: pick the smaller delta, not just
+    // whichever note is scanned last.
+    const notes = [note(60, 1), note(60, 1.15)];
+    const match = judgeNextPress(notes, [undefined, undefined], 60, 1.05);
+    expect(match).toEqual({ index: 0, judgment: "perfect" });
   });
 
   it("returns null when no unjudged note of that pitch is within the ok window", () => {
@@ -102,9 +105,12 @@ describe("judgeNextPress", () => {
   });
 
   it("skips notes that are already judged", () => {
-    const notes = [note(60, 1), note(60, 2)];
-    const match = judgeNextPress(notes, ["perfect", undefined], 60, 2.01);
-    expect(match).toEqual({ index: 1, judgment: "perfect" });
+    // Note 0 is closer to the query time (delta 0) but already judged; note 1
+    // is farther (delta 0.1) but unjudged. Without the skip, index 0 would win
+    // since it has the smaller delta — this only passes if the skip is real.
+    const notes = [note(60, 1), note(60, 1.1)];
+    const match = judgeNextPress(notes, ["perfect", undefined], 60, 1);
+    expect(match).toEqual({ index: 1, judgment: "good" });
   });
 });
 
