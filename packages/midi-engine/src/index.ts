@@ -9,3 +9,4 @@ import { scoreMidiExercise } from "./scoring.js";
 export function scoreRawMidiEvents(params: { exercise: MidiExercise; rawEvents: RawMidiEvent[]; durationTolerancePercent?: number }) {
   return scoreMidiExercise({ exercise: params.exercise, performedNotes: pairRawMidiEvents(params.rawEvents), ...(params.durationTolerancePercent === undefined ? {} : { durationTolerancePercent: params.durationTolerancePercent }) });
 }
+export * from "./playalong.js";

@@ -6,8 +6,10 @@ Full-stack piano learning app. pnpm monorepo: `apps/web` (React/Vite/TypeScript/
 
 - Growing Classical Technical Path: 24+ lessons spanning foundation to intermediate, with repertoire, ear-training, and technique batches landing over time.
 - MIDI exercise player: metronome count-in, ▶ Listen previews of the target, honest per-key feedback (green = right pitch, red = wrong/missed), pass/fail scoring.
+- **Play-along mode**: Synthesia-style falling notes over the piano for a ~300-song curated library (public-domain classical + pop/film covers) plus your own MIDI uploads. Tempo scaling (25–100%), adjustable look-ahead visibility, wait mode, guide audio, timing-judged scoring (perfect/good/ok/miss, combos) with difficulty multipliers, and per-song personal bests. Fetch the library with `pnpm --filter @keyboard-sensei/api exec tsx scripts/fetch-midi-library.ts`.
 - Play with an on-screen piano (mouse, touch, or computer keyboard) or real hardware via Web MIDI.
-- Quizzes, TTS lesson narration (ElevenLabs), progress tracking, and three themes.
+- Quizzes, TTS lesson narration (ElevenLabs), progress tracking, practice history (exercises + play-along), and three themes.
+- **Feedback button on every page** (bug/idea reports) and an **admin area** (user management with per-lesson progress control, feedback queue, song library management). Admin login: `admin@keyboardsensei.local` / `ADMIN_PASSWORD` env (dev fallback `admin-sensei-dev`); admins see every lesson unlocked.
 
 ## Prerequisites
 

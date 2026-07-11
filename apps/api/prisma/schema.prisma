@@ -13,16 +13,68 @@ enum ProgressStatus {
   completed
 }
 
+enum Role {
+  user
+  admin
+}
+
 model User {
-  id                 String            @id @default(cuid())
-  email              String            @unique
+  id                 String             @id @default(cuid())
+  email              String             @unique
   display_name       String
   narration_voice_id String?
   password_hash      String
-  created_at         DateTime          @default(now())
+  role               Role               @default(user)
+  created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]
   progress           UserProgress[]
+  feedback           Feedback[]
+  songs              Song[]
+  playalong_attempts PlayAlongAttempt[]
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  user_id    String?
+  type       String
+  message    String
+  page_path  String
+  user_agent String
+  status     String   @default("open")
+  created_at DateTime @default(now())
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+}
+
+model Song {
+  id             String             @id @default(cuid())
+  title          String
+  artist         String
+  genre          String
+  difficulty     Int
+  duration_sec   Float
+  note_count     Int
+  content_rights String
+  source_url     String?
+  file_path      String
+  uploader_id    String?
+  created_at     DateTime           @default(now())
+  uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
+  attempts       PlayAlongAttempt[]
+}
+
+model PlayAlongAttempt {
+  id          String   @id @default(cuid())
+  user_id     String
+  song_id     String
+  score       Float
+  accuracy    Float
+  tempo_pct   Int
+  lookahead_s Float
+  wait_mode   Boolean
+  created_at  DateTime @default(now())
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  song        Song     @relation(fields: [song_id], references: [id], onDelete: Cascade)
 }
 
 model TtsUsage {

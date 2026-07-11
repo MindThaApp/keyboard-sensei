@@ -1,11 +1,17 @@
-import { useState } from "react";
-import { Link, NavLink, Route, Routes } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
 import PracticeGymPage from "./components/midi/PracticeGymPage";
 import PracticeHistoryPage from "./components/progress/PracticeHistoryPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage, { RegistrationForm } from "./components/auth/AuthPage";
+import FeedbackWidget from "./components/feedback/FeedbackWidget";
+import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
+import AdminUsersPage from "./components/admin/AdminUsersPage";
+import AdminSongsPage from "./components/admin/AdminSongsPage";
+import SongBrowserPage from "./components/play/SongBrowserPage";
+import PlayAlongPage from "./components/play/PlayAlongPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
@@ -29,8 +35,17 @@ export default function App() {
   const [onboarding, setOnboarding] = useState<Onboarding>(null);
   const [placementError, setPlacementError] = useState<string | null>(null);
 
+  // Route guard: the API already 403s non-admins; this just keeps them off the pages.
+  const RequireAdmin = ({ children }: { children: ReactNode }) =>
+    auth.user === null ? null : auth.user.role === "admin" ? <>{children}</> : <Navigate to="/" replace />;
+
   if (!auth.authenticated) {
-    return <AuthPage onEntered={(kind) => { if (kind !== "login") setOnboarding({ step: "assessment", source: kind, scores: [] }); }} />;
+    return (
+      <>
+        <AuthPage onEntered={(kind) => { if (kind !== "login") setOnboarding({ step: "assessment", source: kind, scores: [] }); }} />
+        <FeedbackWidget />
+      </>
+    );
   }
 
   const finishAssessment = async (scores: number[]) => {
@@ -94,8 +109,10 @@ export default function App() {
           <nav className="flex items-center gap-1 text-sm">
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
+            <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
+            {auth.user?.role === "admin" && <NavLink to="/admin/users" className={navLinkClasses}>Admin</NavLink>}
             <label className="sr-only" htmlFor="theme">Theme</label>
             <select
               id="theme"
@@ -121,8 +138,14 @@ export default function App() {
           <Route path="/practice-gym" element={<PracticeGymPage />} />
           <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/play" element={<SongBrowserPage />} />
+          <Route path="/play/:songId" element={<PlayAlongPage />} />
+          <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
+          <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
+          <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>
+      <FeedbackWidget />
     </div>
   );
 }
