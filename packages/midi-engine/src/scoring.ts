@@ -2,12 +2,12 @@ import type { ExpectedNoteEvent, MidiExercise, PerformedNote, ScoringMistake, Sc
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { resolveScoreWeights } from "./config.js";
 
-export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNotes: PerformedNote[]; durationTolerancePercent?: number }
+export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNotes: PerformedNote[]; durationTolerancePercent?: number; tempoPct?: 25 | 50 | 75 | 100 }
 const round = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
 
-export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent }: ScoreMidiExerciseParams): ScoringResult {
+export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent, tempoPct = 100 }: ScoreMidiExerciseParams): ScoringResult {
   const untimed = exercise.scoring === "untimed";
-  const msPerBeat = 60_000 / exercise.tempoBpm;
+  const msPerBeat = (60_000 / exercise.tempoBpm) * (100 / tempoPct);
   const expected = [...exercise.expected].sort((a, b) => a.startBeat - b.startBeat);
   const performed = [...performedNotes].sort((a, b) => a.startTimestampMs - b.startTimestampMs);
   const origin = performed[0]?.startTimestampMs ?? 0;
