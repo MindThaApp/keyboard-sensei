@@ -66,10 +66,13 @@ const performedSchema = z.object({
   durationMs: z.number().nonnegative().nullable(),
 });
 
+const tempoPctSchema = z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(100)]);
+
 const performanceSchema = z
   .object({
     rawEvents: z.array(rawEventSchema).optional(),
     performedNotes: z.array(performedSchema).optional(),
+    tempoPct: tempoPctSchema.optional(),
   })
   .refine(
     (value) => (value.rawEvents === undefined) !== (value.performedNotes === undefined),
@@ -381,7 +384,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
     const exercise = validateMidiExercise(row.exercise_json);
     const performedNotes = (input.performedNotes ??
       pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    const result = scoreMidiExercise({ exercise, performedNotes });
+    const result = scoreMidiExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
     const uid = userId(req);
 
     await prisma.$transaction(async (tx) => {
@@ -633,13 +636,14 @@ app.post("/practice/score", async (req, res, next) => {
         exercise: z.unknown(),
         rawEvents: z.array(rawEventSchema).optional(),
         performedNotes: z.array(performedSchema).optional(),
+        tempoPct: tempoPctSchema.optional(),
       })
       .parse(req.body);
     const performance = performanceSchema.parse(body);
     const exercise = validateMidiExercise(body.exercise) as MidiExercise;
     const performedNotes = (performance.performedNotes ??
       pairRawMidiEvents(performance.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    res.json(scoreMidiExercise({ exercise, performedNotes }));
+    res.json(scoreMidiExercise({ exercise, performedNotes, tempoPct: performance.tempoPct }));
   } catch (e) {
     next(e);
   }
