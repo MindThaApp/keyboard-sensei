@@ -182,6 +182,111 @@ paths:
         '200': { description: Practice score, content: { application/json: { schema: { $ref: '#/components/schemas/ScoringResult' } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /feedback:
+    post:
+      summary: Submit feedback or an issue report (rate-limited 10/hour/user)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FeedbackRequest' } } }
+      responses:
+        '201': { description: Accepted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { description: Rate limited }
+  /songs:
+    get:
+      summary: List the song library (seeded songs + caller's uploads; admins see all uploads)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Songs, content: { application/json: { schema: { type: object, properties: { songs: { type: array, items: { $ref: '#/components/schemas/Song' } } } } } } }
+  /songs/upload:
+    post:
+      summary: Upload a .mid file (raw bytes body, metadata in query params title/artist/genre, max 1 MB)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Song' } } } }
+        '422': { description: Invalid MIDI (unparseable, too short/long, no piano notes) }
+  /songs/{id}/file:
+    get:
+      summary: Stream the raw MIDI bytes for a song
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: audio/midi bytes }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /songs/{id}:
+    delete:
+      summary: Delete a song (uploader deletes own; admin deletes any)
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Not the uploader and not admin }
+  /songs/{id}/attempts:
+    post:
+      summary: Record a play-along attempt
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PlayAlongAttemptRequest' } } }
+      responses:
+        '201': { description: Recorded }
+  /songs/attempts/me:
+    get:
+      summary: Caller's play-along personal bests and recent attempts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Bests keyed by song id + recent list }
+  /admin/users:
+    get:
+      summary: "[admin] List users with progress summary"
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Users }
+        '403': { description: Not an admin }
+  /admin/users/{id}:
+    patch:
+      summary: "[admin] Update email/display_name/role/password"
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: "[admin] Delete a user (cannot delete self)"
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Deleted }, '400': { description: cannot_delete_self } }
+  /admin/users/{id}/progress:
+    get:
+      summary: "[admin] Per-lesson progress for a user (all lessons)"
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Progress rows } }
+  /admin/users/{id}/progress/{lessonId}:
+    put:
+      summary: "[admin] Set a lesson's status/best score for a user"
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: lessonId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Upserted } }
+  /admin/feedback:
+    get:
+      summary: "[admin] List feedback (filter ?status=open|resolved|all)"
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Feedback list } }
+  /admin/feedback/{id}:
+    patch:
+      summary: "[admin] Set feedback status open/resolved"
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Updated } }
+  /admin/songs/{id}:
+    patch:
+      summary: "[admin] Edit song metadata (title/artist/genre/difficulty)"
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Updated } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -204,7 +309,10 @@ components:
         display_name: { type: string, minLength: 1, maxLength: 80 }
         narration_voice_id: { type: string, nullable: true }
     ChangePasswordRequest: { type: object, required: [currentPassword, newPassword], properties: { currentPassword: { type: string, minLength: 1 }, newPassword: { type: string, minLength: 8 } } }
-    AuthUser: { type: object, required: [id, email, display_name, narration_voice_id], properties: { id: { type: string }, email: { type: string, format: email }, display_name: { type: string }, narration_voice_id: { type: string, nullable: true } } }
+    AuthUser: { type: object, required: [id, email, display_name, narration_voice_id, role], properties: { id: { type: string }, email: { type: string, format: email }, display_name: { type: string }, narration_voice_id: { type: string, nullable: true }, role: { type: string, enum: [user, admin] } } }
+    Song: { type: object, required: [id, title, artist, genre, difficulty, duration_sec, note_count, content_rights, mine], properties: { id: { type: string }, title: { type: string }, artist: { type: string }, genre: { type: string, enum: [classical, pop, film, game, jazz, other] }, difficulty: { type: integer, minimum: 1, maximum: 5 }, duration_sec: { type: number }, note_count: { type: integer }, content_rights: { type: string }, mine: { type: boolean } } }
+    PlayAlongAttemptRequest: { type: object, required: [score, accuracy, tempo_pct, lookahead_s, wait_mode], properties: { score: { type: number, minimum: 0, maximum: 150 }, accuracy: { type: number, minimum: 0, maximum: 100 }, tempo_pct: { type: integer, enum: [25, 50, 75, 100] }, lookahead_s: { type: number }, wait_mode: { type: boolean } } }
+    FeedbackRequest: { type: object, required: [type, message, page_path], properties: { type: { type: string, enum: [bug, idea, other] }, message: { type: string, maxLength: 2000 }, page_path: { type: string, maxLength: 300 } } }
     TtsUsage:
       type: object
       required: [charactersUsed, limit, remaining, disabled]

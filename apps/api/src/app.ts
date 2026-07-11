@@ -14,11 +14,14 @@ import type {
 } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
 import { calculateAssessmentPlacement, validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
-import { createAccessToken, requireAuth } from "./auth.js";
+import { createAccessToken, isAdmin, requireAuth } from "./auth.js";
 import { prisma } from "./db.js";
 import { env } from "./config.js";
 import { lessons } from "./content.js";
 import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage, TtsLimitError } from "./tts.js";
+import { feedbackRouter } from "./feedback.js";
+import { adminUsersRouter } from "./admin-users.js";
+import { songsRouter } from "./songs.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -140,6 +143,7 @@ app.post("/auth/register", async (req, res, next) => {
         email: user.email,
         display_name: user.display_name,
         narration_voice_id: user.narration_voice_id,
+        role: user.role,
       },
     });
   } catch (e) {
@@ -162,6 +166,7 @@ app.post("/auth/login", async (req, res, next) => {
         email: user.email,
         display_name: user.display_name,
         narration_voice_id: user.narration_voice_id,
+        role: user.role,
       },
     });
   } catch (e) {
@@ -193,11 +198,15 @@ app.get("/tts/audio/:id", async (req, res, next) => {
 
 app.use(requireAuth);
 
+app.use(feedbackRouter);
+app.use(adminUsersRouter);
+app.use(songsRouter);
+
 app.get("/users/me", async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId(req) },
-      select: { id: true, email: true, display_name: true, narration_voice_id: true },
+      select: { id: true, email: true, display_name: true, narration_voice_id: true, role: true },
     });
     if (!user) {
       res.status(404).json({ error: { code: "not_found", message: "User not found" } });
@@ -215,7 +224,7 @@ app.patch("/users/me", async (req, res, next) => {
     const user = await prisma.user.update({
       where: { id: userId(req) },
       data: input,
-      select: { id: true, email: true, display_name: true, narration_voice_id: true },
+      select: { id: true, email: true, display_name: true, narration_voice_id: true, role: true },
     });
     res.json(user);
   } catch (e) {
@@ -240,9 +249,21 @@ app.post("/users/me/password", async (req, res, next) => {
   }
 });
 
+/**
+ * Admins see every lesson unlocked without seeded UserProgress rows (read-time
+ * unlock, so new lessons are automatically open to them). Completed stays
+ * completed; anything else is reported as unlocked.
+ */
+const effectiveStatus = (stored: ProgressStatus | undefined, order: number, admin: boolean): ProgressStatus => {
+  if (stored === ProgressStatus.completed) return ProgressStatus.completed;
+  if (admin) return ProgressStatus.unlocked;
+  return stored ?? (order === 1 ? ProgressStatus.unlocked : ProgressStatus.locked);
+};
+
 app.get("/lessons", async (req, res, next) => {
   try {
     const uid = userId(req);
+    const admin = await isAdmin(uid);
     const rows = await prisma.lesson.findMany({
       orderBy: { order: "asc" },
       include: { progress: { where: { user_id: uid } } },
@@ -255,7 +276,7 @@ app.get("/lessons", async (req, res, next) => {
           order: row.order,
           progress: {
             lessonId: row.id,
-            status: progress?.status ?? (row.order === 1 ? "unlocked" : "locked"),
+            status: effectiveStatus(progress?.status, row.order, admin),
             bestScore: progress?.best_score ?? 0,
             completedAt: progress?.completed_at ?? null,
           },
@@ -280,16 +301,19 @@ app.get("/lessons/:id", async (req, res, next) => {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
+    const admin = await isAdmin(userId(req));
     res.json({
       lesson: sanitizeLesson(validateLesson(row.lesson_json)),
       progress: row.progress[0]
         ? {
             lessonId: row.id,
-            status: row.progress[0].status,
+            status: effectiveStatus(row.progress[0].status, row.order, admin),
             bestScore: row.progress[0].best_score,
             completedAt: row.progress[0].completed_at,
           }
-        : null,
+        : admin
+          ? { lessonId: row.id, status: ProgressStatus.unlocked, bestScore: 0, completedAt: null }
+          : null,
       exercises: row.exercises.map((item) => validateMidiExercise(item.exercise_json)),
     });
   } catch (e) {
@@ -634,6 +658,10 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
     res.status(409).json({ error: { code: "conflict", message: "A record with that unique value already exists" } });
+    return;
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
+    res.status(404).json({ error: { code: "not_found", message: "Record not found" } });
     return;
   }
   console.error(error);

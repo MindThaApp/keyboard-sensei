@@ -29,6 +29,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
+      - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,3 +49,4 @@ services:
 volumes:
   keyboard-sensei-postgres-data:
   keyboard-sensei-tts-cache:
+  keyboard-sensei-midi-library:
