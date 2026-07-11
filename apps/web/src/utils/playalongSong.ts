@@ -6,6 +6,10 @@ export interface ParsedPlayAlongSong {
   durationS: number;
   pitchMin: number;
   pitchMax: number;
+  /** Detected tempo (first tempo event), for the notation preview strip's display-only quantization. Never used for scoring. */
+  bpm: number;
+  /** Detected time signature numerator (first time-signature event), default 4. Display-only, same as bpm. */
+  beatsPerBar: number;
 }
 
 const PIANO_MIN = 21;
@@ -57,5 +61,8 @@ export function parsePlayAlongSong(bytes: ArrayBuffer): ParsedPlayAlongSong {
     pitchMax = Math.max(pitchMax, note.midi);
   }
 
-  return { notes, durationS: midi.duration, pitchMin, pitchMax };
+  const bpm = midi.header.tempos[0]?.bpm ?? 120;
+  const beatsPerBar = midi.header.timeSignatures[0]?.timeSignature[0] ?? 4;
+
+  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar };
 }
