@@ -114,25 +114,48 @@ describe("judgeNextPress", () => {
   });
 });
 
+// These now take a RATE (1 = normal speed), not a percentage. The old discrete
+// table {25:0.5, 50:0.7, 75:0.85, 100:1} turned out to be a rounded square root,
+// so the continuous curve reproduces it rather than inventing new numbers.
 describe("multipliers", () => {
-  it("maps tempo to multiplier", () => {
-    expect(tempoMultiplier(25)).toBe(0.5);
-    expect(tempoMultiplier(50)).toBe(0.7);
-    expect(tempoMultiplier(75)).toBe(0.85);
-    expect(tempoMultiplier(100)).toBe(1);
+  it("reproduces the old discrete tempo tiers from a continuous rate", () => {
+    expect(tempoMultiplier(0.25)).toBeCloseTo(0.5, 2); // was 0.5
+    expect(tempoMultiplier(0.5)).toBeCloseTo(0.7, 1); // was 0.7 (sqrt = 0.707)
+    expect(tempoMultiplier(0.75)).toBeCloseTo(0.85, 1); // was 0.85 (sqrt = 0.866)
+    expect(tempoMultiplier(1)).toBe(1); // was 1
   });
 
-  it("maps lookahead to multiplier (shorter = higher)", () => {
-    expect(lookaheadMultiplier(6)).toBe(0.9);
-    expect(lookaheadMultiplier(4)).toBe(1);
-    expect(lookaheadMultiplier(2.5)).toBe(1.1);
-    expect(lookaheadMultiplier(1.5)).toBe(1.2);
+  it("extrapolates above normal speed, which the old literal union could not express", () => {
+    expect(tempoMultiplier(2)).toBeCloseTo(1.414, 2);
+  });
+
+  it("maps lookahead to multiplier (shorter = harder = higher)", () => {
+    expect(lookaheadMultiplier(6)).toBeCloseTo(0.9, 1); // tier was 0.9
+    expect(lookaheadMultiplier(4)).toBe(1); // tier was 1.0
+    expect(lookaheadMultiplier(2.5)).toBeCloseTo(1.1, 1); // tier was 1.1
+    expect(lookaheadMultiplier(1.5)).toBeCloseTo(1.2, 1); // tier was 1.2
+  });
+
+  it("clamps look-ahead instead of returning Infinity — a drag handle WILL be dragged to zero", () => {
+    expect(lookaheadMultiplier(0)).toBe(1.3);
+    expect(Number.isFinite(lookaheadMultiplier(0.0001))).toBe(true);
+    expect(lookaheadMultiplier(0.0001)).toBeLessThanOrEqual(1.3);
+  });
+
+  it("caps the multiplier product at 1.5 so a fast run cannot exceed the API's score ceiling", () => {
+    const perfect = judgePlayAlong([note(60, 1)], [press(60, 1)]);
+    // rate 2.0 (sqrt 1.414) x lookahead 1.0s (1.29) = 1.82 uncapped -> score 182,
+    // which the API rejects (max 160). The user's best runs would silently fail to save.
+    expect(finalScore(perfect, 2, 1)).toBeLessThanOrEqual(160);
+    expect(tempoMultiplier(2) * lookaheadMultiplier(1)).toBeGreaterThan(1.5); // the cap is doing real work
   });
 
   it("computes final score with both multipliers", () => {
     const perfect = judgePlayAlong([note(60, 1)], [press(60, 1)]);
-    expect(finalScore(perfect, 100, 1.5)).toBe(120);
-    expect(finalScore(perfect, 25, 6)).toBe(45);
-    expect(finalScore(perfect, 75, 4)).toBe(85);
+    // 120.6, not the old 120: the continuous curve gives lookahead 1.5s a
+    // multiplier of 1.206 rather than the rounded 1.2 tier it replaced.
+    expect(finalScore(perfect, 1, 1.5)).toBeCloseTo(120.6, 1);
+    // 86.6, not the old 85: sqrt(0.75) = 0.866, where the old table rounded to 0.85.
+    expect(finalScore(perfect, 0.75, 4)).toBeCloseTo(86.6, 1);
   });
 });

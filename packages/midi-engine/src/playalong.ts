@@ -139,24 +139,22 @@ export function judgePlayAlong(notes: PlayAlongNote[], presses: PlayAlongPress[]
 }
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 export type PlayAlongTempoPct = 25 | 50 | 75 | 100;
 
-const TEMPO_MULTIPLIER: Record<PlayAlongTempoPct, number> = { 25: 0.5, 50: 0.7, 75: 0.85, 100: 1 };
-
-export function tempoMultiplier(tempoPct: PlayAlongTempoPct): number {
-  return TEMPO_MULTIPLIER[tempoPct];
+export function tempoMultiplier(rate: number): number {
+  return Math.sqrt(rate);
 }
 
 /** Shorter visible look-ahead = harder = higher multiplier. */
 export function lookaheadMultiplier(lookaheadS: number): number {
-  if (lookaheadS <= 1.5) return 1.2;
-  if (lookaheadS <= 2.5) return 1.1;
-  if (lookaheadS <= 4) return 1;
-  return 0.9;
+  if (lookaheadS <= 0) return 1.3;
+  return clamp(1 + 0.21 * Math.log(4 / lookaheadS), 0.85, 1.3);
 }
 
-/** Final score can exceed 100 on hard settings by design (max 120). */
-export function finalScore(result: PlayAlongResult, tempoPct: PlayAlongTempoPct, lookaheadS: number): number {
-  return round1(result.baseScore * tempoMultiplier(tempoPct) * lookaheadMultiplier(lookaheadS));
+/** Final score can exceed 100 on hard settings by design. */
+export function finalScore(result: PlayAlongResult, rate: number, lookaheadS: number): number {
+  const multiplier = Math.min(1.5, tempoMultiplier(rate) * lookaheadMultiplier(lookaheadS));
+  return round1(result.baseScore * multiplier);
 }

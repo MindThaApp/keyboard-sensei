@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExpectedNoteEvent, MidiExercise, PerformedNote, RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreMidiExercise } from "./index.js";
+import { finalScore, lookaheadMultiplier, tempoMultiplier, type PlayAlongResult } from "./playalong.js";
 
 const event = (id: string, note: number, beat: number, chordGroupId: string | null = null, hand: "left" | "right" = "right"): ExpectedNoteEvent => ({ id, note, startBeat: beat, durationBeats: 1, hand, finger: null, chordGroupId, voice: chordGroupId ? "chord" : "melody" });
 const exercise = (expected: ExpectedNoteEvent[]): MidiExercise => ({ exerciseId: "test", tempoBpm: 120, difficulty: "beginner", simultaneityWindowMs: 100, timingToleranceMs: 120, durationTolerancePercent: 20, expected });
@@ -92,5 +93,123 @@ describe("scoreMidiExercise (tempoPct)", () => {
       tempoPct: 100,
     });
     expect(result.mistakes.some((m) => m.issue === "late")).toBe(true);
+  });
+
+  it("keeps tempoPct 100 anchored to the authored timing tolerance", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const result = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 500), played(62, 630, 500)],
+      tempoPct: 100,
+    });
+
+    // This test exists because rate=1 must be a no-op: all existing lessons
+    // and practice history depend on exercise.timingToleranceMs staying exact.
+    expect(result).toEqual({
+      score: 88,
+      noteAccuracy: 100,
+      timingAccuracy: 50,
+      rhythmAccuracy: 100,
+      chordAccuracy: 100,
+      feedback: ["D4 was late."],
+      mistakes: [
+        {
+          noteId: "b",
+          expectedNote: 62,
+          performedNote: 62,
+          chordGroupId: null,
+          issue: "late",
+        },
+      ],
+    });
+  });
+
+  it("uses a larger beat-scaled timing tolerance at slower tempos", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const result = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 1000), played(62, 1160, 1000)],
+      tempoPct: 50,
+    });
+    expect(result.timingAccuracy).toBe(100);
+    expect(result.mistakes.some((m) => m.issue === "late")).toBe(false);
+  });
+
+  it("uses a smaller beat-scaled timing tolerance at faster tempos", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const result = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 250), played(62, 340, 250)],
+      tempoPct: 200,
+    });
+    expect(result.timingAccuracy).toBe(50);
+    expect(result.mistakes.some((m) => m.issue === "late")).toBe(true);
+  });
+
+  it("clamps beat-scaled timing tolerance at both extremes", () => {
+    const expected = [event("a", 60, 0), event("b", 62, 1)];
+    const slow = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 5000), played(62, 5350, 5000)],
+      tempoPct: 10,
+    });
+    const fast = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 50), played(62, 106, 50)],
+      tempoPct: 10000,
+    });
+
+    expect(slow.timingAccuracy).toBe(100);
+    expect(fast.timingAccuracy).toBe(50);
+    expect(fast.mistakes.some((m) => m.issue === "late")).toBe(true);
+  });
+
+  it("clamps beat-scaled simultaneity window at both extremes", () => {
+    const expected = [event("c", 60, 0, "c1"), event("e", 64, 0, "c1")];
+    const slow = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 5000), played(64, 280, 5000)],
+      tempoPct: 10,
+    });
+    const fast = scoreMidiExercise({
+      exercise: exercise(expected),
+      performedNotes: [played(60, 0, 50), played(64, 31, 50)],
+      tempoPct: 10000,
+    });
+
+    expect(slow.mistakes.some((m) => m.issue === "uneven-hand-timing")).toBe(false);
+    expect(fast.mistakes.some((m) => m.issue === "uneven-hand-timing")).toBe(true);
+  });
+});
+
+describe("play-along continuous multipliers", () => {
+  it("reproduces the old tempo tiers from continuous playback rate", () => {
+    expect(tempoMultiplier(0.25)).toBeCloseTo(0.5, 5);
+    expect(tempoMultiplier(0.5)).toBeCloseTo(0.7, 1);
+    expect(tempoMultiplier(0.75)).toBeCloseTo(0.85, 1);
+    expect(tempoMultiplier(1)).toBeCloseTo(1, 5);
+    expect(tempoMultiplier(1.44)).toBeCloseTo(1.2, 5);
+  });
+
+  it("fits look-ahead continuously and clamps invalid zero input", () => {
+    expect(lookaheadMultiplier(1.5)).toBeCloseTo(1.206, 3);
+    expect(lookaheadMultiplier(2.5)).toBeCloseTo(1.099, 3);
+    expect(lookaheadMultiplier(4)).toBeCloseTo(1, 5);
+    expect(lookaheadMultiplier(6)).toBeCloseTo(0.915, 3);
+    expect(lookaheadMultiplier(0)).toBe(1.3);
+    expect(Number.isFinite(lookaheadMultiplier(0))).toBe(true);
+    expect(lookaheadMultiplier(1000)).toBe(0.85);
+  });
+
+  it("caps the final multiplier product before applying it to the base score", () => {
+    const result: PlayAlongResult = {
+      judgments: ["perfect"],
+      wrongPressCount: 0,
+      accuracyPct: 100,
+      maxCombo: 1,
+      baseScore: 100,
+    };
+    expect(finalScore(result, 2, 1)).toBeLessThanOrEqual(160);
+    expect(finalScore(result, 2, 1)).toBe(150);
   });
 });
