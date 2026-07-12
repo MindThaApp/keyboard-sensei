@@ -22,6 +22,9 @@ export function isDisallowedIp(address: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 169 && b === 254) return true;
+    // 100.64.0.0/10 (CGNAT / shared address space) -- includes Alibaba
+    // Cloud's metadata service at 100.100.100.200.
+    if (a === 100 && b >= 64 && b <= 127) return true;
     return false;
   }
   if (isIPv6(address)) {
@@ -73,9 +76,17 @@ function buildSafeAgent(): Agent {
             return;
           }
           const connectOptions = { host: resolved.address, port: resolvePort(options.port, options.protocol), servername: options.hostname };
-          const socket = options.protocol === "https:" ? tlsConnect(connectOptions) : netConnect(connectOptions);
+          const isHttps = options.protocol === "https:";
+          const socket = isHttps ? tlsConnect(connectOptions) : netConnect(connectOptions);
           socket.once("error", (err: Error) => callback(err, null));
-          socket.once("connect", () => callback(null, socket));
+          // For TLS, "connect" fires after the raw TCP handshake but BEFORE
+          // the TLS handshake (cert/hostname validation) completes -- handing
+          // the socket to undici at that point lets it start using a socket
+          // whose TLS state isn't ready, and a subsequent handshake failure
+          // (e.g. hostname/SNI mismatch) arrives as an uncaught crash instead
+          // of a catchable error. Must wait for "secureConnect" instead,
+          // matching undici's own default connector.
+          socket.once(isHttps ? "secureConnect" : "connect", () => callback(null, socket));
         })
         .catch((err: Error) => callback(err, null));
     },

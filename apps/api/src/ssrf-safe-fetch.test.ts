@@ -20,6 +20,14 @@ describe("isDisallowedIp", () => {
     expect(isDisallowedIp("240.0.0.1")).toBe(true);
   });
 
+  it("blocks 100.64.0.0/10 (CGNAT, incl. Alibaba Cloud's metadata service)", () => {
+    expect(isDisallowedIp("100.64.0.1")).toBe(true);
+    expect(isDisallowedIp("100.100.100.200")).toBe(true);
+    expect(isDisallowedIp("100.127.255.255")).toBe(true);
+    expect(isDisallowedIp("100.63.255.255")).toBe(false);
+    expect(isDisallowedIp("100.128.0.0")).toBe(false);
+  });
+
   it("allows ordinary public IPv4 addresses", () => {
     expect(isDisallowedIp("8.8.8.8")).toBe(false);
     expect(isDisallowedIp("93.184.216.34")).toBe(false);
