@@ -1,6 +1,6 @@
 import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const TOKEN_KEY = "keyboard-sensei-access-token";
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -277,3 +277,17 @@ export const fetchUrlPreview = async (url: string): Promise<UrlPreview> => {
 
 export const createAdminUser = (fields: { email: string; display_name: string; password: string; role: "user" | "admin" }) =>
   request<Pick<AdminUser, "id" | "email" | "display_name" | "role">>("/admin/users", { method: "POST", body: JSON.stringify(fields) });
+
+// --- Instruments (sampled voices) ---
+export type InstrumentCategory = "piano" | "keys" | "more";
+export interface InstrumentInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: InstrumentCategory;
+  content_rights: string;
+  source_url: string | null;
+  mine: boolean;
+  created_at: string;
+}
+export const getInstruments = () => request<{ instruments: InstrumentInfo[] }>("/instruments");

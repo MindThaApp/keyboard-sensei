@@ -4,6 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
+import InstrumentSection from "./InstrumentSection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
 
@@ -347,6 +348,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <AccountSection />
+      <InstrumentSection />
       <NarrationSection />
       <MidiSection />
     </div>
