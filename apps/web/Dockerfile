@@ -11,6 +11,7 @@ COPY packages/shared-types/package.json packages/shared-types/package.json
 COPY packages/midi-engine/package.json packages/midi-engine/package.json
 COPY packages/music-theory/package.json packages/music-theory/package.json
 COPY packages/lesson-engine/package.json packages/lesson-engine/package.json
+COPY patches patches
 
 RUN pnpm install --no-frozen-lockfile
 
