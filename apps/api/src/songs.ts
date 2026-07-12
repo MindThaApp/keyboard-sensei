@@ -37,6 +37,14 @@ const adminSongPatchSchema = z
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one field");
 
+const songPatchSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    artist: z.string().trim().min(1).max(120).optional(),
+    genre: z.enum(["classical", "pop", "film", "game", "jazz", "other"]).optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one field");
+
 const songListItem = (song: {
   id: string;
   title: string;
@@ -224,6 +232,25 @@ songsRouter.delete("/songs/:id", async (req, res, next) => {
     // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
     if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
     res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+songsRouter.patch("/songs/:id", async (req, res, next) => {
+  try {
+    const userId = uid(req);
+    const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
+    if (!song) {
+      res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
+      return;
+    }
+    if (song.uploader_id !== userId) {
+      res.status(403).json({ error: { code: "forbidden", message: "You can only edit songs you uploaded" } });
+      return;
+    }
+    const updated = await prisma.song.update({ where: { id: song.id }, data: songPatchSchema.parse(req.body) });
+    res.json(songListItem(updated, userId));
   } catch (e) {
     next(e);
   }
