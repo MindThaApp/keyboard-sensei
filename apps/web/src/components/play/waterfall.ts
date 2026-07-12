@@ -3,6 +3,7 @@ import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-eng
 /** Must match VirtualPiano's key layout so notes land on their keys. */
 export const WHITE_KEY_WIDTH_PX = 40;
 export const BLACK_KEY_WIDTH_PX = 26;
+const BLACK_KEY_RATIO = BLACK_KEY_WIDTH_PX / WHITE_KEY_WIDTH_PX;
 
 const BLACK_KEY_PITCH_CLASSES = new Set([1, 3, 6, 8, 10]);
 export const isBlackKey = (note: number): boolean => BLACK_KEY_PITCH_CLASSES.has(((note % 12) + 12) % 12);
@@ -11,7 +12,11 @@ export interface KeyboardGeometry {
   lowestNote: number;
   highestNote: number;
   widthPx: number;
-  /** x/width of each MIDI note's key, matching VirtualPiano rendering. */
+  whiteKeyWidthPx: number;
+  blackKeyWidthPx: number;
+  /** x/width of each MIDI note's key. The single source of truth: both the
+   *  rendered keys and the waterfall lanes read from this, so they cannot
+   *  drift apart at any zoom level. */
   xFor: (note: number) => { x: number; width: number };
 }
 
@@ -26,7 +31,8 @@ export function pianoRangeFor(pitchMin: number, pitchMax: number): { lowestNote:
   return { lowestNote: Math.max(21, low), highestNote: Math.min(108, high) };
 }
 
-export function keyboardGeometry(lowestNote: number, highestNote: number): KeyboardGeometry {
+export function keyboardGeometry(lowestNote: number, highestNote: number, whiteKeyWidthPx: number = WHITE_KEY_WIDTH_PX): KeyboardGeometry {
+  const blackKeyWidthPx = whiteKeyWidthPx * BLACK_KEY_RATIO;
   const whiteNotes: number[] = [];
   for (let note = lowestNote; note <= highestNote; note++) {
     if (!isBlackKey(note)) whiteNotes.push(note);
@@ -34,12 +40,19 @@ export function keyboardGeometry(lowestNote: number, highestNote: number): Keybo
   const whiteIndex = new Map(whiteNotes.map((note, index) => [note, index]));
   const xFor = (note: number): { x: number; width: number } => {
     if (!isBlackKey(note)) {
-      return { x: (whiteIndex.get(note) ?? 0) * WHITE_KEY_WIDTH_PX, width: WHITE_KEY_WIDTH_PX };
+      return { x: (whiteIndex.get(note) ?? 0) * whiteKeyWidthPx, width: whiteKeyWidthPx };
     }
     const whiteKeysBefore = whiteNotes.filter((white) => white < note).length;
-    return { x: whiteKeysBefore * WHITE_KEY_WIDTH_PX - BLACK_KEY_WIDTH_PX / 2, width: BLACK_KEY_WIDTH_PX };
+    return { x: whiteKeysBefore * whiteKeyWidthPx - blackKeyWidthPx / 2, width: blackKeyWidthPx };
   };
-  return { lowestNote, highestNote, widthPx: whiteNotes.length * WHITE_KEY_WIDTH_PX, xFor };
+  return { lowestNote, highestNote, widthPx: whiteNotes.length * whiteKeyWidthPx, whiteKeyWidthPx, blackKeyWidthPx, xFor };
+}
+
+/** White-key width that makes [lowestNote, highestNote] exactly fill containerPx. */
+export function fitWhiteKeyWidth(lowestNote: number, highestNote: number, containerPx: number): number {
+  let whiteCount = 0;
+  for (let n = lowestNote; n <= highestNote; n++) if (!isBlackKey(n)) whiteCount++;
+  return whiteCount > 0 ? containerPx / whiteCount : WHITE_KEY_WIDTH_PX;
 }
 
 export interface WaterfallColors {
