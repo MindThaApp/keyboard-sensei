@@ -53,6 +53,10 @@ model Feedback {
   page_path  String
   user_agent String
   status     String   @default("open")
+  // Filename within FEEDBACK_SCREENSHOT_DIR, not a path -- served via
+  // GET /admin/feedback/:id/screenshot behind requireAdmin, never returned
+  // to clients directly (see the notation_path lesson in songs.ts).
+  screenshot String?
   created_at DateTime @default(now())
   user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
 }
