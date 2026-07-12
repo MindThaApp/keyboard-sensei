@@ -96,8 +96,13 @@ export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bp
   }, [notes, windowStart, windowBeats, beatsPerBar, Math.floor(currentBeat * 4)]);
 
   return (
-    <div className="mb-2 max-h-[320px] overflow-y-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
-      <NotationRenderer data={data} activeNoteIds={activeNoteIds} />
+    // No vertical cap here: the SVG is already sized to its own content
+    // (see NotationRenderer's renderer.resize). maxSystemWidthPx={Infinity}
+    // forces exactly one system (never wraps to a second stave pair), so the
+    // rendered height is a constant GRAND_STAVE_HEIGHT_PX + 40px regardless
+    // of note density — no clipping, and no mid-song height jump either.
+    <div className="mb-2 overflow-x-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
+      <NotationRenderer data={data} activeNoteIds={activeNoteIds} maxSystemWidthPx={Infinity} />
     </div>
   );
 }

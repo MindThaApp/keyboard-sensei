@@ -278,11 +278,16 @@ export default function NotationRenderer({
   data,
   title,
   activeNoteIds,
+  maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
 }: {
   data: Record<string, unknown>;
   title?: string;
   /** ExpectedNoteEvent ids (or play-along note ids) currently due to be played — tinted on the stave. */
   activeNoteIds?: Set<string>;
+  /** Width (px) at which a system wraps to a new line. Callers that need a
+   *  height that never jumps (e.g. a rolling preview strip) can pass
+   *  Infinity to force exactly one system regardless of note density. */
+  maxSystemWidthPx?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -296,7 +301,7 @@ export default function NotationRenderer({
         const grandStaffData = data as unknown as GrandStaffData;
         const trebleMeasures = measuresOf(grandStaffData.treble);
         const bassMeasures = measuresOf(grandStaffData.bass);
-        const systems = chunkGrandStaffIntoSystems(trebleMeasures, bassMeasures, MAX_SYSTEM_WIDTH_PX);
+        const systems = chunkGrandStaffIntoSystems(trebleMeasures, bassMeasures, maxSystemWidthPx);
         const widths = systems.map(({ treble, bass }) =>
           Math.max(
             systemWidth(treble, grandStaffData.treble.keySignature),
@@ -333,7 +338,7 @@ export default function NotationRenderer({
       } else {
         const staveData = data as unknown as SimpleStaveData;
         const measures = measuresOf(staveData);
-        const chunks = chunkMeasuresIntoSystems(measures, MAX_SYSTEM_WIDTH_PX);
+        const chunks = chunkMeasuresIntoSystems(measures, maxSystemWidthPx);
         const widths = chunks.map((chunk) => systemWidth(chunk, staveData.keySignature));
         const width = Math.max(...widths, 420);
         const totalHeight = chunks.length * SINGLE_STAVE_HEIGHT_PX + Math.max(chunks.length - 1, 0) * SYSTEM_GAP_PX;
@@ -356,7 +361,7 @@ export default function NotationRenderer({
       container.innerHTML =
         '<p class="text-sm text-rose-600">Notation could not be rendered.</p>';
     }
-  }, [data, activeNoteIds]);
+  }, [data, activeNoteIds, maxSystemWidthPx]);
 
   return (
     <div className="max-w-full overflow-x-auto">
