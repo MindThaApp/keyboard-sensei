@@ -135,6 +135,7 @@ songsRouter.get("/songs/attempts/me", async (req, res, next) => {
         score: row.score,
         accuracy: row.accuracy,
         tempo_pct: row.tempo_pct,
+        tempo_bpm: row.tempo_bpm,
         lookahead_s: row.lookahead_s,
         wait_mode: row.wait_mode,
         created_at: row.created_at.toISOString(),
@@ -196,9 +197,14 @@ songsRouter.get("/songs/:id/notation", async (req, res, next) => {
 });
 
 const attemptSchema = z.object({
-  score: z.number().min(0).max(150),
+  // 160, not 150: with continuous tempo and look-ahead the multipliers can reach
+  // 1.5 (they are capped there), so a strong fast run scores above the old 150
+  // ceiling. Leaving it at 150 meant Zod rejected the attempt with a 400 — i.e.
+  // the user's best runs were exactly the ones that failed to save.
+  score: z.number().min(0).max(160),
   accuracy: z.number().min(0).max(100),
-  tempo_pct: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(100)]),
+  tempo_pct: z.number().min(10).max(250),
+  tempo_bpm: z.number().min(20).max(400).nullish(),
   lookahead_s: z.number().min(0.5).max(10),
   wait_mode: z.boolean(),
 });
