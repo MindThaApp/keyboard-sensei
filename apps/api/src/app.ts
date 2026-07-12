@@ -22,6 +22,7 @@ import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage,
 import { feedbackRouter } from "./feedback.js";
 import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
+import { archiveRouter } from "./archive.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -204,6 +205,7 @@ app.use(requireAuth);
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
 app.use(songsRouter);
+app.use(archiveRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
