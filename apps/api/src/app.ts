@@ -124,7 +124,18 @@ const lessonTitleFromJson = (lessonJson: Prisma.JsonValue): string => {
 
 export const app: ReturnType<typeof express> = express();
 
-app.use(cors({ origin: env.CORS_ORIGIN.split(",").map((value) => value.trim()) }));
+app.use(
+  cors({
+    origin: env.CORS_ORIGIN.split(",").map((value) => value.trim()),
+    // Custom response headers aren't CORS-safelisted by default -- without
+    // this, /songs/fetch-url-preview's x-song-* metadata headers are
+    // invisible to the browser on every cross-origin deployment (dev
+    // :5174->:3001, prod :8181->:3101 both cross-origin, no proxy), so the
+    // URL-import preview silently showed "0:00 / 0 notes / difficulty 1"
+    // for every real fetch despite the API sending correct values.
+    exposedHeaders: ["x-song-duration-sec", "x-song-note-count", "x-song-difficulty"],
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
