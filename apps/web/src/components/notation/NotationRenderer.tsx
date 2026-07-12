@@ -234,6 +234,10 @@ function drawStaveSystem(
   keySignature: string | undefined,
   timeSignature: string | undefined,
   activeNoteIds: Set<string> | undefined,
+  /** When provided, each drawn note's post-format x pixel is appended here,
+   *  once per id in its `NoteData.ids` — the primitive ScrollingScore uses
+   *  to build its beat→x cursor mapping (see NotationRenderer's `onLayout`). */
+  positions?: { id: string; x: number }[],
 ): Stave {
   const stave = new Stave(x, y, width);
   stave.addClef(clef);
@@ -243,13 +247,16 @@ function drawStaveSystem(
 
   const sigAccidentals = keySignatureAccidentals(keySignature);
   const tickables: (StaveNote | BarNote)[] = [];
+  const noteEntries: { note: StaveNote; ids?: string[] }[] = [];
   let noteCount = 0;
   measures.forEach((measure, measureIndex) => {
     // One voice for the whole system; BarNote tickables (tick-free by
     // design) render the barlines between measure groups.
     if (measureIndex > 0) tickables.push(new BarNote());
     measure.forEach((n) => {
-      tickables.push(buildStaveNote(n, clef, sigAccidentals, activeNoteIds));
+      const staveNote = buildStaveNote(n, clef, sigAccidentals, activeNoteIds);
+      tickables.push(staveNote);
+      if (positions) noteEntries.push({ note: staveNote, ids: n.ids });
       noteCount += 1;
     });
   });
@@ -263,6 +270,16 @@ function drawStaveSystem(
     const formatWidth = Math.max(stave.getNoteEndX() - stave.getNoteStartX() - 20, 50);
     new Formatter().joinVoices([voice]).format([voice], formatWidth);
     voice.draw(context, stave);
+  }
+
+  // getAbsoluteX() is only meaningful once the voice has been formatted and
+  // drawn above — it reads back the x the Formatter actually assigned.
+  if (positions) {
+    for (const { note, ids } of noteEntries) {
+      if (!ids || ids.length === 0) continue;
+      const noteX = note.getAbsoluteX();
+      for (const id of ids) positions.push({ id, x: noteX });
+    }
   }
 
   return stave;
@@ -313,6 +330,7 @@ export default function NotationRenderer({
   title,
   activeNoteIds,
   maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
+  onLayout,
 }: {
   data: Record<string, unknown>;
   title?: string;
@@ -322,13 +340,21 @@ export default function NotationRenderer({
    *  height that never jumps (e.g. a rolling preview strip) can pass
    *  Infinity to force exactly one system regardless of note density. */
   maxSystemWidthPx?: number;
+  /** Fires once per render with each drawn note's post-format absolute x pixel
+   *  (one entry per id in its `NoteData.ids`) — how ScrollingScore learns
+   *  where each beat landed on the ribbon. Read via a ref internally, so it
+   *  need not be memoized by the caller and never re-triggers this effect. */
+  onLayout?: (positions: { id: string; x: number }[]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onLayoutRef = useRef(onLayout);
+  onLayoutRef.current = onLayout;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     container.innerHTML = "";
+    const positions: { id: string; x: number }[] = [];
 
     try {
       if (isGrandStaffData(data)) {
@@ -355,12 +381,12 @@ export default function NotationRenderer({
           const trebleStave = drawStaveSystem(
             context, system.treble, grandStaffData.treble.clef, 20, y, widths[i] - 40,
             grandStaffData.treble.keySignature, i === 0 ? grandStaffData.treble.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
           const bassStave = drawStaveSystem(
             context, system.bass, grandStaffData.bass.clef, 20, y + 90, widths[i] - 40,
             grandStaffData.bass.keySignature, i === 0 ? grandStaffData.bass.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
           const brace = new StaveConnector(trebleStave, bassStave);
           brace.setType("brace");
@@ -386,11 +412,12 @@ export default function NotationRenderer({
           drawStaveSystem(
             context, chunk, staveData.clef, 10, y, widths[i] - 20,
             staveData.keySignature, i === 0 ? staveData.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
         });
       }
       hugContent(container);
+      onLayoutRef.current?.(positions);
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
