@@ -96,7 +96,7 @@ export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bp
   }, [notes, windowStart, windowBeats, beatsPerBar, Math.floor(currentBeat * 4)]);
 
   return (
-    <div className="mb-2 max-h-[200px] overflow-hidden rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className="mb-2 max-h-[320px] overflow-y-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
       <NotationRenderer data={data} activeNoteIds={activeNoteIds} />
     </div>
   );
