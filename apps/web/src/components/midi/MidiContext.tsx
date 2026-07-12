@@ -22,7 +22,6 @@ interface MidiContextValue {
   webMidiError: string | null;
   devices: MidiDeviceInfo[];
   /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
-  lastNoteAtMs: number | null;
   connectWebMidi: () => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
   subscribe: (listener: RawMidiListener) => () => void;
@@ -46,7 +45,6 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const [webMidiConnected, setWebMidiConnected] = useState(false);
   const [webMidiError, setWebMidiError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MidiDeviceInfo[]>([]);
-  const [lastNoteAtMs, setLastNoteAtMs] = useState<number | null>(null);
 
   const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
 
@@ -79,7 +77,6 @@ export function MidiProvider({ children }: { children: ReactNode }) {
 
     webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
-      setLastNoteAtMs(Date.now());
       emit({ note, velocity, type: "noteon", timestampMs });
     });
     webAdapter.onNoteOff((note, timestampMs) => {
@@ -162,11 +159,10 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       webMidiConnected,
       webMidiError,
       devices,
-      lastNoteAtMs,
       connectWebMidi,
       subscribe,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, lastNoteAtMs, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, connectWebMidi, subscribe],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;
