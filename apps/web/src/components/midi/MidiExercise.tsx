@@ -13,6 +13,15 @@ import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/mea
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
 const COUNT_IN_BEATS = 4;
+const HIGHLIGHT_ENABLED_KEY = "ks-highlight-enabled";
+function loadHighlightEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(HIGHLIGHT_ENABLED_KEY);
+    return raw === null ? true : raw === "true";
+  } catch {
+    return true;
+  }
+}
 
 interface Props {
   exerciseId: string;
@@ -135,6 +144,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [beat, setBeat] = useState<{ index: number; isCountIn: boolean } | null>(null);
   const [metronomeOn, setMetronomeOn] = useState(true);
   const [metronomeSettings, setMetronomeSettings] = useState<MetronomeSettings>(loadMetronomeSettings);
+  const [highlightEnabled, setHighlightEnabled] = useState<boolean>(loadHighlightEnabled);
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
@@ -406,7 +416,13 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         </div>
       </div>
 
-      {notation && <NotationRenderer data={notation} title="Read and play" activeNoteIds={capturing ? activeNoteIds : undefined} />}
+      {notation && (
+        <NotationRenderer
+          data={notation}
+          title="Read and play"
+          activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
+        />
+      )}
 
       <div className="flex flex-wrap gap-2">
         {[...new Map(exercise.expected.map((e) => [e.startBeat, exercise.expected.filter((n) => n.startBeat === e.startBeat)])).values()].map(
@@ -421,7 +437,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       <VirtualPiano
         lowestNote={lowestNote}
         highestNote={highestNote}
-        expectedNotes={capturing && !untimed ? liveDueMidis : phase !== "scored" ? notes : []}
+        expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : []}
         feedbackByNote={feedback}
       />
 
@@ -453,7 +469,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
               {phase === "counting-in" ? `Count-in… ${beat ? beat.index + 1 : ""}` : "Recording — play, then submit."}
             </span>
-            {capturing && !untimed && (
+            {capturing && !untimed && highlightEnabled && (
               <div className="flex items-center gap-3 text-xs">
                 <span className="tabular-nums">
                   <span className="text-slate-500">Live </span>
@@ -508,6 +524,21 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
               Metronome while playing
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={highlightEnabled}
+                onChange={(e) => {
+                  setHighlightEnabled(e.target.checked);
+                  try {
+                    localStorage.setItem(HIGHLIGHT_ENABLED_KEY, String(e.target.checked));
+                  } catch {
+                    // localStorage unavailable (private browsing, etc.) — setting still applies for this session.
+                  }
+                }}
+              />
+              Highlight notes while playing
             </label>
             <MetronomeControls
               settings={metronomeSettings}
