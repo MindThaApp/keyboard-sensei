@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireAdmin } from "./auth.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
+import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -26,7 +27,26 @@ const uploadQuerySchema = z.object({
   title: z.string().trim().min(1).max(120),
   artist: z.string().trim().min(1).max(120).default("Unknown"),
   genre: z.enum(["classical", "pop", "film", "game", "jazz", "other"]).default("other"),
+  source_url: z.string().trim().url().max(2000).optional(),
 });
+
+// Light in-memory rate limit: 10 URL-fetch attempts per user per hour. This
+// endpoint makes outbound requests on the user's behalf; this is not a hard
+// security boundary, just the same accidental-abuse posture as feedback.
+const FETCH_RATE_LIMIT = 10;
+const FETCH_RATE_WINDOW_MS = 60 * 60 * 1000;
+const recentFetchByUser = new Map<string, number[]>();
+
+const isFetchRateLimited = (userId: string): boolean => {
+  const now = Date.now();
+  const timestamps = (recentFetchByUser.get(userId) ?? []).filter((t) => now - t < FETCH_RATE_WINDOW_MS);
+  if (timestamps.length >= FETCH_RATE_LIMIT) return true;
+  timestamps.push(now);
+  recentFetchByUser.set(userId, timestamps);
+  return false;
+};
+
+const urlPreviewSchema = z.object({ url: z.string().trim().url().max(2000) });
 
 const adminSongPatchSchema = z
   .object({
@@ -168,6 +188,43 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
   }
 });
 
+songsRouter.post("/songs/fetch-url-preview", async (req, res, next) => {
+  try {
+    const userId = uid(req);
+    if (isFetchRateLimited(userId)) {
+      res.status(429).json({ error: { code: "rate_limited", message: "Too many import attempts — try again later" } });
+      return;
+    }
+    const { url } = urlPreviewSchema.parse(req.body);
+    let bytes: Buffer;
+    try {
+      bytes = await fetchUrlSafely(url, { maxBytes: 1024 * 1024, timeoutMs: 10_000 });
+    } catch (error) {
+      if (error instanceof SsrfBlockedError) {
+        res.status(422).json({ error: { code: "fetch_blocked", message: error.message } });
+        return;
+      }
+      throw error;
+    }
+    let metadata: SongMetadata;
+    try {
+      metadata = extractSongMetadata(new Uint8Array(bytes));
+    } catch (error) {
+      if (error instanceof InvalidMidiError) {
+        res.status(422).json({ error: { code: "invalid_midi", message: error.message } });
+        return;
+      }
+      throw error;
+    }
+    res.set("x-song-duration-sec", String(metadata.durationSec));
+    res.set("x-song-note-count", String(metadata.noteCount));
+    res.set("x-song-difficulty", String(metadata.difficulty));
+    res.type("audio/midi").send(bytes);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // Raw MIDI bytes; metadata comes in query params so the body stays binary.
 songsRouter.post(
   "/songs/upload",
@@ -200,7 +257,8 @@ songsRouter.post(
           difficulty: metadata.difficulty,
           duration_sec: metadata.durationSec,
           note_count: metadata.noteCount,
-          content_rights: "user-upload",
+          content_rights: query.source_url ? "user-import-url" : "user-upload",
+          source_url: query.source_url ?? null,
           file_path: "pending",
           uploader_id: userId,
         },

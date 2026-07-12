@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { Midi } from "@tonejs/midi";
 import { ZodError } from "zod";
@@ -11,6 +12,7 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   song: {
+    create: vi.fn(),
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
@@ -18,6 +20,16 @@ const prismaMock = vi.hoisted(() => ({
 }));
 
 vi.mock("./db.js", () => ({ prisma: prismaMock }));
+
+const ssrfMock = vi.hoisted(() => {
+  class MockSsrfBlockedError extends Error {}
+  return {
+    fetchUrlSafely: vi.fn(),
+    SsrfBlockedError: MockSsrfBlockedError,
+  };
+});
+
+vi.mock("./ssrf-safe-fetch.js", () => ssrfMock);
 
 import { songsRouter } from "./songs.js";
 
@@ -93,6 +105,7 @@ type SongRow = {
   duration_sec: number;
   note_count: number;
   content_rights: string;
+  source_url: string | null;
   file_path: string;
   uploader_id: string | null;
 };
@@ -106,6 +119,7 @@ const uploadedSong = (overrides: Partial<SongRow> = {}): SongRow => ({
   duration_sec: 90,
   note_count: 180,
   content_rights: "user-upload",
+  source_url: null,
   file_path: "/tmp/original.mid",
   uploader_id: "owner-1",
   ...overrides,
@@ -189,6 +203,218 @@ async function patchSong(userId: string, songId: string, body: Record<string, un
     );
   });
 }
+
+async function callSongsRouter(options: {
+  method: string;
+  url: string;
+  userId: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  rawBody?: Buffer;
+}) {
+  return await new Promise<{
+    status: number;
+    body: unknown;
+    headers: Record<string, string>;
+  }>((resolve, reject) => {
+    let status = 200;
+    let settled = false;
+    const headers: Record<string, string> = {};
+    const parsedUrl = new URL(options.url, "http://test.local");
+    let sentRawBody = false;
+    const req = new Readable({
+      read() {
+        if (sentRawBody || !options.rawBody) {
+          this.push(null);
+          return;
+        }
+        sentRawBody = true;
+        this.push(options.rawBody);
+        this.push(null);
+      },
+    }) as Request;
+    Object.assign(req, {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      baseUrl: "",
+      path: parsedUrl.pathname,
+      query: Object.fromEntries(parsedUrl.searchParams),
+      headers: options.headers ?? {},
+      body: options.body,
+      userId: options.userId,
+    });
+    const res = {
+      status(code: number) {
+        status = code;
+        return this;
+      },
+      set(name: string, value: string) {
+        headers[name.toLowerCase()] = value;
+        return this;
+      },
+      type(value: string) {
+        headers["content-type"] = value;
+        return this;
+      },
+      json(payload: unknown) {
+        settled = true;
+        resolve({ status, body: payload, headers });
+        return this;
+      },
+      send(payload: unknown) {
+        settled = true;
+        resolve({ status, body: payload, headers });
+        return this;
+      },
+    } as Response;
+
+    (songsRouter as unknown as (req: Request, res: Response, next: (error?: unknown) => void) => void)(
+      req,
+      res,
+      (error?: unknown) => {
+        if (error instanceof ZodError) {
+          resolve({
+            status: 400,
+            body: {
+              error: { code: "validation_error", message: "Request validation failed", details: error.flatten() },
+            },
+            headers,
+          });
+          return;
+        }
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!settled) {
+          resolve({
+            status: 404,
+            body: { error: { code: "not_found", message: `No route for ${options.method} ${options.url}` } },
+            headers,
+          });
+        }
+      },
+    );
+  });
+}
+
+describe("POST /songs/fetch-url-preview", () => {
+  it("returns a clear 4xx error when SSRF protection blocks the target URL", async () => {
+    vi.clearAllMocks();
+    ssrfMock.fetchUrlSafely.mockRejectedValueOnce(new ssrfMock.SsrfBlockedError("Refusing to connect to localhost"));
+
+    const response = await callSongsRouter({
+      method: "POST",
+      url: "/songs/fetch-url-preview",
+      userId: "owner-1",
+      headers: { "content-type": "application/json" },
+      body: { url: "http://127.0.0.1:1/whatever" },
+    });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(response.body).toEqual({
+      error: { code: "fetch_blocked", message: "Refusing to connect to localhost" },
+    });
+  });
+
+  it("returns fetched MIDI bytes with extracted metadata headers", async () => {
+    vi.clearAllMocks();
+    const bytes = Buffer.from(buildMidi(80));
+    ssrfMock.fetchUrlSafely.mockResolvedValueOnce(bytes);
+
+    const response = await callSongsRouter({
+      method: "POST",
+      url: "/songs/fetch-url-preview",
+      userId: "owner-1",
+      headers: { "content-type": "application/json" },
+      body: { url: "https://example.com/song.mid" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("audio/midi");
+    expect(response.headers["x-song-duration-sec"]).toBeTruthy();
+    expect(response.headers["x-song-note-count"]).toBe("80");
+    expect(response.headers["x-song-difficulty"]).toBeTruthy();
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect((response.body as Buffer).equals(bytes)).toBe(true);
+    expect(ssrfMock.fetchUrlSafely).toHaveBeenCalledWith("https://example.com/song.mid", {
+      maxBytes: 1024 * 1024,
+      timeoutMs: 10_000,
+    });
+  });
+});
+
+describe("POST /songs/upload", () => {
+  it("stores source_url provenance for URL imports", async () => {
+    vi.clearAllMocks();
+    const bytes = Buffer.from(buildMidi(80));
+    const created = uploadedSong({
+      id: "song-import-1",
+      title: "Imported Song",
+      artist: "URL Artist",
+      genre: "game",
+      content_rights: "user-import-url",
+      source_url: "https://example.com/song.mid",
+      file_path: "pending",
+    });
+    const updated = uploadedSong({ ...created, file_path: "/tmp/upload-song-import-1.mid" });
+    prismaMock.song.create.mockResolvedValueOnce(created);
+    prismaMock.song.update.mockResolvedValueOnce(updated);
+
+    const response = await callSongsRouter({
+      method: "POST",
+      url: "/songs/upload?title=Imported%20Song&artist=URL%20Artist&genre=game&source_url=https%3A%2F%2Fexample.com%2Fsong.mid",
+      userId: "owner-1",
+      headers: { "content-type": "audio/midi", "content-length": String(bytes.length) },
+      rawBody: bytes,
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ id: "song-import-1", content_rights: "user-import-url", mine: true });
+    expect(prismaMock.song.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Imported Song",
+        artist: "URL Artist",
+        genre: "game",
+        content_rights: "user-import-url",
+        source_url: "https://example.com/song.mid",
+        uploader_id: "owner-1",
+      }),
+    });
+  });
+
+  it("keeps direct uploads as user-upload when source_url is omitted", async () => {
+    vi.clearAllMocks();
+    const bytes = Buffer.from(buildMidi(80));
+    const created = uploadedSong({ id: "song-upload-1", title: "Direct Song", artist: "Direct Artist", file_path: "pending" });
+    const updated = uploadedSong({ ...created, file_path: "/tmp/upload-song-upload-1.mid" });
+    prismaMock.song.create.mockResolvedValueOnce(created);
+    prismaMock.song.update.mockResolvedValueOnce(updated);
+
+    const response = await callSongsRouter({
+      method: "POST",
+      url: "/songs/upload?title=Direct%20Song&artist=Direct%20Artist",
+      userId: "owner-1",
+      headers: { "content-type": "audio/midi", "content-length": String(bytes.length) },
+      rawBody: bytes,
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ id: "song-upload-1", content_rights: "user-upload", mine: true });
+    expect(prismaMock.song.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Direct Song",
+        artist: "Direct Artist",
+        genre: "other",
+        content_rights: "user-upload",
+        source_url: null,
+        uploader_id: "owner-1",
+      }),
+    });
+  });
+});
 
 describe("PATCH /songs/:id", () => {
   it("lets the uploader edit title, artist, and genre", async () => {
