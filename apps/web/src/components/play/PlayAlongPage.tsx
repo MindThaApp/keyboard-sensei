@@ -125,6 +125,7 @@ export default function PlayAlongPage() {
   const [result, setResult] = useState<PlayAlongResult | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [songTimeS, setSongTimeS] = useState(0);
+  const [paused, setPaused] = useState(false);
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
 
   const engineRef = useRef<PlayAlongEngine | null>(null);
@@ -144,6 +145,19 @@ export default function PlayAlongPage() {
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
+
+  // Push setting changes into a RUNNING engine, so adjusting them while paused
+  // actually takes effect on resume rather than only on the next attempt.
+  // (lookaheadS needs no plumbing: drawWaterfall reads it from settings each frame.)
+  useEffect(() => {
+    engineRef.current?.setTempoPct(settings.tempoPct);
+  }, [settings.tempoPct]);
+  useEffect(() => {
+    engineRef.current?.setWaitMode(settings.waitMode);
+  }, [settings.waitMode]);
+  useEffect(() => {
+    engineRef.current?.setGuideAudio(settings.guideAudio);
+  }, [settings.guideAudio]);
 
   // Load song metadata + file.
   useEffect(() => {
@@ -213,6 +227,18 @@ export default function PlayAlongPage() {
   // whichever visibilityMode/lookaheadS produced it — both the rAF loop (via start()'s
   // closure) and the idle preview effect below read the same value.
   const heightPx = waterfallHeightPxFor(settings.visibilityMode, settings.lookaheadS);
+
+  const togglePause = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (engine.isPaused) {
+      engine.resume();
+      setPaused(false);
+    } else {
+      engine.pause();
+      setPaused(true);
+    }
+  }, []);
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -305,6 +331,7 @@ export default function PlayAlongPage() {
       },
     });
     engineRef.current = engine;
+    setPaused(false);
     // clickSafe is false on the handful of recordings whose tempo lurches so hard
     // that a following click is a conductor, not a metronome — see buildBeatGrid.
     metronomeRef.current = parsed.grid.clickSafe ? new PlayAlongMetronome(parsed.grid.beats) : null;
@@ -426,7 +453,7 @@ export default function PlayAlongPage() {
             max={TEMPO_MAX_PCT}
             step={1}
             value={settings.tempoPct}
-            disabled={phase === "playing"}
+            disabled={phase === "playing" && !paused}
             aria-label="Playback tempo, percent of the song's written speed"
             onChange={(e) => setSettings((s) => ({ ...s, tempoPct: Number(e.target.value) }))}
             className="w-32 accent-felt-600 disabled:opacity-50"
@@ -449,7 +476,7 @@ export default function PlayAlongPage() {
             max={LOOKAHEAD_MAX_S}
             step={0.1}
             value={settings.lookaheadS}
-            disabled={phase === "playing"}
+            disabled={phase === "playing" && !paused}
             aria-label="How many seconds of the song are visible ahead of the hit line"
             onChange={(e) => setSettings((s) => ({ ...s, lookaheadS: Number(e.target.value) }))}
             className="w-28 accent-felt-600 disabled:opacity-50"
@@ -472,7 +499,7 @@ export default function PlayAlongPage() {
               type="button"
               role="radio"
               aria-checked={settings.visibilityMode === option.value}
-              disabled={phase === "playing"}
+              disabled={phase === "playing" && !paused}
               onClick={() => setSettings((s) => ({ ...s, visibilityMode: option.value }))}
               className={`rounded-md px-2 py-1 text-xs transition-colors disabled:opacity-50 ${
                 settings.visibilityMode === option.value
@@ -488,7 +515,7 @@ export default function PlayAlongPage() {
           <input
             type="checkbox"
             checked={settings.waitMode}
-            disabled={phase === "playing"}
+            disabled={phase === "playing" && !paused}
             onChange={(e) => setSettings((s) => ({ ...s, waitMode: e.target.checked }))}
           />
           Wait mode <span className="text-slate-400">(pauses for you, unscored)</span>
@@ -497,7 +524,7 @@ export default function PlayAlongPage() {
           <input
             type="checkbox"
             checked={settings.guideAudio}
-            disabled={phase === "playing"}
+            disabled={phase === "playing" && !paused}
             onChange={(e) => setSettings((s) => ({ ...s, guideAudio: e.target.checked }))}
           />
           Guide audio
@@ -591,7 +618,9 @@ export default function PlayAlongPage() {
           <span className="tabular-nums"><span className="text-xs text-slate-500">Combo </span><strong className={stats.combo >= 10 ? "text-brass-600 dark:text-brass-400" : ""}>{settings.waitMode ? "—" : stats.combo}</strong></span>
           {waiting && <span className="font-medium text-felt-600 dark:text-felt-400">Waiting for the highlighted key…</span>}
           {countdown !== null && <span className="font-display text-lg font-semibold text-felt-600 dark:text-felt-400">Starting in {countdown}…</span>}
-          <button className="secondary-button ml-auto text-xs" onClick={cancelRun}>Cancel</button>
+          {paused && <span className="font-medium text-brass-600 dark:text-brass-400">Paused — adjust the settings below, then resume.</span>}
+          <button className="secondary-button ml-auto text-xs" onClick={togglePause}>{paused ? "Resume" : "Pause"}</button>
+          <button className="secondary-button text-xs" onClick={cancelRun}>Cancel</button>
         </div>
       )}
 
