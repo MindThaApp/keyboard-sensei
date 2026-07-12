@@ -56,11 +56,22 @@ model Song {
   note_count     Int
   content_rights String
   source_url     String?
+  notation_path  String?
   file_path      String
   uploader_id    String?
   created_at     DateTime           @default(now())
   uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
   attempts       PlayAlongAttempt[]
+}
+
+model ArchiveEntry {
+  id           String @id @default(cuid())
+  title        String
+  composer     String
+  duration_sec Float
+  note_count   Int
+  difficulty   Int
+  source_ref   String
 }
 
 model PlayAlongAttempt {
