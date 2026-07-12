@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+
+patchedDependencies:
+  '@types/vexflow@1.2.42': patches/@types__vexflow@1.2.42.patch

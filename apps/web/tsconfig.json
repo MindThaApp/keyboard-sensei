@@ -5,6 +5,14 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
+    // Without this, TS auto-includes every @types/* package found anywhere
+    // in the pnpm store as global ambient types -- opensheetmusicdisplay's
+    // transitive @types/vexflow (an old 1.x-era ambient `declare module
+    // "vexflow"`) was shadowing this app's own real vexflow 4.x module
+    // resolution project-wide, breaking NotationRenderer.tsx's unrelated
+    // imports. Whitelisting only what this app actually needs avoids that
+    // class of transitive-dependency type pollution going forward.
+    "types": ["node", "react", "react-dom"],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
