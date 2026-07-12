@@ -415,9 +415,13 @@ A small control row above the keys: `[−] [+] [Fit]`. `−`/`+` step the width 
 
 The key container gets `overflow-x: auto` so it scrolls when zoomed in past the container width.
 
-- [ ] **Step 4: Drag handles**
+- [ ] **Step 4: Drag handles — expand by zooming out**
 
 Render a grab handle at each end of the keyboard. Dragging the left handle outward lowers `deviceRange.lowestNote` to the nearest C below; dragging inward raises it. Same for the right handle and `highestNote`. Clamp to MIDI 21–108 (a real piano's A0–C8). On release, call `setDeviceRange(...)` (which persists via Task 3).
+
+**Critical behaviour:** expanding the range must *add keys and zoom out to keep the whole keyboard within the container width* — the total rendered width stays pinned to the container while the individual keys get narrower. Implement by recomputing `whiteKeyWidthPx = fitWhiteKeyWidth(newLowest, newHighest, containerWidth)` on every drag frame. Dragging must never push the keyboard off-screen or introduce a horizontal scrollbar.
+
+Zoom and range stay independent: the drag sets the *range*, `+`/`−` set the *key size*. After a drag the user can still zoom freely.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -453,9 +457,17 @@ On first load of a song, set `whiteKeyWidthPx = fitWhiteKeyWidth(parsed.pitchMin
 
 **Conflict rule (from the spec):** this applies ONLY on initial load. Once the user touches `+`, `−`, `Fit`, or a drag handle, their choice wins and auto-zoom must not override it again for that song. Track this with a `userAdjustedZoom` boolean.
 
-- [ ] **Step 4: Shade the song's span**
+- [ ] **Step 4: Recommended-range indicator**
 
-Render a translucent overlay (or a bracket above the keys) covering `xFor(parsed.pitchMin).x` to `xFor(parsed.pitchMax).x + width`, so the player can see where to put their hands on a keyboard that may be much wider than the piece.
+Render a translucent overlay (or a bracket above the keys) covering `xFor(pitchMin).x` to `xFor(pitchMax).x + width`, labelled as the **recommended range for this session**. Two purposes: it shows the player where to put their hands, and it shows how far they could *shrink* the keyboard without losing any needed keys — so they don't drag it wider than necessary and make the keys pointlessly small.
+
+**This indicator is required on the lesson/exercise pages too, not only Play-Along.** For a lesson, the recommended span is the min/max of the exercise's `expected` note events (`MidiExercise.expected`). Put the shared logic in `VirtualPiano` behind an optional prop:
+
+```ts
+  recommendedRange?: { lowestNote: number; highestNote: number };
+```
+
+so `MidiExercise.tsx` and `PlayAlongPage.tsx` both feed it and the rendering lives in one place.
 
 - [ ] **Step 5: Verify and commit**
 
@@ -466,6 +478,50 @@ Run: `pnpm -r typecheck && pnpm -r test` → pass.
 git add apps/web/src/components/play/PlayAlongPage.tsx
 git commit -m "feat: play-along keyboard mirrors the device range with aligned falling bars"
 ```
+
+---
+
+### Task 6: Shrink the Play-Along notation strip to its content
+
+The falling bars and the keyboard don't fit on one screen because the notation strip's cream container is taller than what it renders.
+
+**Files:**
+- Modify: `apps/web/src/components/play/NotationPreviewStrip.tsx:99`
+
+- [ ] **Step 1: Understand the scar before touching it**
+
+Line 99 currently reads:
+
+```tsx
+    <div className="mb-2 max-h-[320px] overflow-y-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
+```
+
+`max-h-[320px]` is a magic number. A previous session had the *opposite* bug — the cap was too small and clipped the bass staff — and fixed it by raising this number, overshooting. **Do not just pick a smaller number.** That re-opens the clipping bug the moment a staff renders taller than the new guess.
+
+- [ ] **Step 2: Size the container to the rendered content**
+
+The strip renders a **grand staff** (one treble + one bass staff) over a rolling 1–2 measure window. It never wraps to a second system, so there are always exactly two staves and the height is bounded.
+
+Remove `max-h-[320px]` and `overflow-y-auto`. Let the container's height be driven by the rendered SVG — which is, by construction, the smallest height that hides no notes. If the renderer needs an explicit height, read the SVG's actual `getBBox().height` / `clientHeight` after render and set the container to it (clean up any `ResizeObserver` in the effect cleanup — a resize-listener leak was fixed in this codebase before).
+
+- [ ] **Step 3: Verify and commit**
+
+**Live check (required):** on a Play-Along song, confirm (a) no note or staff line is clipped at the top or bottom of the cream box, and (b) the notation strip, the falling bars, and the keyboard now all fit on one screen without scrolling. Check on both a two-handed piece (both staves populated) and a right-hand-only piece.
+
+```bash
+git add apps/web/src/components/play/NotationPreviewStrip.tsx
+git commit -m "fix: size the notation strip to its content so the waterfall and keyboard fit on screen"
+```
+
+---
+
+### Task 7 (BLOCKED): Draggable waterfall height bound to look-ahead
+
+**Do not implement yet.** Dragging the top border of the falling-bar area to set the visible look-ahead window makes `lookaheadS` continuous, which forces `lookaheadMultiplier` (currently 4 discrete tiers feeding the XP/score multiplier) to become a continuous function.
+
+That is the same "discrete tiers → continuous" problem as the 25–200 BPM metronome, and the two share the scoring question. Both are being specced together in a separate continuous-difficulty spec, which must be agreed with Ramin before any code is written (project rule: scoring-formula changes get scoped first).
+
+Groundwork already done: the existing four tiers fit `1 + 0.21·ln(4 / lookaheadS)` closely — 1.5s→1.21, 2.5s→1.10, 4s→1.00, >4s→~0.90 — so the continuous curve can be derived from the existing values rather than invented.
 
 ---
 

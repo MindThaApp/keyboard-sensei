@@ -48,10 +48,21 @@ The resolved range persists to `localStorage`, keyed on device name, so each key
 
 ### 3. Zoom and fit
 
+- The keyboard uses the **full available screen width** by default.
 - Controls: `[−] [+] [Fit]`.
 - `Fit` computes the `whiteKeyWidthPx` that makes the current range exactly fill the container width.
 - Zoom level persists per device.
 - **First load with no stored preference:** fit-to-width, so the user immediately sees their whole range.
+
+**Drag-to-expand behaviour.** Dragging a handle outward adds keys *and zooms out to keep the keyboard within the screen width* — i.e. the total rendered width stays pinned to the container and the keys get narrower as the range grows. Dragging inward removes keys and the keys get wider. After a drag, the user can still zoom in/out freely; the drag sets the *range*, zoom independently sets the *key size*. Dragging must never push the keyboard off-screen.
+
+### 3a. Recommended-range indicator
+
+The user needs to know how wide the keyboard actually *needs* to be for what they're currently playing, so they don't drag it wider than necessary and shrink the keys for no benefit.
+
+On both **Play-Along** and the **lesson / exercise** pages, render a visual indicator of the **recommended range** for the current session — the note span the song or exercise actually uses (`pitchMin`..`pitchMax` for a song; the exercise's expected-note span for a lesson). Anything outside that span is not needed for this session.
+
+The indicator marks the recommended span on the keyboard itself (shading or a bracket), so the user can see at a glance both where to put their hands and how far they could shrink the keyboard without losing anything.
 
 ### 4. Play-Along specifics
 
@@ -64,6 +75,18 @@ The resolved range persists to `localStorage`, keyed on device name, so each key
 ### 5. Scope
 
 `VirtualPiano` is the shared component across lessons, Practice Gym, and Play-Along, so all three inherit the device range, zoom, and fit. Only Play-Along additionally gets song-span framing and highlighting.
+
+### 6. Play-Along vertical layout
+
+Today the falling bars and the keyboard do not fit on one screen together, because the notation strip's container is taller than its content.
+
+**Notation strip height.** `NotationPreviewStrip.tsx:99` hardcodes `max-h-[320px]`. This is a scar: an earlier bug clipped the bass staff because the cap was *too small*, and it was fixed by raising the magic number — overshooting. The fix here is to remove the magic number entirely and size the container to the **actual rendered SVG height**, which is by construction the smallest height that hides no notes. Do not simply pick a smaller constant; that re-opens the clipping bug.
+
+**Number of staves is fixed at two.** The strip renders a grand staff — one treble (right hand) and one bass (left hand) — over a rolling 1–2 measure window. It never wraps to a second system, so there is never a third or fourth staff. The height is therefore bounded and can safely hug its content.
+
+**Draggable waterfall height, bound to look-ahead.** The user can drag the *top border* of the falling-bar area to make it taller or shorter. This is not a cosmetic resize: the height of the waterfall *is* the visible look-ahead window, so dragging it directly sets `lookaheadS` — a taller area shows more of the song in advance (easier), a shorter one shows less (harder). Because look-ahead already feeds the score multiplier, dragging the border visibly changes the XP multiplier, and the UI must show that multiplier updating live as the user drags.
+
+This makes `lookaheadS` **continuous** rather than the current four discrete tiers, which in turn requires `lookaheadMultiplier` to become a continuous function. See the separate continuous-difficulty spec — the existing four tiers fit `1 + 0.21·ln(4 / lookaheadS)` closely (1.5s→1.21, 2.5s→1.10, 4s→1.00, >4s→~0.90), so no new numbers need inventing. **This part is blocked on that spec and must not be built before it is agreed.**
 
 ## Known trade-off
 
