@@ -7,6 +7,8 @@ import { barRangeContaining, buildBeatGrid, parsePlayAlongSong } from "./playalo
 // Real library files (apps/api/data/midi-library) used as fixtures to prove the
 // denominator-aware bar-length fix against genuine, previously-mismeasured MIDI
 // data rather than only synthetic examples.
+import { hasLibraryFixtures } from "./libraryFixtures";
+
 const MIDI_LIBRARY_DIR = join(__dirname, "../../../api/data/midi-library");
 
 function loadLibraryFile(name: string): ArrayBuffer {
@@ -14,7 +16,7 @@ function loadLibraryFile(name: string): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-describe("parsePlayAlongSong", () => {
+describe.skipIf(!hasLibraryFixtures())("parsePlayAlongSong", () => {
   it("assigns hands by track mean pitch for two-track files", () => {
     const midi = new Midi();
     const right = midi.addTrack();
