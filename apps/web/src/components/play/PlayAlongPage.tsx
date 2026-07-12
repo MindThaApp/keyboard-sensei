@@ -7,7 +7,7 @@ import {
   type PlayAlongResult,
   type PlayAlongTempoPct,
 } from "@keyboard-sensei/midi-engine";
-import { getSongFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
+import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
 import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
 import { PlayAlongEngine, type PlayAlongLiveStats } from "../../utils/playalongEngine";
 import { useMidiContext } from "../midi/MidiContext";
@@ -21,6 +21,7 @@ import {
   WATERFALL_COLORS_LIGHT,
 } from "./waterfall";
 import NotationPreviewStrip, { quantizeToBeats } from "./NotationPreviewStrip";
+import { OsmdNotation } from "./OsmdNotation";
 
 const TEMPOS: PlayAlongTempoPct[] = [25, 50, 75, 100];
 const LOOKAHEADS = [
@@ -83,6 +84,7 @@ export default function PlayAlongPage() {
   const [result, setResult] = useState<PlayAlongResult | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [songTimeS, setSongTimeS] = useState(0);
+  const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
 
   const engineRef = useRef<PlayAlongEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -116,6 +118,24 @@ export default function PlayAlongPage() {
       cancelled = true;
     };
   }, [songId]);
+
+  // Fetch real MusicXML/.mxl notation for archive-imported songs, when
+  // available (song.notation_path is a presence indicator, not a real path
+  // -- see songListItem() server-side). Falls back to NotationPreviewStrip
+  // (below) for direct uploads/URL imports, which never have notation.
+  useEffect(() => {
+    setNotationBytes(null);
+    if (!songId || !song?.notation_path) return;
+    let cancelled = false;
+    getSongNotationFile(songId)
+      .then((bytes) => {
+        if (!cancelled) setNotationBytes(bytes);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [songId, song?.notation_path]);
 
   const range = useMemo(() => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : null), [parsed]);
   const geometry = useMemo(() => (range ? keyboardGeometry(range.lowestNote, range.highestNote) : null), [range]);
@@ -391,7 +411,11 @@ export default function PlayAlongPage() {
       )}
 
       {settings.viewMode !== "falling" && (
-        <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
+        notationBytes ? (
+          <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />
+        ) : (
+          <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
+        )
       )}
 
       {/* Waterfall + piano, sharing one horizontal scroll context */}
