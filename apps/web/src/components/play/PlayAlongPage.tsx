@@ -25,6 +25,7 @@ import {
 } from "./waterfall";
 import NotationPreviewStrip, { quantizeToBeats } from "./NotationPreviewStrip";
 import { OsmdNotation } from "./OsmdNotation";
+import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -44,8 +45,8 @@ const WINDOW_MODE_PX_PER_SECOND = WATERFALL_HEIGHT_PX / 4;
 const WATERFALL_MIN_HEIGHT_PX = 120;
 const WATERFALL_MAX_HEIGHT_PX = 640;
 
-type ViewMode = "falling" | "notation" | "both";
-const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
+type ViewMode = "falling" | "notation" | "both" | "scrolling";
+const VIEW_MODES: ViewMode[] = ["falling", "notation", "both", "scrolling"];
 
 type VisibilityMode = "note-size" | "window-size";
 const VISIBILITY_MODES: VisibilityMode[] = ["note-size", "window-size"];
@@ -136,6 +137,7 @@ export default function PlayAlongPage() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scrollingScoreRef = useRef<ScrollingScoreHandle | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageWidth, setStageWidth] = useState(0);
   const rafRef = useRef<number>(0);
@@ -298,6 +300,16 @@ export default function PlayAlongPage() {
     });
   }, [phase, parsed, geometry, settings.viewMode, settings.lookaheadS, heightPx, colors]);
 
+  // Static preview for the scrolling score, mirroring the canvas preview
+  // above: before Play is pressed there's no rAF loop driving setSongTime,
+  // so without this the ribbon would sit at its default (cursor at x=0)
+  // rather than showing songTimeS = 0's real cursor position.
+  useEffect(() => {
+    if (phase === "playing") return;
+    if (settings.viewMode !== "scrolling") return;
+    scrollingScoreRef.current?.setSongTime(0);
+  }, [phase, settings.viewMode, parsed]);
+
   const start = useCallback(() => {
     if (!parsed || !geometry) return;
     stop();
@@ -344,6 +356,13 @@ export default function PlayAlongPage() {
       if (!active) return;
       const finished = active.tick(performance.now());
       const songTime = active.songTime();
+
+      // Runs every frame (unlike the ~120ms-throttled HUD state below) and
+      // mutates the ribbon's DOM transform directly via refs inside
+      // ScrollingScore — never a setState, so this can't cause a 60fps React
+      // re-render (see docs/agent-briefing.md). No-op when the scrolling
+      // score isn't mounted (ref is null in any other view mode).
+      scrollingScoreRef.current?.setSongTime(songTime);
 
       // Same loop as the waterfall: re-anchor the click off the engine's own song
       // time every frame rather than pre-scheduling, so it cannot drift from the
@@ -589,6 +608,7 @@ export default function PlayAlongPage() {
             { value: "falling" as const, label: "Falling notes" },
             { value: "notation" as const, label: "Sheet music" },
             { value: "both" as const, label: "Both" },
+            { value: "scrolling" as const, label: "Scrolling score" },
           ]).map((option) => (
             <button
               key={option.value}
@@ -663,7 +683,16 @@ export default function PlayAlongPage() {
         </div>
       )}
 
-      {settings.viewMode !== "falling" && (
+      {settings.viewMode === "scrolling" && (
+        <ScrollingScore
+          ref={scrollingScoreRef}
+          notes={parsed.notes}
+          grid={parsed.grid}
+          timeSignatureSegments={parsed.timeSignatureSegments}
+        />
+      )}
+
+      {settings.viewMode !== "falling" && settings.viewMode !== "scrolling" && (
         notationBytes ? (
           <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />
         ) : (
@@ -682,7 +711,7 @@ export default function PlayAlongPage() {
           falling bars and visually detach from them. */}
       <div ref={stageRef} className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="mx-auto" style={{ width: geometry.widthPx }}>
-          {settings.viewMode !== "notation" && (
+          {settings.viewMode !== "notation" && settings.viewMode !== "scrolling" && (
             <canvas
               ref={canvasRef}
               style={{ width: geometry.widthPx, height: heightPx, display: "block" }}
