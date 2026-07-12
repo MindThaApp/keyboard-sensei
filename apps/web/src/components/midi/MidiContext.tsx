@@ -21,6 +21,8 @@ interface MidiContextValue {
   webMidiConnected: boolean;
   webMidiError: string | null;
   devices: MidiDeviceInfo[];
+  /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
+  lastNoteAtMs: number | null;
   connectWebMidi: () => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
   subscribe: (listener: RawMidiListener) => () => void;
@@ -44,6 +46,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const [webMidiConnected, setWebMidiConnected] = useState(false);
   const [webMidiError, setWebMidiError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MidiDeviceInfo[]>([]);
+  const [lastNoteAtMs, setLastNoteAtMs] = useState<number | null>(null);
 
   const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
 
@@ -76,11 +79,20 @@ export function MidiProvider({ children }: { children: ReactNode }) {
 
     webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
+      setLastNoteAtMs(Date.now());
       emit({ note, velocity, type: "noteon", timestampMs });
     });
     webAdapter.onNoteOff((note, timestampMs) => {
       pianoSynth.stopNote(note);
       emit({ note, velocity: 0, type: "noteoff", timestampMs });
+    });
+
+    webAdapter.onStateChange((connectedDevices) => {
+      setDevices(connectedDevices);
+      setWebMidiConnected(connectedDevices.length > 0);
+      setWebMidiError(connectedDevices.length === 0
+        ? "Your MIDI keyboard was disconnected. Plug it back in — it should reconnect automatically."
+        : null);
     });
   }, []);
 
@@ -92,7 +104,12 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      await webAdapterRef.current!.connect();
+      await Promise.race([
+        webAdapterRef.current!.connect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("The browser didn't respond to the MIDI request. Unplug your keyboard, plug it back in, then reload the page.")), 5000),
+        ),
+      ]);
       const connectedDevices = webAdapterRef.current!.listDevices();
       if (connectedDevices.length === 0) {
         // requestMIDIAccess() only grants permission — it succeeds even with zero
@@ -145,10 +162,11 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       webMidiConnected,
       webMidiError,
       devices,
+      lastNoteAtMs,
       connectWebMidi,
       subscribe,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, lastNoteAtMs, connectWebMidi, subscribe],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;
