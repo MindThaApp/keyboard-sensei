@@ -89,6 +89,12 @@ export class PlayAlongEngine {
     return this.waitingPitches.size > 0;
   }
 
+  /** Playback rate (1 = written tempo). The metronome needs it to convert a
+   *  song-time delta into a wall-clock delta when scheduling a click. */
+  get playbackRate(): number {
+    return this.rate;
+  }
+
   /** Pitches the song is frozen on (wait mode) — for highlighting keys. */
   get waitingMidis(): number[] {
     return [...this.waitingPitches.keys()];
