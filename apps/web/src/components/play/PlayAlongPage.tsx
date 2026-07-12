@@ -10,6 +10,8 @@ import {
 import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
 import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
 import { PlayAlongEngine, type PlayAlongLiveStats } from "../../utils/playalongEngine";
+import { PlayAlongMetronome, CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
+import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -43,9 +45,13 @@ interface Settings {
   waitMode: boolean;
   guideAudio: boolean;
   viewMode: ViewMode;
+  metronome: boolean;
+  metronomeSound: MetronomeSound;
+  clickLevel: ClickLevel;
+  metronomeVolume: number;
 }
 
-const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both" };
+const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both", metronome: false, metronomeSound: "click", clickLevel: "beat", metronomeVolume: 0.7 };
 
 function loadSettings(): Settings {
   try {
@@ -58,6 +64,10 @@ function loadSettings(): Settings {
       waitMode: Boolean(parsed.waitMode),
       guideAudio: parsed.guideAudio !== false,
       viewMode: VIEW_MODES.includes(parsed.viewMode as ViewMode) ? (parsed.viewMode as ViewMode) : "both",
+      metronome: Boolean(parsed.metronome),
+      metronomeSound: METRONOME_SOUNDS.some((s) => s.value === parsed.metronomeSound) ? (parsed.metronomeSound as MetronomeSound) : "click",
+      clickLevel: CLICK_LEVELS.some((c) => c.value === parsed.clickLevel) ? (parsed.clickLevel as ClickLevel) : "beat",
+      metronomeVolume: typeof parsed.metronomeVolume === "number" ? parsed.metronomeVolume : 0.7,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -88,6 +98,12 @@ export default function PlayAlongPage() {
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
 
   const engineRef = useRef<PlayAlongEngine | null>(null);
+  const metronomeRef = useRef<PlayAlongMetronome | null>(null);
+  // The rAF loop is created once in start() and closes over that render's settings.
+  // Mirror them in a ref so changing the click sound/level mid-song takes effect
+  // without restarting the engine.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number>(0);
   const phaseRef = useRef<Phase>("loading");
@@ -147,6 +163,8 @@ export default function PlayAlongPage() {
     cancelAnimationFrame(rafRef.current);
     engineRef.current?.stop();
     engineRef.current = null;
+    metronomeRef.current?.stop();
+    metronomeRef.current = null;
   }, []);
 
   useEffect(() => stop, [stop]);
@@ -192,6 +210,9 @@ export default function PlayAlongPage() {
       },
     });
     engineRef.current = engine;
+    // clickSafe is false on the handful of recordings whose tempo lurches so hard
+    // that a following click is a conductor, not a metronome — see buildBeatGrid.
+    metronomeRef.current = parsed.grid.clickSafe ? new PlayAlongMetronome(parsed.grid.beats) : null;
     engine.start();
     setPhase("playing");
 
@@ -201,6 +222,14 @@ export default function PlayAlongPage() {
       if (!active) return;
       const finished = active.tick(performance.now());
       const songTime = active.songTime();
+
+      // Same loop as the waterfall: re-anchor the click off the engine's own song
+      // time every frame rather than pre-scheduling, so it cannot drift from the
+      // notes and cannot click through a wait-mode freeze.
+      const live = settingsRef.current;
+      if (live.metronome) {
+        metronomeRef.current?.tick(songTime, active.playbackRate, active.isWaiting, live.metronomeSound, live.metronomeVolume, live.clickLevel);
+      }
 
       const canvas = canvasRef.current;
       if (canvas && geometry) {
@@ -342,6 +371,60 @@ export default function PlayAlongPage() {
           />
           Guide audio
         </label>
+
+        {/* Metronome. The click follows the song's own beat grid (from its tempo
+            map), so it stays locked to the music and to the tempo slider. */}
+        <label
+          className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"
+          title={parsed.grid.clickSafe ? undefined : "This recording's tempo shifts constantly — a click would lurch along with it rather than keep time."}
+        >
+          <input
+            type="checkbox"
+            checked={settings.metronome && parsed.grid.clickSafe}
+            disabled={!parsed.grid.clickSafe}
+            onChange={(e) => setSettings((s) => ({ ...s, metronome: e.target.checked }))}
+          />
+          Metronome
+          {!parsed.grid.clickSafe && <span className="text-slate-400">(tempo shifts too much)</span>}
+        </label>
+
+        {settings.metronome && parsed.grid.clickSafe && (
+          <>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <span className="text-slate-500">Click on</span>
+              <select
+                aria-label="Metronome click level"
+                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                value={settings.clickLevel}
+                onChange={(e) => setSettings((s) => ({ ...s, clickLevel: e.target.value as ClickLevel }))}
+                title={CLICK_LEVELS.find((c) => c.value === settings.clickLevel)?.description}
+              >
+                {CLICK_LEVELS.map((option) => (
+                  <option key={option.value} value={option.value} title={option.description}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <span className="text-slate-500">Sound</span>
+              <select
+                aria-label="Metronome sound"
+                className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                value={settings.metronomeSound}
+                onChange={(e) => setSettings((s) => ({ ...s, metronomeSound: e.target.value as MetronomeSound }))}
+                title={METRONOME_SOUNDS.find((m) => m.value === settings.metronomeSound)?.description}
+              >
+                {METRONOME_SOUNDS.map((option) => (
+                  <option key={option.value} value={option.value} title={option.description}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+
         <div className="flex items-center gap-1" role="radiogroup" aria-label="View">
           <span className="mr-1 text-xs text-slate-500">View</span>
           {([
