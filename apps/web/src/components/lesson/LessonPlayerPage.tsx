@@ -71,7 +71,8 @@ export default function LessonPlayerPage() {
   const nextUnlocked = nextLesson !== null && nextLesson.progress.status !== "locked";
 
   return (
-    <div className="space-y-6">
+    // Full-bleed, same reason as Practice Gym: the keyboard needs the width.
+    <div className="mx-[calc(50%-50vw)] w-screen space-y-6 px-4">
       <div>
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link to="/" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>

@@ -438,19 +438,40 @@ export default function VirtualPiano({
     if (devices.length > 0) setDeviceRange(next);
   }, [recommendedRange, range, devices.length, setDeviceRange]);
 
+  const isFullPiano = range.lowestNote <= PIANO_LOWEST && range.highestNote >= PIANO_HIGHEST;
+
+  /** Show all 88 keys, sized to fit the container. */
+  const showFullKeyboard = useCallback(() => {
+    const next = { lowestNote: PIANO_LOWEST, highestNote: PIANO_HIGHEST };
+    setRange(next);
+    if (devices.length > 0) setDeviceRange(next);
+  }, [devices.length, setDeviceRange]);
+
   return (
     <div ref={containerRef} className="w-full">
       <div className="mb-1 flex items-center justify-end gap-1">
-        {recommendedRange && !fitsPiece && (
-          <button
-            type="button"
-            onClick={fitToPiece}
-            title="Widen the keyboard so every note this piece uses is on screen"
-            className="mr-auto rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Fit to piece
-          </button>
-        )}
+        <div className="mr-auto flex items-center gap-1">
+          {recommendedRange && !fitsPiece && (
+            <button
+              type="button"
+              onClick={fitToPiece}
+              title="Widen the keyboard so every note this piece uses is on screen"
+              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Fit to piece
+            </button>
+          )}
+          {!isFullPiano && (
+            <button
+              type="button"
+              onClick={showFullKeyboard}
+              title="Show all 88 keys, sized to fit the screen"
+              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Full keyboard
+            </button>
+          )}
+        </div>
         <button
           type="button"
           aria-label="Zoom out"
