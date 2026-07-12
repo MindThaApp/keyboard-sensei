@@ -8,4 +8,5 @@ coverage
 .env.deploy
 apps/api/data/tts-cache
 apps/api/data/midi-library
+apps/api/data/instruments
 apps/api/data/feedback-screenshots

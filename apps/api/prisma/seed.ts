@@ -13,8 +13,11 @@ const json=(value:unknown)=>value as Prisma.InputJsonValue;
 const SEED_DIR=path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST_PATH=path.resolve(SEED_DIR,"../scripts/midi-manifest.json");
 const LIBRARY_DIR=path.resolve(SEED_DIR,"../data/midi-library");
+const INSTRUMENT_MANIFEST_PATH=path.resolve(SEED_DIR,"../scripts/instrument-manifest.json");
+const INSTRUMENT_LIBRARY_DIR=path.resolve(SEED_DIR,"../data/instruments");
 
 interface LibraryManifestEntry{id:string;title:string;artist:string;genre:string;rights:string;source:string;file:string;durationSec:number;noteCount:number;difficulty:number}
+interface InstrumentManifestEntry{id:string;name:string;description:string;category:string;rights:string;sourceUrl:string;packDir:string}
 
 /**
  * Upsert the curated song library from scripts/midi-manifest.json. Files come
@@ -38,6 +41,22 @@ async function seedSongs():Promise<void>{
   console.log(`Seeded ${seeded} library songs`);
 }
 
+async function seedInstruments():Promise<void>{
+  let raw:string;
+  try{raw=await readFile(INSTRUMENT_MANIFEST_PATH,"utf8")}catch{console.warn("No instrument-manifest.json — skipping instrument library seed (run scripts/fetch-instrument-library.ts)");return}
+  const entries=JSON.parse(raw) as InstrumentManifestEntry[];
+  let seeded=0,missing=0;
+  for(const entry of entries){
+    const pack_path=path.join(INSTRUMENT_LIBRARY_DIR,entry.packDir);
+    if(!existsSync(pack_path)){missing+=1;continue}
+    const data={name:entry.name,description:entry.description,category:entry.category,pack_path,source_url:entry.sourceUrl,content_rights:entry.rights};
+    await prisma.instrument.upsert({where:{id:`seed-${entry.id}`},create:{id:`seed-${entry.id}`,...data},update:data});
+    seeded+=1;
+  }
+  if(missing>0)console.warn(`Instrument library: ${missing} manifest entries missing on disk (run scripts/fetch-instrument-library.ts to fetch)`);
+  console.log(`Seeded ${seeded} library instruments`);
+}
+
 async function main(){
   lessons.forEach(validateLesson);exercises.forEach(validateMidiExercise);
   const password_hash=await bcrypt.hash("demo-password",12);
@@ -50,6 +69,7 @@ async function main(){
   for(const exercise of exercises){const lesson=lessons.find(item=>item.sections.some(section=>section.type==="midi-exercise"&&section.exerciseId===exercise.exerciseId));if(!lesson)throw new Error(`No lesson owns ${exercise.exerciseId}`);await prisma.exercise.upsert({where:{id:exercise.exerciseId},create:{id:exercise.exerciseId,exercise_json:json(exercise),lesson_id:lesson.id},update:{exercise_json:json(exercise),lesson_id:lesson.id}})}
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});
   await seedSongs();
+  await seedInstruments();
   console.log(`Seeded ${lessons.length} lessons, ${exercises.length} exercises, demo user ${demo.email}, and admin ${admin.email}`);
 }
 main().finally(()=>prisma.$disconnect());

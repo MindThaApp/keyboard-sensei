@@ -31,6 +31,7 @@ model User {
   progress           UserProgress[]
   feedback           Feedback[]
   songs              Song[]
+  instruments        Instrument[]
   playalong_attempts PlayAlongAttempt[]
   achievements       UserAchievement[]
 }
@@ -77,6 +78,19 @@ model Song {
   created_at     DateTime           @default(now())
   uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
   attempts       PlayAlongAttempt[]
+}
+
+model Instrument {
+  id             String   @id @default(cuid())
+  name           String
+  description    String
+  category       String
+  pack_path      String
+  source_url     String?
+  uploader_id    String?
+  content_rights String
+  created_at     DateTime @default(now())
+  uploader       User?    @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
 }
 
 model ArchiveEntry {

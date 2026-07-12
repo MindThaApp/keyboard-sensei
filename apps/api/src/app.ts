@@ -22,6 +22,7 @@ import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage,
 import { feedbackRouter } from "./feedback.js";
 import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
+import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { dashboardRouter } from "./dashboard.js";
 
@@ -219,6 +220,7 @@ app.use(requireAuth);
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
 app.use(songsRouter);
+app.use(instrumentsRouter);
 app.use(archiveRouter);
 app.use(dashboardRouter);
 

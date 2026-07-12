@@ -28,6 +28,7 @@ services:
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
+      - keyboard-sensei-instruments:/app/apps/api/data/instruments
       - keyboard-sensei-feedback-screenshots:/app/apps/api/data/feedback-screenshots
     depends_on:
       postgres:
@@ -67,6 +68,7 @@ volumes:
   keyboard-sensei-postgres-data:
   keyboard-sensei-tts-cache:
   keyboard-sensei-midi-library:
+  keyboard-sensei-instruments:
   keyboard-sensei-feedback-screenshots:
   keyboard-sensei-caddy-data:
   keyboard-sensei-caddy-config:
