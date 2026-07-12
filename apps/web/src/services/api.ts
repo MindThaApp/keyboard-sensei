@@ -160,6 +160,7 @@ export interface PlayAlongAttemptSummary {
   score: number;
   accuracy: number;
   tempo_pct: number;
+  tempo_bpm: number | null;
   lookahead_s: number;
   wait_mode: boolean;
   created_at: string;
@@ -177,7 +178,7 @@ export const adminUpdateSong = (id: string, fields: Partial<{ title: string; art
   request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const getMyPlayAlongAttempts = () =>
   request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
-export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; lookahead_s: number; wait_mode: boolean }) =>
+export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) =>
   request<{ id: string; score: number; accuracy: number }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
 
 // --- Dashboard ---
