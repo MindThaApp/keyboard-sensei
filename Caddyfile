@@ -1,0 +1,16 @@
+{
+	# Real clients (curl, Chrome, Edge) omit the SNI extension entirely when
+	# connecting to a literal IP address rather than a hostname — this is
+	# standard client behavior, not a bug. Without default_sni, Caddy has no
+	# certificate to offer such a connection and the handshake fails with an
+	# internal_error alert (confirmed via packet capture: full ClientHello
+	# received and ACKed, then Caddy sends the alert — a cert-selection
+	# failure, not a network/transport problem).
+	default_sni 192.168.4.4
+}
+
+https://192.168.4.4:8443, https://localhost:8443 {
+	tls internal
+
+	reverse_proxy web:80
+}
