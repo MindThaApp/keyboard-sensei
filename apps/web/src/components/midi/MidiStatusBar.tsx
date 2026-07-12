@@ -1,17 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMidiContext } from "./MidiContext";
 
 /** Shows MIDI hardware status and never fails silently on unsupported browsers (Safari/iOS). */
 export default function MidiStatusBar() {
-  const { webMidiSupported, webMidiConnected, webMidiError, devices, lastNoteAtMs, connectWebMidi } = useMidiContext();
+  const { webMidiSupported, webMidiConnected, webMidiError, devices, subscribe, connectWebMidi } = useMidiContext();
 
+  // Note activity is held locally rather than on the context: a note-on fires on
+  // every key press, and putting it on the shared context value would re-render
+  // every consumer (the 88-key VirtualPiano, PlayAlongPage, MidiExercise) on each
+  // press just to flash this dot.
   const [activityLit, setActivityLit] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (lastNoteAtMs === null) return;
-    setActivityLit(true);
-    const timer = setTimeout(() => setActivityLit(false), 400);
-    return () => clearTimeout(timer);
-  }, [lastNoteAtMs]);
+    const unsubscribe = subscribe((event) => {
+      if (event.type !== "noteon") return;
+      setActivityLit(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setActivityLit(false), 400);
+    });
+    return () => {
+      unsubscribe();
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [subscribe]);
 
   let dotClass: string;
   let message: string;
@@ -26,8 +37,10 @@ export default function MidiStatusBar() {
     message = `MIDI keyboard connected${devices[0] ? `: ${devices[0].name}` : ""}. The on-screen piano works too.`;
   } else {
     dotClass = "bg-slate-400 dark:bg-slate-500";
-    message = webMidiError ??
-      "MIDI access granted, but no keyboard was detected. Unplug the keyboard's USB cable, plug it back in, and click Connect again. (If it has two USB ports, use the one marked USB-to-HOST.)";
+    // The "no keyboard detected" text belongs in webMidiError (set by MidiContext
+    // once access is actually granted) — using it as the default would tell a user
+    // who has never clicked Connect that access was granted when it wasn't.
+    message = webMidiError ?? "No MIDI keyboard connected — the on-screen piano works either way.";
     showConnectButton = true;
   }
 
