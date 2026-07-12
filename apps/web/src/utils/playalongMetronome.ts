@@ -4,6 +4,21 @@ import { playClick, type MetronomeSound } from "./clickTimbres";
 /** Schedule at most this far ahead, in WALL-CLOCK seconds. */
 const LOOKAHEAD_WALL_S = 0.12;
 
+/** Which beats the click lands on. */
+export type ClickLevel = "bar" | "beat" | "subdivision";
+
+export const CLICK_LEVELS: ReadonlyArray<{ value: ClickLevel; label: string; description: string }> = [
+  { value: "bar", label: "Bar", description: "One click per bar, on the downbeat. Least intrusive — for when your time is already solid." },
+  { value: "beat", label: "Beat", description: "The pulse you'd count out loud. In 6/8 that's two clicks per bar, not six." },
+  { value: "subdivision", label: "Subdivision", description: "Every notated beat, including the inner ones. Dense, but it exposes rushed rhythms." },
+];
+
+const wanted = (beat: { isDownbeat: boolean; isMainBeat: boolean }, level: ClickLevel): boolean => {
+  if (level === "bar") return beat.isDownbeat;
+  if (level === "beat") return beat.isMainBeat;
+  return true;
+};
+
 /**
  * A metronome that follows a song's beat grid instead of free-running at a fixed BPM.
  *
@@ -54,7 +69,14 @@ export class PlayAlongMetronome {
    * @param rate       engine playback rate (1 = written tempo)
    * @param isWaiting  engine.isWaiting — song is frozen, so emit nothing
    */
-  tick(songTimeS: number, rate: number, isWaiting: boolean, sound: MetronomeSound, volume: number): void {
+  tick(
+    songTimeS: number,
+    rate: number,
+    isWaiting: boolean,
+    sound: MetronomeSound,
+    volume: number,
+    level: ClickLevel = "beat",
+  ): void {
     if (isWaiting || rate <= 0) return;
 
     // Skip beats already behind us (e.g. after a seek, or the count-in).
@@ -68,8 +90,10 @@ export class PlayAlongMetronome {
     while (this.cursor < this.beats.length) {
       const beat = this.beats[this.cursor]!;
       if (beat.timeS > horizonSongS) break;
-      const whenWallS = ctx.currentTime + Math.max(0, (beat.timeS - songTimeS) / rate);
-      playClick(ctx, whenWallS, beat.isDownbeat, volume, sound);
+      if (wanted(beat, level)) {
+        const whenWallS = ctx.currentTime + Math.max(0, (beat.timeS - songTimeS) / rate);
+        playClick(ctx, whenWallS, beat.isDownbeat, volume, sound);
+      }
       this.cursor++;
     }
   }

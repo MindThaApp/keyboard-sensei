@@ -62,6 +62,9 @@ export interface BeatGridEntry {
   timeS: number;
   beatInBar: number;
   isDownbeat: boolean;
+  /** The beats a musician actually counts. Same as every beat in simple meters;
+   *  every third notated beat in compound ones (6/8 is felt in 2, not 6). */
+  isMainBeat: boolean;
 }
 
 export interface SongBeatGrid {
@@ -159,6 +162,12 @@ export function buildBeatGrid(midi: Midi, segments: TimeSignatureSegment[]): Son
         numerator: seg.numerator,
         denominator: seg.denominator,
       });
+      // Compound meters (6/8, 9/8, 12/8) group their notated beats in threes: a
+      // pianist counts 6/8 as TWO dotted-quarters, not six eighths. Clicking every
+      // notated beat there means six clicks a bar — correct by the definition of
+      // the time signature, and exhausting to practise against. `isMainBeat` marks
+      // the beats you'd actually count out loud.
+      const groupSize = seg.denominator >= 8 && seg.numerator % 3 === 0 && seg.numerator > 3 ? 3 : 1;
       for (let b = 0; b < seg.numerator; b++) {
         const beatTick = barTick + b * seg.ticksPerBeat;
         if (beatTick >= segEndTick) break; // meter changed mid-bar: don't emit beats past the segment boundary
@@ -166,6 +175,7 @@ export function buildBeatGrid(midi: Midi, segments: TimeSignatureSegment[]): Son
           timeS: midi.header.ticksToSeconds(beatTick),
           beatInBar: b,
           isDownbeat: b === 0,
+          isMainBeat: b % groupSize === 0,
         });
       }
     }

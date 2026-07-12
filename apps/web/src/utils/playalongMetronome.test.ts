@@ -22,6 +22,15 @@ const grid = Array.from({ length: 12 }, (_, i) => ({
   timeS: i,
   beatInBar: i % 4,
   isDownbeat: i % 4 === 0,
+  isMainBeat: true, // simple meter: every notated beat is a counted beat
+}));
+
+/** 6/8: six notated eighths per bar, but only beats 0 and 3 are counted. */
+const compound = Array.from({ length: 12 }, (_, i) => ({
+  timeS: i,
+  beatInBar: i % 6,
+  isDownbeat: i % 6 === 0,
+  isMainBeat: i % 3 === 0,
 }));
 
 describe("PlayAlongMetronome", () => {
@@ -81,5 +90,27 @@ describe("PlayAlongMetronome", () => {
     m.tick(0, 1, false, "click", 0.7);
     m.tick(1, 1, false, "click", 0.7);
     expect(clicks.map((c) => c.accented)).toEqual([true, false]);
+  });
+
+  it("clicks the counted pulse in compound meter, not every eighth (6/8 = 2 clicks a bar)", () => {
+    const m = new PlayAlongMetronome(compound);
+    for (let t = 0; t < 6; t++) m.tick(t, 1, false, "click", 0.7, "beat");
+    // Beats 0..5 of one 6/8 bar -> only 0 and 3 are counted.
+    expect(clicks).toHaveLength(2);
+    expect(clicks[0]!.accented).toBe(true); // downbeat
+    expect(clicks[1]!.accented).toBe(false);
+  });
+
+  it("subdivision level clicks every notated beat", () => {
+    const m = new PlayAlongMetronome(compound);
+    for (let t = 0; t < 6; t++) m.tick(t, 1, false, "click", 0.7, "subdivision");
+    expect(clicks).toHaveLength(6);
+  });
+
+  it("bar level clicks only the downbeat", () => {
+    const m = new PlayAlongMetronome(compound);
+    for (let t = 0; t < 12; t++) m.tick(t, 1, false, "click", 0.7, "bar");
+    expect(clicks).toHaveLength(2); // two bars in 12 beats of 6/8
+    expect(clicks.every((c) => c.accented)).toBe(true);
   });
 });
