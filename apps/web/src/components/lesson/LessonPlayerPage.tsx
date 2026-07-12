@@ -5,6 +5,7 @@ import TheoryCardSectionView from "./TheoryCardSectionView";
 import NotationRenderer from "../notation/NotationRenderer";
 import QuizSectionView from "../quiz/QuizSectionView";
 import MidiExercise from "../midi/MidiExercise";
+import MidiStatusBar from "../midi/MidiStatusBar";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
 import { getLesson } from "../../services/api";
@@ -109,6 +110,8 @@ export default function LessonPlayerPage() {
           {detailError} — exercises may not load. Refresh to retry.
         </p>
       )}
+
+      {lesson.sections.some((section) => section.type === "midi-exercise") && <MidiStatusBar />}
 
       <div className="space-y-6">
         {lesson.sections.map((section, sectionIndex) => {

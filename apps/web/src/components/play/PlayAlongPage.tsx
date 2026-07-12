@@ -11,6 +11,7 @@ import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, typ
 import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
 import { PlayAlongEngine, type PlayAlongLiveStats } from "../../utils/playalongEngine";
 import { useMidiContext } from "../midi/MidiContext";
+import MidiStatusBar from "../midi/MidiStatusBar";
 import { useTheme } from "../../contexts/ThemeContext";
 import VirtualPiano from "../piano/VirtualPiano";
 import {
@@ -273,6 +274,8 @@ export default function PlayAlongPage() {
         </div>
         <Link to="/play" className="secondary-button ml-auto text-sm">← Library</Link>
       </div>
+
+      <MidiStatusBar />
 
       {/* Settings bar */}
       <div className="card flex flex-wrap items-center gap-4 p-3 text-sm">

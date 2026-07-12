@@ -112,6 +112,25 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     }
   }, [webMidiSupported]);
 
+  // Web MIDI permission, once granted, persists for the origin — but the adapter's
+  // onmidimessage handlers are rebuilt on every page load, so hardware input stays
+  // dead until connect() runs again. Without this, a reload (or opening a lesson /
+  // play-along page directly) silently drops the keyboard with no way to notice.
+  // Only reconnect when permission is ALREADY granted, so a first-time visitor is
+  // never hit with an unprompted permission dialog — they connect via MidiStatusBar.
+  useEffect(() => {
+    if (!webMidiSupported) return;
+    void (async () => {
+      try {
+        const status = await navigator.permissions.query({ name: "midi" } as unknown as PermissionDescriptor);
+        if (status.state === "granted") await connectWebMidi();
+      } catch {
+        // Browser's Permissions API doesn't recognise "midi" — fall back to the
+        // explicit Connect button rather than prompting on load.
+      }
+    })();
+  }, [webMidiSupported, connectWebMidi]);
+
   const subscribe = useCallback((listener: RawMidiListener) => {
     listenersRef.current.add(listener);
     return () => {
