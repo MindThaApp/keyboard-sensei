@@ -59,7 +59,20 @@ interface Props {
   onRecordingClock?: (clock: { startTimeMs: number; effectiveBpm: number } | null) => void;
 }
 
-type Phase = "idle" | "listening" | "counting-in" | "recording" | "submitting" | "scored";
+type Phase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
+
+/**
+ * Converts a raw MIDI event's wall-clock timestamp (performance.now() basis)
+ * into elapsed *performance* time in ms, relative to the start of the
+ * attempt, excluding any time spent paused. `pausedMs` accumulates both
+ * genuine pause duration and any resume count-in (which also isn't
+ * performance) — see `pause`/`resumeExercise` below. This is what every
+ * timestamp handed to pairRawMidiEvents/scoring is built from, so a pause is
+ * invisible to scoring: freezing this value is the entire mechanism.
+ */
+export function elapsedPerformanceMs(rawTimestampMs: number, startTimeMs: number, pausedMs: number): number {
+  return rawTimestampMs - startTimeMs - pausedMs;
+}
 
 const LIVE_POINTS: Record<PlayAlongJudgment, number> = { perfect: 10, good: 7, ok: 4, miss: -3 };
 const WRONG_PRESS_PENALTY = 2;
@@ -184,6 +197,10 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const raw = useRef<RawMidiEvent[]>([]);
   const start = useRef(0);
   const active = useRef(false);
+  /** Total ms of the current attempt spent paused (or in a resume count-in), subtracted out of every performance timestamp. */
+  const pausedMs = useRef(0);
+  /** Wall-clock moment the current pause began; null when not paused. */
+  const pauseStart = useRef<number | null>(null);
   const previewTimeouts = useRef<number[]>([]);
   const previewSounding = useRef<Set<number>>(new Set());
   const metronomeOnRef = useRef(metronomeOn);
@@ -208,11 +225,12 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     () =>
       subscribe((event) => {
         if (!active.current) return;
-        raw.current.push({ ...event, timestampMs: event.timestampMs - start.current });
+        const elapsedMs = elapsedPerformanceMs(event.timestampMs, start.current, pausedMs.current);
+        raw.current.push({ ...event, timestampMs: elapsedMs });
         if (event.type !== "noteon") return;
         setPlayed(true);
         if (exercise?.scoring === "untimed") return;
-        const songTimeS = (event.timestampMs - start.current) / 1000;
+        const songTimeS = elapsedMs / 1000;
         const match = judgeNextPress(liveNotesRef.current, liveJudgmentsRef.current, event.note, songTimeS);
         if (match) {
           liveJudgmentsRef.current[match.index] = match.judgment;
@@ -306,19 +324,27 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     setActiveNoteIds(new Set());
   };
 
-  const startLiveFollow = () => {
+  /**
+   * `preserve`: on a pause→resume, keep the judgments/score/combo already
+   * earned (only the note timings are recomputed, in case the tempo changed
+   * while paused) instead of restarting the live overlay from zero — a fresh
+   * attempt still resets everything.
+   */
+  const startLiveFollow = (preserve = false) => {
     liveNotesRef.current = liveNotesFor(exercise, effectiveBpm);
-    liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
-    liveMissCursorRef.current = 0;
-    setLiveScore(0);
-    setLiveCombo(0);
-    setLastDelta(null);
+    if (!preserve) {
+      liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
+      liveMissCursorRef.current = 0;
+      setLiveScore(0);
+      setLiveCombo(0);
+      setLastDelta(null);
+    }
     activeNoteIdsRef.current = "";
     setActiveNoteIds(new Set());
 
     const tick = () => {
       if (!active.current) return;
-      const songTimeS = (performance.now() - start.current) / 1000;
+      const songTimeS = elapsedPerformanceMs(performance.now(), start.current, pausedMs.current) / 1000;
       const notes = liveNotesRef.current;
       const judgments = liveJudgmentsRef.current;
 
@@ -359,6 +385,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     setResult(null);
     setError(null);
     setBeat(null);
+    pausedMs.current = 0;
+    pauseStart.current = null;
     if (untimed) {
       // No pulse to lock onto — start recording immediately, no count-in, no clicks.
       start.current = performance.now();
@@ -385,11 +413,71 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     });
   };
 
+  /**
+   * Pauses recording without discarding the attempt: stops the metronome and
+   * the live-follow loop, and marks the wall-clock moment so `resumeExercise`
+   * can fold the gap (plus any resume count-in) into `pausedMs`, keeping
+   * every performance timestamp — already-captured and yet-to-come — on the
+   * same clock as an unpaused run. Notes already played stay in `raw.current`.
+   */
+  const pause = () => {
+    if (phase !== "recording") return;
+    metronome.stop();
+    active.current = false;
+    cancelAnimationFrame(liveRafRef.current);
+    pauseStart.current = performance.now();
+    setBeat(null);
+    setPhase("paused");
+    onRecordingClockRef.current?.(null);
+  };
+
+  /**
+   * Resumes a paused attempt. Re-runs the count-in (its clicks aren't
+   * recorded, same as the initial count-in — see elapsedPerformanceMs) using
+   * whatever tempo/metronome settings are current, so a tempo change made
+   * while paused takes effect from here on. `start.current` and
+   * `raw.current` are untouched, so this continues the same attempt.
+   */
+  const resumeExercise = () => {
+    if (phase !== "paused") return;
+    const unfreeze = () => {
+      if (pauseStart.current !== null) {
+        pausedMs.current += performance.now() - pauseStart.current;
+        pauseStart.current = null;
+      }
+    };
+    if (untimed) {
+      unfreeze();
+      active.current = true;
+      setPhase("recording");
+      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      return;
+    }
+    setPhase("counting-in");
+    metronome.start({
+      bpm: effectiveBpm,
+      countInBeats: COUNT_IN_BEATS,
+      sound: metronomeSettingsRef.current.sound,
+      volume: metronomeSettingsRef.current.volume,
+      onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
+      onGo: () => {
+        unfreeze();
+        active.current = true;
+        setPhase("recording");
+        if (!metronomeOnRef.current) metronome.stop();
+        startLiveFollow(true);
+        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      },
+    });
+  };
+
   const cancel = () => {
     metronome.stop();
     active.current = false;
     stopLiveFollow();
     setBeat(null);
+    pausedMs.current = 0;
+    pauseStart.current = null;
     setPhase("idle");
     onRecordingClockRef.current?.(null);
   };
@@ -490,9 +578,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             </button>
           </>
         )}
-        {(phase === "counting-in" || capturing) && (
+        {(phase === "counting-in" || capturing || phase === "paused") && (
           <>
-            {!untimed && (
+            {!untimed && phase !== "paused" && (
               <div className="flex items-center gap-1.5" aria-hidden>
                 {Array.from({ length: COUNT_IN_BEATS }, (_, i) => (
                   <span
@@ -505,7 +593,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               </div>
             )}
             <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
-              {phase === "counting-in" ? `Count-in… ${beat ? beat.index + 1 : ""}` : "Recording — play, then submit."}
+              {phase === "counting-in"
+                ? `Count-in… ${beat ? beat.index + 1 : ""}`
+                : phase === "paused"
+                  ? "Paused — adjust tempo or settings, then resume."
+                  : "Recording — play, then submit."}
             </span>
             {capturing && !untimed && highlightEnabled && (
               <div className="flex items-center gap-3 text-xs">
@@ -531,6 +623,16 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             {capturing && (
               <button className="primary-button" disabled={!played} onClick={() => void submit()}>
                 Submit Attempt
+              </button>
+            )}
+            {capturing && (
+              <button className="secondary-button" onClick={pause}>
+                Pause
+              </button>
+            )}
+            {phase === "paused" && (
+              <button className="primary-button" onClick={resumeExercise}>
+                Resume
               </button>
             )}
             <button className="secondary-button" onClick={cancel}>Cancel</button>
