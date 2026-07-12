@@ -3,7 +3,7 @@ import path from "node:path";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { extractSongMetadata, InvalidMidiError, MIDI_LIBRARY_DIR } from "./songs.js";
+import { extractSongMetadata, InvalidMidiError, isFetchRateLimited, MIDI_LIBRARY_DIR } from "./songs.js";
 
 const searchQuerySchema = z.object({
   q: z.string().trim().max(200).default(""),
@@ -84,6 +84,10 @@ archiveRouter.get("/archive/search", async (req, res, next) => {
 archiveRouter.post("/archive/:id/import", async (req, res, next) => {
   try {
     const userId = uid(req);
+    if (isFetchRateLimited(userId)) {
+      res.status(429).json({ error: { code: "rate_limited", message: "Too many import attempts — try again later" } });
+      return;
+    }
     const entry = await prisma.archiveEntry.findUnique({ where: { id: z.string().parse(req.params.id) } });
     if (!entry) {
       res.status(404).json({ error: { code: "not_found", message: "Archive entry not found" } });
