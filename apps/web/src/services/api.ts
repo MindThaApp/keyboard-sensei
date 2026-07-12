@@ -138,9 +138,13 @@ export const getSongFile = async (id: string): Promise<ArrayBuffer> => {
   return response.arrayBuffer();
 };
 
-export const uploadSong = async (file: File, meta: { title: string; artist: string; genre: SongGenre }): Promise<Song> => {
+export const uploadSong = async (
+  file: File | Blob,
+  meta: { title: string; artist: string; genre: SongGenre; source_url?: string },
+): Promise<Song> => {
   const token = getToken();
   const params = new URLSearchParams({ title: meta.title, artist: meta.artist, genre: meta.genre });
+  if (meta.source_url) params.set("source_url", meta.source_url);
   const response = await fetch(`${API_URL}/songs/upload?${params}`, {
     method: "POST",
     headers: { "content-type": "audio/midi", ...(token ? { authorization: `Bearer ${token}` } : {}) },
@@ -149,4 +153,30 @@ export const uploadSong = async (file: File, meta: { title: string; artist: stri
   const body = await response.json().catch(() => null) as (Song & { error?: { message?: string } }) | null;
   if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
   return body as Song;
+};
+
+export interface UrlPreview {
+  bytes: ArrayBuffer;
+  durationSec: number;
+  noteCount: number;
+  difficulty: number;
+}
+
+export const fetchUrlPreview = async (url: string): Promise<UrlPreview> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/songs/fetch-url-preview`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ url }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(body?.error?.message ?? `Could not fetch that URL (${response.status})`);
+  }
+  return {
+    bytes: await response.arrayBuffer(),
+    durationSec: Number(response.headers.get("x-song-duration-sec") ?? 0),
+    noteCount: Number(response.headers.get("x-song-note-count") ?? 0),
+    difficulty: Number(response.headers.get("x-song-difficulty") ?? 1),
+  };
 };
