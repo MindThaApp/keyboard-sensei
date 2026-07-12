@@ -1,4 +1,5 @@
 import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
+import type { BarGridEntry } from "../../utils/playalongSong";
 
 /** Must match VirtualPiano's key layout so notes land on their keys. */
 export const WHITE_KEY_WIDTH_PX = 40;
@@ -71,6 +72,7 @@ export interface WaterfallColors {
   missed: string;
   lane: string;
   hitLine: string;
+  barline: string;
 }
 
 export const WATERFALL_COLORS_LIGHT: WaterfallColors = {
@@ -80,6 +82,7 @@ export const WATERFALL_COLORS_LIGHT: WaterfallColors = {
   missed: "#fb7185", // rose-400
   lane: "rgba(15, 23, 42, 0.04)",
   hitLine: "rgba(180, 50, 62, 0.55)",
+  barline: "rgba(15, 23, 42, 0.14)",
 };
 
 export const WATERFALL_COLORS_DARK: WaterfallColors = {
@@ -89,6 +92,7 @@ export const WATERFALL_COLORS_DARK: WaterfallColors = {
   missed: "#fb7185",
   lane: "rgba(255, 255, 255, 0.04)",
   hitLine: "rgba(207, 82, 96, 0.6)",
+  barline: "rgba(255, 255, 255, 0.14)",
 };
 
 export interface WaterfallFrame {
@@ -100,6 +104,8 @@ export interface WaterfallFrame {
   heightPx: number;
   colors: WaterfallColors;
   waitingPitches?: Set<number>;
+  /** Falling barlines, in song seconds (see buildBeatGrid). Optional so older callers/tests keep compiling. */
+  bars?: BarGridEntry[];
 }
 
 /**
@@ -124,6 +130,21 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
   }
 
   const pxPerSecond = heightPx / lookaheadS;
+
+  // Falling barlines: same transform as the notes below (bar.timeS in place of
+  // note.startS), drawn before the note loop so notes paint on top of them,
+  // not the other way round. Bars only, not every beat — at typical lookahead
+  // that's ~8 beat lines on screen and reads as noise.
+  if (frame.bars) {
+    ctx.fillStyle = colors.barline;
+    for (const bar of frame.bars) {
+      const timeToStart = bar.timeS - songTimeS;
+      if (timeToStart < 0 || timeToStart > lookaheadS) continue;
+      const y = Math.round(heightPx - timeToStart * pxPerSecond);
+      ctx.fillRect(0, y, width, 1);
+    }
+  }
+
   // Recently passed notes remain briefly visible below the hit line…no,
   // the hit line IS the bottom; passed portions simply slide out of view.
   for (let i = 0; i < notes.length; i++) {

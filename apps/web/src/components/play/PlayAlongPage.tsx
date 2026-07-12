@@ -226,6 +226,7 @@ export default function PlayAlongPage() {
             geometry,
             heightPx: WATERFALL_HEIGHT_PX,
             colors,
+            bars: parsed.grid.bars,
           });
         }
       }

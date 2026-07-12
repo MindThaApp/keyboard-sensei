@@ -45,6 +45,32 @@ export interface ParsedPlayAlongSong {
   beatsPerBar: number;
   /** Every time-signature segment in the piece, in chronological order, denominator-aware. Always has at least one entry (defaults to 4/4 at tick 0 when the MIDI has no time-signature event). */
   timeSignatureSegments: TimeSignatureSegment[];
+  /** Bar/beat grid built from the FULL tempo map (see buildBeatGrid). Precomputed once at parse time. */
+  grid: SongBeatGrid;
+}
+
+/** One bar boundary, in song seconds, from the full tempo map (see buildBeatGrid). */
+export interface BarGridEntry {
+  timeS: number;
+  barIndex: number;
+  numerator: number;
+  denominator: number;
+}
+
+/** One notated-beat boundary, in song seconds, from the full tempo map (see buildBeatGrid). */
+export interface BeatGridEntry {
+  timeS: number;
+  beatInBar: number;
+  isDownbeat: boolean;
+}
+
+export interface SongBeatGrid {
+  bars: BarGridEntry[];
+  beats: BeatGridEntry[];
+  /** Non-null ONLY when the song has one honest, stable tempo (denominator-aware: the notated-beat BPM, not tempos[0].bpm's quarter-note BPM). Null for any file with a real tempo map. */
+  steadyBpm: number | null;
+  /** False when the tempo lurches hard enough that a following click would be more misleading than useful (a lurching conductor, not a metronome). */
+  clickSafe: boolean;
 }
 
 const PIANO_MIN = 21;
@@ -109,6 +135,90 @@ export function barRangesFrom(
 }
 
 /**
+ * Builds the falling-barline / metronome grid from the FULL tempo map.
+ *
+ * Every tick is converted to seconds via `midi.header.ticksToSeconds(tick)` —
+ * the SAME function @tonejs/midi already uses to place every note's
+ * `note.time`. So the grid and the notes live in the same coordinate system
+ * BY CONSTRUCTION, for any tempo map however wild — there is no error term,
+ * and no naive constant-BPM approximation is involved anywhere in here.
+ */
+export function buildBeatGrid(midi: Midi, segments: TimeSignatureSegment[]): SongBeatGrid {
+  const endTick = midi.durationTicks;
+  const bars: BarGridEntry[] = [];
+  const beats: BeatGridEntry[] = [];
+  let barIndex = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const segEndTick = i + 1 < segments.length ? segments[i + 1].startTick : endTick;
+    for (let barTick = seg.startTick; barTick < segEndTick; barTick += seg.ticksPerBar) {
+      bars.push({
+        timeS: midi.header.ticksToSeconds(barTick),
+        barIndex: barIndex++,
+        numerator: seg.numerator,
+        denominator: seg.denominator,
+      });
+      for (let b = 0; b < seg.numerator; b++) {
+        const beatTick = barTick + b * seg.ticksPerBeat;
+        if (beatTick >= segEndTick) break; // meter changed mid-bar: don't emit beats past the segment boundary
+        beats.push({
+          timeS: midi.header.ticksToSeconds(beatTick),
+          beatInBar: b,
+          isDownbeat: b === 0,
+        });
+      }
+    }
+  }
+
+  return {
+    bars,
+    beats,
+    steadyBpm: computeSteadyBpm(midi, segments),
+    clickSafe: computeClickSafe(beats),
+  };
+}
+
+/**
+ * Non-null only when the tempo is effectively constant (a single tempo
+ * event, or every tempo event within ~1% of the first). Converts the
+ * QUARTER-NOTE tempo (@tonejs/midi's `bpm`) to the NOTATED-BEAT tempo the
+ * user actually hears/counts — for a 6/8 or 12/8 piece the felt beat is a
+ * dotted quarter, so tempos[0].bpm alone would be an audibly wrong number.
+ */
+function computeSteadyBpm(midi: Midi, segments: TimeSignatureSegment[]): number | null {
+  const tempos = midi.header.tempos;
+  if (tempos.length === 0) return null;
+  const quarterBpm = tempos[0].bpm;
+  if (tempos.length > 1) {
+    const stable = tempos.every((t) => Math.abs(t.bpm - quarterBpm) / quarterBpm <= 0.01);
+    if (!stable) return null;
+  }
+  const denominator = segments[0]?.denominator ?? 4;
+  return quarterBpm * (denominator / 4);
+}
+
+/**
+ * False when the tempo lurches hard enough that a following click would be
+ * misleading rather than helpful: more than 10% of adjacent notated-beat
+ * durations differ from their predecessor by more than 5%.
+ */
+function computeClickSafe(beats: BeatGridEntry[]): boolean {
+  if (beats.length < 3) return true;
+  let lurches = 0;
+  let comparisons = 0;
+  for (let i = 2; i < beats.length; i++) {
+    const prevDuration = beats[i - 1].timeS - beats[i - 2].timeS;
+    const duration = beats[i].timeS - beats[i - 1].timeS;
+    if (prevDuration <= 0) continue;
+    comparisons++;
+    if (Math.abs(duration - prevDuration) / prevDuration > 0.05) lurches++;
+  }
+  if (comparisons === 0) return true;
+  return lurches / comparisons <= 0.1;
+}
+
+/**
  * Parse raw MIDI bytes into play-along notes (song seconds, tempo map already
  * applied by @tonejs/midi). Hand assignment: with 2+ note-bearing tracks the
  * lowest-mean-pitch track is the left hand; single-track songs split at
@@ -157,6 +267,7 @@ export function parsePlayAlongSong(bytes: ArrayBuffer): ParsedPlayAlongSong {
   const bpm = midi.header.tempos[0]?.bpm ?? 120;
   const timeSignatureSegments = parseTimeSignatureSegments(midi);
   const beatsPerBar = timeSignatureSegments[0].beatsPerBar;
+  const grid = buildBeatGrid(midi, timeSignatureSegments);
 
-  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments };
+  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments, grid };
 }
