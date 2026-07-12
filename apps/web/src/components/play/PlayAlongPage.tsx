@@ -180,7 +180,7 @@ export default function PlayAlongPage() {
         if (!settings.waitMode && songId) {
           setSubmitState("saving");
           submitPlayAlongAttempt(songId, {
-            score: finalScore(finished, settings.tempoPct, settings.lookaheadS),
+            score: finalScore(finished, settings.tempoPct / 100, settings.lookaheadS),
             accuracy: finished.accuracyPct,
             tempo_pct: settings.tempoPct,
             lookahead_s: settings.lookaheadS,
@@ -265,7 +265,7 @@ export default function PlayAlongPage() {
 
   const liveScore = finalScore(
     { judgments: [], wrongPressCount: stats.wrongPressCount, accuracyPct: stats.accuracyPct, maxCombo: stats.maxCombo, baseScore: stats.accuracyPct },
-    settings.tempoPct,
+    settings.tempoPct / 100,
     settings.lookaheadS,
   );
 
@@ -364,7 +364,7 @@ export default function PlayAlongPage() {
           ))}
         </div>
         <span className="ml-auto text-xs text-slate-400">
-          ×{(tempoMultiplier(settings.tempoPct) * lookaheadMultiplier(settings.lookaheadS)).toFixed(2)} score multiplier
+          ×{Math.min(1.5, tempoMultiplier(settings.tempoPct / 100) * lookaheadMultiplier(settings.lookaheadS)).toFixed(2)} score multiplier
         </span>
       </div>
 
@@ -385,12 +385,12 @@ export default function PlayAlongPage() {
         <section aria-label="Result" className="card space-y-3 p-5">
           <div className="flex items-center gap-4">
             <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">
-              {gradeFor(finalScore(result, settings.tempoPct, settings.lookaheadS))}
+              {gradeFor(finalScore(result, settings.tempoPct / 100, settings.lookaheadS))}
             </span>
             <div>
-              <p className="text-2xl font-semibold tabular-nums">{finalScore(result, settings.tempoPct, settings.lookaheadS)}</p>
+              <p className="text-2xl font-semibold tabular-nums">{finalScore(result, settings.tempoPct / 100, settings.lookaheadS)}</p>
               <p className="text-xs text-slate-500">
-                base {result.baseScore} × tempo {tempoMultiplier(settings.tempoPct)} × visibility {lookaheadMultiplier(settings.lookaheadS)}
+                base {result.baseScore} × tempo {tempoMultiplier(settings.tempoPct / 100).toFixed(2)} × visibility {lookaheadMultiplier(settings.lookaheadS).toFixed(2)}
               </p>
             </div>
             <div className="ml-auto text-right text-xs text-slate-500">
