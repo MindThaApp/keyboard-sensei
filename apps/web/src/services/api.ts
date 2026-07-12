@@ -104,7 +104,16 @@ export interface Song {
   duration_sec: number;
   note_count: number;
   content_rights: string;
+  notation_path: string | null;
   mine: boolean;
+}
+export interface ArchiveEntryResult {
+  id: string;
+  title: string;
+  composer: string;
+  duration_sec: number;
+  note_count: number;
+  difficulty: number;
 }
 export interface PlayAlongAttemptSummary {
   id: string;
@@ -119,6 +128,11 @@ export interface PlayAlongAttemptSummary {
   created_at: string;
 }
 export const getSongs = () => request<{ songs: Song[] }>("/songs");
+export const searchArchive = (q: string, offset = 0, limit = 30) =>
+  request<{ results: ArchiveEntryResult[] }>(`/archive/search?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`);
+
+export const importArchiveEntry = (id: string) =>
+  request<{ id: string; title: string; artist: string }>(`/archive/${encodeURIComponent(id)}/import`, { method: "POST" });
 export const deleteSong = (id: string) => request<{ ok: true }>(`/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const updateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre }>) =>
   request<Song>(`/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
@@ -135,6 +149,16 @@ export const getSongFile = async (id: string): Promise<ArrayBuffer> => {
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) throw new Error(`Could not load song file (${response.status})`);
+  return response.arrayBuffer();
+};
+
+export const getSongNotationFile = async (id: string): Promise<ArrayBuffer | null> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/songs/${encodeURIComponent(id)}/notation`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Could not load notation (${response.status})`);
   return response.arrayBuffer();
 };
 
