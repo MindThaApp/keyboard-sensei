@@ -12,6 +12,8 @@ import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/mea
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
+
+const SHEET_SCALE_KEY = "ks-exercise-sheet-scale";
 const COUNT_IN_BEATS = 4;
 /** UI slider bounds (BPM). Narrower than the API's accepted tempoPct range — see tempoBpmBounds. */
 const SLIDER_MIN_BPM = 25;
@@ -179,6 +181,24 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const { subscribe, mockAdapter } = useMidiContext();
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
+
+  // The span this exercise actually uses — drives VirtualPiano's "Fit to piece"
+  // button, so the user can widen a too-narrow keyboard in one click.
+  const exerciseRange = useMemo(() => {
+    const midis = exercise?.expected?.map((n) => n.note) ?? [];
+    if (midis.length === 0) return undefined;
+    return { lowestNote: Math.min(...midis), highestNote: Math.max(...midis) };
+  }, [exercise]);
+
+  // Sheet size. The notation had no size control at all here (only Play-Along's
+  // strip had one), so a sheet that was too tall could not be shrunk.
+  const [sheetScale, setSheetScale] = useState<number>(() => {
+    const raw = Number(localStorage.getItem(SHEET_SCALE_KEY));
+    return Number.isFinite(raw) && raw >= 0.5 && raw <= 1.6 ? raw : 1;
+  });
+  useEffect(() => {
+    localStorage.setItem(SHEET_SCALE_KEY, String(sheetScale));
+  }, [sheetScale]);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [beat, setBeat] = useState<{ index: number; isCountIn: boolean } | null>(null);
@@ -543,11 +563,39 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       </div>
 
       {notation && (
-        <NotationRenderer
-          data={notation}
-          title="Read and play"
-          activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
-        />
+        <div>
+          <div className="mb-1 flex items-center justify-end gap-1 text-xs text-slate-500">
+            <span className="mr-1">Sheet size</span>
+            <button
+              type="button"
+              aria-label="Smaller sheet"
+              onClick={() => setSheetScale((v) => Math.max(0.5, Math.round((v - 0.1) * 10) / 10))}
+              disabled={sheetScale <= 0.5}
+              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+            >
+              −
+            </button>
+            <span className="w-10 text-center tabular-nums">{Math.round(sheetScale * 100)}%</span>
+            <button
+              type="button"
+              aria-label="Larger sheet"
+              onClick={() => setSheetScale((v) => Math.min(1.6, Math.round((v + 0.1) * 10) / 10))}
+              disabled={sheetScale >= 1.6}
+              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+            >
+              +
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <div style={{ transform: `scale(${sheetScale})`, transformOrigin: "top left", width: `${100 / sheetScale}%` }}>
+              <NotationRenderer
+                data={notation}
+                title="Read and play"
+                activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -563,6 +611,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       <VirtualPiano
         lowestNote={lowestNote}
         highestNote={highestNote}
+        recommendedRange={exerciseRange}
         expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : []}
         feedbackByNote={feedback}
       />
