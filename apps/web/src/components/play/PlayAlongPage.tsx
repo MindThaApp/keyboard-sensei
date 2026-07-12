@@ -32,14 +32,18 @@ const LOOKAHEADS = [
 const SETTINGS_KEY = "ks-playalong-settings";
 const WATERFALL_HEIGHT_PX = 320;
 
+type ViewMode = "falling" | "notation" | "both";
+const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
+
 interface Settings {
   tempoPct: PlayAlongTempoPct;
   lookaheadS: number;
   waitMode: boolean;
   guideAudio: boolean;
+  viewMode: ViewMode;
 }
 
-const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true };
+const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both" };
 
 function loadSettings(): Settings {
   try {
@@ -51,6 +55,7 @@ function loadSettings(): Settings {
       lookaheadS: LOOKAHEADS.some((option) => option.value === parsed.lookaheadS) ? (parsed.lookaheadS as number) : 4,
       waitMode: Boolean(parsed.waitMode),
       guideAudio: parsed.guideAudio !== false,
+      viewMode: VIEW_MODES.includes(parsed.viewMode as ViewMode) ? (parsed.viewMode as ViewMode) : "both",
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -307,6 +312,28 @@ export default function PlayAlongPage() {
           />
           Guide audio
         </label>
+        <div className="flex items-center gap-1" role="radiogroup" aria-label="View">
+          <span className="mr-1 text-xs text-slate-500">View</span>
+          {([
+            { value: "falling" as const, label: "Falling notes" },
+            { value: "notation" as const, label: "Sheet music" },
+            { value: "both" as const, label: "Both" },
+          ]).map((option) => (
+            <button
+              key={option.value}
+              role="radio"
+              aria-checked={settings.viewMode === option.value}
+              onClick={() => setSettings((s) => ({ ...s, viewMode: option.value }))}
+              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                settings.viewMode === option.value
+                  ? "bg-felt-600 font-medium text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <span className="ml-auto text-xs text-slate-400">
           ×{(tempoMultiplier(settings.tempoPct) * lookaheadMultiplier(settings.lookaheadS)).toFixed(2)} score multiplier
         </span>
@@ -355,25 +382,28 @@ export default function PlayAlongPage() {
         </section>
       )}
 
-      <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
+      {phase === "ready" && (
+        <div className="flex justify-center">
+          <button className="primary-button px-6 py-2.5 text-base" onClick={start}>
+            ▶ Start
+          </button>
+        </div>
+      )}
+
+      {settings.viewMode !== "falling" && (
+        <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
+      )}
 
       {/* Waterfall + piano, sharing one horizontal scroll context */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="mx-auto" style={{ width: geometry.widthPx }}>
-          <div className="relative">
+          {settings.viewMode !== "notation" && (
             <canvas
               ref={canvasRef}
               style={{ width: geometry.widthPx, height: WATERFALL_HEIGHT_PX, display: "block" }}
               aria-label="Falling notes"
             />
-            {phase === "ready" && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button className="primary-button px-6 py-2.5 text-base" onClick={start}>
-                  ▶ Start
-                </button>
-              </div>
-            )}
-          </div>
+          )}
           <VirtualPiano lowestNote={range.lowestNote} highestNote={range.highestNote} showLabels={false} expectedNotes={waitingNotes} />
         </div>
       </div>
