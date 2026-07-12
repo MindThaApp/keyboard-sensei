@@ -103,11 +103,22 @@ export async function fetchUrlSafely(url: string, opts: { maxBytes: number; time
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs);
   try {
-    const response = await undiciFetch(url, {
-      dispatcher: agent,
-      signal: controller.signal,
-      headers: { "accept-encoding": "identity" },
-    });
+    let response;
+    try {
+      response = await undiciFetch(url, {
+        dispatcher: agent,
+        signal: controller.signal,
+        headers: { "accept-encoding": "identity" },
+      });
+    } catch (error) {
+      // undici wraps connector errors in a generic TypeError("fetch failed")
+      // with the real error only on `.cause` -- unwrap it here so callers
+      // can reliably `instanceof SsrfBlockedError` without knowing about
+      // this wrapping quirk. Confirmed live: a blocked connect otherwise
+      // surfaced as an unrecognized TypeError, not SsrfBlockedError.
+      if (error instanceof Error && error.cause instanceof SsrfBlockedError) throw error.cause;
+      throw error;
+    }
     if (!response.ok || !response.body) {
       throw new SsrfBlockedError(`Fetch failed with status ${response.status}`);
     }
