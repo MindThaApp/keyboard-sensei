@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { deleteSong, getMyPlayAlongAttempts, getSongs, uploadSong, type Song, type SongGenre } from "../../services/api";
+import { deleteSong, getMyPlayAlongAttempts, getSongs, updateSong, uploadSong, type Song, type SongGenre } from "../../services/api";
 
 const GENRES: { value: SongGenre | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -91,6 +91,44 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
   );
 }
 
+function EditSongRow({ song, onSaved, onCancel }: { song: Song; onSaved: (song: Song) => void; onCancel: () => void }) {
+  const [title, setTitle] = useState(song.title);
+  const [artist, setArtist] = useState(song.artist);
+  const [genre, setGenre] = useState<SongGenre>(song.genre);
+  const [state, setState] = useState<"idle" | "saving">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!title.trim()) return;
+    setState("saving");
+    setError(null);
+    try {
+      onSaved(await updateSong(song.id, { title: title.trim(), artist: artist.trim() || "Unknown", genre }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save changes");
+      setState("idle");
+    }
+  };
+
+  const field = "rounded-md border border-slate-300 bg-transparent px-2 py-1 text-xs dark:border-slate-600";
+  return (
+    <li className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+      <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
+      <input className={field} value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist" />
+      <select className={field} value={genre} onChange={(e) => setGenre(e.target.value as SongGenre)}>
+        {GENRES.filter((g) => g.value !== "all").map((g) => (
+          <option key={g.value} value={g.value}>{g.label}</option>
+        ))}
+      </select>
+      <button className="primary-button px-2 py-1 text-xs" disabled={!title.trim() || state === "saving"} onClick={() => void save()}>
+        {state === "saving" ? "Saving…" : "Save"}
+      </button>
+      <button className="secondary-button px-2 py-1 text-xs" onClick={onCancel}>Cancel</button>
+      {error && <p role="alert" className="w-full text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+    </li>
+  );
+}
+
 export default function SongBrowserPage() {
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [bests, setBests] = useState<Record<string, { score: number; accuracy: number }>>({});
@@ -100,6 +138,7 @@ export default function SongBrowserPage() {
   const [difficulty, setDifficulty] = useState<number | 0>(0);
   const [sort, setSort] = useState<"title" | "artist" | "difficulty" | "duration">("artist");
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     getSongs()
@@ -208,6 +247,19 @@ export default function SongBrowserPage() {
       <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
         {visible?.map((song) => {
           const best = bests[song.id];
+          if (editingId === song.id) {
+            return (
+              <EditSongRow
+                key={song.id}
+                song={song}
+                onSaved={(updated) => {
+                  setSongs((current) => current?.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)) ?? null);
+                  setEditingId(null);
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            );
+          }
           return (
             <li key={song.id}>
               <Link
@@ -219,12 +271,20 @@ export default function SongBrowserPage() {
                   <p className="truncate text-xs text-slate-500">{song.artist}</p>
                 </div>
                 {song.mine && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); void removeSong(song); }}
-                    className="rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/30"
-                  >
-                    Delete
-                  </button>
+                  <>
+                    <button
+                      onClick={(e) => { e.preventDefault(); setEditingId(song.id); }}
+                      className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => { e.preventDefault(); void removeSong(song); }}
+                      className="rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/30"
+                    >
+                      Delete
+                    </button>
+                  </>
                 )}
                 <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
                   {song.genre}

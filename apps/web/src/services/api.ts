@@ -120,6 +120,8 @@ export interface PlayAlongAttemptSummary {
 }
 export const getSongs = () => request<{ songs: Song[] }>("/songs");
 export const deleteSong = (id: string) => request<{ ok: true }>(`/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const updateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre }>) =>
+  request<Song>(`/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const adminUpdateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre; difficulty: number }>) =>
   request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const getMyPlayAlongAttempts = () =>
