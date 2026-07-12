@@ -37,7 +37,7 @@ const FETCH_RATE_LIMIT = 10;
 const FETCH_RATE_WINDOW_MS = 60 * 60 * 1000;
 const recentFetchByUser = new Map<string, number[]>();
 
-const isFetchRateLimited = (userId: string): boolean => {
+export const isFetchRateLimited = (userId: string): boolean => {
   const now = Date.now();
   const timestamps = (recentFetchByUser.get(userId) ?? []).filter((t) => now - t < FETCH_RATE_WINDOW_MS);
   if (timestamps.length >= FETCH_RATE_LIMIT) return true;

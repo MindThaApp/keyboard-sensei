@@ -22,6 +22,7 @@ const GENRES: { value: SongGenre | "all"; label: string }[] = [
   { value: "classical", label: "Classical" },
   { value: "pop", label: "Pop" },
   { value: "film", label: "Film" },
+  { value: "game", label: "Game" },
   { value: "jazz", label: "Jazz / Ragtime" },
   { value: "other", label: "Other" },
 ];
