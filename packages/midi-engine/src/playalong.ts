@@ -141,7 +141,12 @@ export function judgePlayAlong(notes: PlayAlongNote[], presses: PlayAlongPress[]
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-export type PlayAlongTempoPct = 25 | 50 | 75 | 100;
+/** Playback speed as a percentage of the song's written tempo. Continuous since
+ * 2026-07-12 (was the literal union 25|50|75|100) — Play-Along now has a real
+ * slider. It stays a PERCENTAGE, not BPM: Song has no bpm column and BPM derived
+ * from the MIDI's first tempo event is a fiction for the library's rubato
+ * recordings. A true BPM is shown only when SongBeatGrid.steadyBpm is non-null. */
+export type PlayAlongTempoPct = number;
 
 export function tempoMultiplier(rate: number): number {
   return Math.sqrt(rate);

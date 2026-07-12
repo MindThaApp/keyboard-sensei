@@ -5,7 +5,6 @@ import {
   lookaheadMultiplier,
   tempoMultiplier,
   type PlayAlongResult,
-  type PlayAlongTempoPct,
 } from "@keyboard-sensei/midi-engine";
 import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
 import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
@@ -19,6 +18,7 @@ import VirtualPiano from "../piano/VirtualPiano";
 import {
   drawWaterfall,
   keyboardGeometry,
+  fitWhiteKeyWidth,
   pianoRangeFor,
   WATERFALL_COLORS_DARK,
   WATERFALL_COLORS_LIGHT,
@@ -26,13 +26,14 @@ import {
 import NotationPreviewStrip, { quantizeToBeats } from "./NotationPreviewStrip";
 import { OsmdNotation } from "./OsmdNotation";
 
-const TEMPOS: PlayAlongTempoPct[] = [25, 50, 75, 100];
-const LOOKAHEADS = [
-  { value: 6, label: "Relaxed · 6s" },
-  { value: 4, label: "Standard · 4s" },
-  { value: 2.5, label: "Tight · 2.5s" },
-  { value: 1.5, label: "Blind · 1.5s" },
-];
+// Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
+// engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
+// clamped, and their product is capped at 1.5 so a fast run can't exceed the API's
+// score ceiling of 160.
+const TEMPO_MIN_PCT = 25;
+const TEMPO_MAX_PCT = 200;
+const LOOKAHEAD_MIN_S = 1;
+const LOOKAHEAD_MAX_S = 8;
 const SETTINGS_KEY = "ks-playalong-settings";
 const WATERFALL_HEIGHT_PX = 320;
 
@@ -40,7 +41,7 @@ type ViewMode = "falling" | "notation" | "both";
 const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
 
 interface Settings {
-  tempoPct: PlayAlongTempoPct;
+  tempoPct: number;
   lookaheadS: number;
   waitMode: boolean;
   guideAudio: boolean;
@@ -53,14 +54,17 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both", metronome: false, metronomeSound: "click", clickLevel: "beat", metronomeVolume: 0.7 };
 
+const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
-      tempoPct: TEMPOS.includes(parsed.tempoPct as PlayAlongTempoPct) ? (parsed.tempoPct as PlayAlongTempoPct) : 100,
-      lookaheadS: LOOKAHEADS.some((option) => option.value === parsed.lookaheadS) ? (parsed.lookaheadS as number) : 4,
+      tempoPct: clampNum(parsed.tempoPct, TEMPO_MIN_PCT, TEMPO_MAX_PCT, 100),
+      lookaheadS: clampNum(parsed.lookaheadS, LOOKAHEAD_MIN_S, LOOKAHEAD_MAX_S, 4),
       waitMode: Boolean(parsed.waitMode),
       guideAudio: parsed.guideAudio !== false,
       viewMode: VIEW_MODES.includes(parsed.viewMode as ViewMode) ? (parsed.viewMode as ViewMode) : "both",
@@ -105,6 +109,8 @@ export default function PlayAlongPage() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stageWidth, setStageWidth] = useState(0);
   const rafRef = useRef<number>(0);
   const phaseRef = useRef<Phase>("loading");
   phaseRef.current = phase;
@@ -154,8 +160,27 @@ export default function PlayAlongPage() {
     };
   }, [songId, song?.notation_path]);
 
+  // Track the stage width so the keyboard and waterfall fill the space the page
+  // actually has. Observe the OUTER element, never the one whose width we set from
+  // the observation — that's a ResizeObserver feedback loop.
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => setStageWidth(entry.contentRect.width));
+    observer.observe(node);
+    setStageWidth(node.clientWidth);
+    return () => observer.disconnect();
+  }, [phase]);
+
   const range = useMemo(() => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : null), [parsed]);
-  const geometry = useMemo(() => (range ? keyboardGeometry(range.lowestNote, range.highestNote) : null), [range]);
+  const whiteKeyWidthPx = useMemo(
+    () => (range && stageWidth > 0 ? fitWhiteKeyWidth(range.lowestNote, range.highestNote, stageWidth) : undefined),
+    [range, stageWidth],
+  );
+  const geometry = useMemo(
+    () => (range ? keyboardGeometry(range.lowestNote, range.highestNote, whiteKeyWidthPx) : null),
+    [range, whiteKeyWidthPx],
+  );
   const quantizedNotes = useMemo(() => (parsed ? quantizeToBeats(parsed.notes, parsed.bpm) : []), [parsed]);
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
 
@@ -300,7 +325,11 @@ export default function PlayAlongPage() {
   );
 
   return (
-    <div className="space-y-4">
+    // Full-bleed: the app shell caps content at max-w-5xl (1024px), which starved
+    // the keyboard and waterfall of the horizontal space they actually have. This
+    // breaks out of that container to the full viewport width without touching the
+    // layout of every other page.
+    <div className="mx-[calc(50%-50vw)] w-screen space-y-4 px-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
           <h1 className="truncate font-display text-2xl font-semibold">{song?.title ?? "Play along"}</h1>
@@ -315,44 +344,53 @@ export default function PlayAlongPage() {
 
       {/* Settings bar */}
       <div className="card flex flex-wrap items-center gap-4 p-3 text-sm">
-        <div className="flex items-center gap-1" role="radiogroup" aria-label="Tempo">
-          <span className="mr-1 text-xs text-slate-500">Tempo</span>
-          {TEMPOS.map((tempo) => (
-            <button
-              key={tempo}
-              role="radio"
-              aria-checked={settings.tempoPct === tempo}
-              disabled={phase === "playing"}
-              onClick={() => setSettings((s) => ({ ...s, tempoPct: tempo }))}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                settings.tempoPct === tempo
-                  ? "bg-felt-600 font-medium text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              } disabled:opacity-50`}
-            >
-              {tempo}%
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1" role="radiogroup" aria-label="Look-ahead">
-          <span className="mr-1 text-xs text-slate-500">Visibility</span>
-          {LOOKAHEADS.map((option) => (
-            <button
-              key={option.value}
-              role="radio"
-              aria-checked={settings.lookaheadS === option.value}
-              disabled={phase === "playing"}
-              onClick={() => setSettings((s) => ({ ...s, lookaheadS: option.value }))}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                settings.lookaheadS === option.value
-                  ? "bg-felt-600 font-medium text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              } disabled:opacity-50`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        {/* Tempo is a PERCENTAGE here, not BPM: Song has no bpm column, and BPM is
+            derived from the MIDI's first tempo event — a fiction for the rubato
+            performance recordings in the library. Show a real BPM only when the
+            song genuinely has one stable tempo (grid.steadyBpm). */}
+        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <span className="text-slate-500">Tempo</span>
+          <input
+            type="range"
+            min={TEMPO_MIN_PCT}
+            max={TEMPO_MAX_PCT}
+            step={1}
+            value={settings.tempoPct}
+            disabled={phase === "playing"}
+            aria-label="Playback tempo, percent of the song's written speed"
+            onChange={(e) => setSettings((s) => ({ ...s, tempoPct: Number(e.target.value) }))}
+            className="w-32 accent-felt-600 disabled:opacity-50"
+          />
+          <span className="w-24 tabular-nums font-medium">
+            {settings.tempoPct}%
+            {parsed.grid.steadyBpm !== null && (
+              <span className="ml-1 font-normal text-slate-400">
+                ~{Math.round((parsed.grid.steadyBpm * settings.tempoPct) / 100)} BPM
+              </span>
+            )}
+          </span>
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <span className="text-slate-500">Visibility</span>
+          <input
+            type="range"
+            min={LOOKAHEAD_MIN_S}
+            max={LOOKAHEAD_MAX_S}
+            step={0.1}
+            value={settings.lookaheadS}
+            disabled={phase === "playing"}
+            aria-label="How many seconds of the song are visible ahead of the hit line"
+            onChange={(e) => setSettings((s) => ({ ...s, lookaheadS: Number(e.target.value) }))}
+            className="w-28 accent-felt-600 disabled:opacity-50"
+          />
+          <span className="w-28 tabular-nums font-medium">
+            {settings.lookaheadS.toFixed(1)}s
+            <span className="ml-1 font-normal text-slate-400">
+              ×{lookaheadMultiplier(settings.lookaheadS).toFixed(2)} XP
+            </span>
+          </span>
+        </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
@@ -517,7 +555,10 @@ export default function PlayAlongPage() {
       )}
 
       {/* Waterfall + piano, sharing one horizontal scroll context */}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
+      {/* ONE horizontal scroll context wrapping both the canvas and the piano. If
+          VirtualPiano added its own, the keys could scroll independently of the
+          falling bars and visually detach from them. */}
+      <div ref={stageRef} className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="mx-auto" style={{ width: geometry.widthPx }}>
           {settings.viewMode !== "notation" && (
             <canvas
@@ -526,7 +567,14 @@ export default function PlayAlongPage() {
               aria-label="Falling notes"
             />
           )}
-          <VirtualPiano lowestNote={range.lowestNote} highestNote={range.highestNote} showLabels={false} expectedNotes={waitingNotes} />
+          <VirtualPiano
+            lowestNote={range.lowestNote}
+            highestNote={range.highestNote}
+            showLabels={false}
+            expectedNotes={waitingNotes}
+            scrollable={false}
+            recommendedRange={{ lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax }}
+          />
         </div>
       </div>
     </div>
