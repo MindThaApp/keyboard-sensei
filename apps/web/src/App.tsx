@@ -13,6 +13,7 @@ import AdminUsersPage from "./components/admin/AdminUsersPage";
 import AdminSongsPage from "./components/admin/AdminSongsPage";
 import SongBrowserPage from "./components/play/SongBrowserPage";
 import PlayAlongPage from "./components/play/PlayAlongPage";
+import SongLibraryPage from "./components/library/SongLibraryPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
@@ -111,6 +112,7 @@ export default function App() {
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
             <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
+            <NavLink to="/library" className={navLinkClasses}>Library</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/dashboard" className={navLinkClasses}>Dashboard</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
@@ -142,6 +144,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play" element={<SongBrowserPage />} />
+          <Route path="/library" element={<SongLibraryPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
