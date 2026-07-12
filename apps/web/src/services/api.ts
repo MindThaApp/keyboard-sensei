@@ -143,6 +143,38 @@ export const getMyPlayAlongAttempts = () =>
 export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; lookahead_s: number; wait_mode: boolean }) =>
   request<{ id: string; score: number; accuracy: number }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
 
+// --- Dashboard ---
+export interface DashboardStreak {
+  current: number;
+  longest: number;
+  lastActiveDate: string | null;
+}
+export interface DashboardLevelProgress {
+  level: string;
+  completed: number;
+  total: number;
+}
+export interface DashboardAchievement {
+  key: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  unlockedAt: string | null;
+}
+export type DashboardActivityType = "lesson" | "gym" | "playalong";
+export interface DashboardActivity {
+  type: DashboardActivityType;
+  label: string;
+  at: string;
+}
+export interface DashboardResponse {
+  streak: DashboardStreak;
+  levelProgress: DashboardLevelProgress[];
+  achievements: DashboardAchievement[];
+  recentActivity: DashboardActivity[];
+}
+export const getDashboard = () => request<DashboardResponse>("/users/me/dashboard");
+
 export const getSongFile = async (id: string): Promise<ArrayBuffer> => {
   const token = getToken();
   const response = await fetch(`${API_URL}/songs/${encodeURIComponent(id)}/file`, {

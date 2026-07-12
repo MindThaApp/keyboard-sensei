@@ -32,6 +32,17 @@ model User {
   feedback           Feedback[]
   songs              Song[]
   playalong_attempts PlayAlongAttempt[]
+  achievements       UserAchievement[]
+}
+
+model UserAchievement {
+  id              String   @id @default(cuid())
+  user_id         String
+  achievement_key String
+  unlocked_at     DateTime @default(now())
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, achievement_key])
 }
 
 model Feedback {
