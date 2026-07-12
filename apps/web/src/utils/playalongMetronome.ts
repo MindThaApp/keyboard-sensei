@@ -1,5 +1,6 @@
 import type { BeatGridEntry } from "./playalongSong";
 import { playClick, type MetronomeSound } from "./clickTimbres";
+import { registerAudioContext } from "./audioUnlock";
 
 /** Schedule at most this far ahead, in WALL-CLOCK seconds. */
 const LOOKAHEAD_WALL_S = 0.12;
@@ -57,7 +58,10 @@ export class PlayAlongMetronome {
   constructor(private readonly beats: readonly BeatGridEntry[]) {}
 
   private ensureContext(): AudioContext {
-    if (!this.ctx) this.ctx = new AudioContext();
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      registerAudioContext(this.ctx);
+    }
     if (this.ctx.state === "suspended") void this.ctx.resume();
     return this.ctx;
   }

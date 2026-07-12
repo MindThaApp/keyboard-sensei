@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, useCallback } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey } from "../play/waterfall";
-import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
+import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange, unionRange } from "../../utils/keyboardRange";
 
 const MIDDLE_C = 60;
 /** Classic "typing keyboard as piano" layout, one row of white/black keys starting at C4. */
@@ -423,17 +423,34 @@ export default function VirtualPiano({
     }
   }
 
-  const recommendedBand = useMemo(() => {
-    if (!recommendedRange) return null;
-    const start = geometry.xFor(recommendedRange.lowestNote);
-    const end = geometry.xFor(recommendedRange.highestNote);
-    if (!start || !end) return null;
-    return { x: start.x, width: end.x + end.width - start.x };
-  }, [recommendedRange, geometry]);
+  // A shaded band across the keys was tried first and was simply ugly — a big
+  // amber overlay sitting on top of the piano whenever the range wasn't an exact
+  // match. A button is quieter: it says what it does, and it disappears once the
+  // keyboard already covers the piece.
+  const fitsPiece =
+    !recommendedRange ||
+    (range.lowestNote <= recommendedRange.lowestNote && range.highestNote >= recommendedRange.highestNote);
+
+  const fitToPiece = useCallback(() => {
+    if (!recommendedRange) return;
+    const next = unionRange(range, recommendedRange);
+    setRange(next);
+    if (devices.length > 0) setDeviceRange(next);
+  }, [recommendedRange, range, devices.length, setDeviceRange]);
 
   return (
     <div ref={containerRef} className="w-full">
       <div className="mb-1 flex items-center justify-end gap-1">
+        {recommendedRange && !fitsPiece && (
+          <button
+            type="button"
+            onClick={fitToPiece}
+            title="Widen the keyboard so every note this piece uses is on screen"
+            className="mr-auto rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Fit to piece
+          </button>
+        )}
         <button
           type="button"
           aria-label="Zoom out"
@@ -468,17 +485,7 @@ export default function VirtualPiano({
           role="group"
           aria-label="Virtual piano keyboard"
         >
-          {recommendedBand && (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute top-0 z-20 flex justify-center border-x-2 border-amber-400/70 bg-amber-300/15"
-              style={{ left: recommendedBand.x, width: recommendedBand.width, height: whiteKeyHeightPx }}
-            >
-              <span className="mt-1 h-fit rounded bg-amber-400/90 px-1 text-[9px] font-medium text-amber-950">
-                recommended for this piece
-              </span>
-            </div>
-          )}
+
           <div className="flex" style={{ height: whiteKeyHeightPx }}>
             {whiteNotes.map((note) => {
               const rect = geometry.xFor(note);

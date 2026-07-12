@@ -44,10 +44,12 @@ const FINISH_GRACE_S = 1;
  */
 export class PlayAlongEngine {
   private readonly options: Required<PlayAlongEngineOptions>;
-  private readonly rate: number;
+  private rate: number;
   private startMs: number | null = null;
   private lastTickMs = 0;
   private pausedS = 0;
+  private paused = false;
+  private pauseStartMs: number | null = null;
 
   private presses: PlayAlongPress[] = [];
   /** Judgment per note index; undefined = not yet judged. */
@@ -89,6 +91,71 @@ export class PlayAlongEngine {
     return this.waitingPitches.size > 0;
   }
 
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
+  /**
+   * Change the playback rate mid-song without moving the playhead.
+   *
+   * songTime = ((now - startMs)/1000 - pausedS) * rate - leadInS. Changing `rate`
+   * alone would yank the song forward or backward, so pausedS is re-solved to keep
+   * songTime exactly where it is. Everything that reads songTime() — the notes, the
+   * falling bars, the metronome — therefore stays put; only the speed from here on
+   * changes. This is what lets the tempo slider work while paused.
+   */
+  setTempoPct(tempoPct: number, nowMs = performance.now()): void {
+    if (this.startMs === null) {
+      this.rate = tempoPct / 100;
+      return;
+    }
+    const currentSongTime = this.songTime(nowMs);
+    const nextRate = Math.max(0.01, tempoPct / 100);
+    const anchorMs = this.paused && this.pauseStartMs !== null ? this.pauseStartMs : nowMs;
+    this.rate = nextRate;
+    this.pausedS =
+      (anchorMs - this.startMs) / 1000 - (currentSongTime + this.options.leadInS) / nextRate;
+  }
+
+  /** Wait mode and guide audio can be toggled mid-run (e.g. while paused). */
+  setWaitMode(waitMode: boolean): void {
+    this.options.waitMode = waitMode;
+    if (!waitMode) this.waitingPitches.clear();
+  }
+
+  setGuideAudio(guideAudio: boolean): void {
+    this.options.guideAudio = guideAudio;
+    if (!guideAudio) {
+      for (const midi of this.soundingGuide.values()) pianoSynth.stopNote(midi);
+      this.soundingGuide.clear();
+    }
+  }
+
+  /** Freeze the song without losing the attempt. Guide audio is silenced. */
+  pause(nowMs = performance.now()): void {
+    if (this.paused) return;
+    this.paused = true;
+    this.pauseStartMs = nowMs;
+    for (const midi of this.soundingGuide.values()) pianoSynth.stopNote(midi);
+    this.soundingGuide.clear();
+  }
+
+  /**
+   * Unfreeze. The entire paused span is folded into pausedS here rather than
+   * accumulated tick-by-tick, so the freeze is exact whether or not the caller
+   * kept its animation loop running while paused. songTime() therefore resumes
+   * at precisely the value it held when pause() was called — the notes, the
+   * falling bars and the metronome all read songTime(), so none of them can
+   * desync across a pause.
+   */
+  resume(nowMs = performance.now()): void {
+    if (!this.paused) return;
+    if (this.pauseStartMs !== null) this.pausedS += (nowMs - this.pauseStartMs) / 1000;
+    this.pauseStartMs = null;
+    this.lastTickMs = nowMs;
+    this.paused = false;
+  }
+
   /** Playback rate (1 = written tempo). The metronome needs it to convert a
    *  song-time delta into a wall-clock delta when scheduling a click. */
   get playbackRate(): number {
@@ -107,7 +174,13 @@ export class PlayAlongEngine {
   /** Current song time in seconds; negative during the lead-in countdown. */
   songTime(nowMs = performance.now()): number {
     if (this.startMs === null) return -this.options.leadInS;
-    return ((nowMs - this.startMs) / 1000 - this.pausedS) * this.rate - this.options.leadInS;
+    // While paused the clock must HOLD, not merely be corrected on resume:
+    // the waterfall, the metronome and the notation cursor all read songTime()
+    // every frame, so a clock that kept running would visibly slide the whole
+    // display forward while the song was frozen. pausedS only absorbs the gap at
+    // resume(), so freeze against the moment the pause began.
+    const effectiveNowMs = this.paused && this.pauseStartMs !== null ? this.pauseStartMs : nowMs;
+    return ((effectiveNowMs - this.startMs) / 1000 - this.pausedS) * this.rate - this.options.leadInS;
   }
 
   /**
@@ -117,6 +190,14 @@ export class PlayAlongEngine {
   tick(nowMs = performance.now()): boolean {
     if (this.finished || this.startMs === null) return this.finished;
     const { notes, waitMode, guideAudio, durationS } = this.options;
+
+    if (this.paused) {
+      // Frozen. Do NOT accumulate here: the caller may stop its animation loop
+      // while paused, which would leave lastTickMs stale and let the song jump
+      // forward on resume. resume() folds the whole paused span in instead.
+      this.lastTickMs = nowMs;
+      return false;
+    }
 
     if (this.isWaiting) {
       // Song frozen: consume wall time into pausedS so songTime holds still.

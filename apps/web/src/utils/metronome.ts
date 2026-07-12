@@ -1,4 +1,5 @@
 import { playClick, type MetronomeSound } from "./clickTimbres";
+import { registerAudioContext } from "./audioUnlock";
 
 // Timbres live in clickTimbres.ts so the Play-Along grid-driven scheduler can
 // emit identical sounds without inheriting this class's fixed-BPM clock.
@@ -43,7 +44,10 @@ export class Metronome {
   }
 
   private ensureContext(): AudioContext {
-    if (!this.ctx) this.ctx = new AudioContext();
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      registerAudioContext(this.ctx);
+    }
     if (this.ctx.state === "suspended") void this.ctx.resume();
     return this.ctx;
   }
