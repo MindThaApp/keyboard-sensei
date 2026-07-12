@@ -140,25 +140,43 @@ export function OsmdNotation({ notationBytes, songTimeS }: { notationBytes: Arra
     // note necessarily has a usable element (e.g. a rest-only voice entry),
     // so scroll to the first one that actually resolves to a real element.
     //
-    // behavior MUST be "auto" (instant), not "smooth": songTimeS updates
-    // roughly every 120ms during playback, and a smooth scroll's animation
-    // takes longer than that to complete -- each new update interrupted and
-    // restarted the previous one before it ever progressed, netting zero
-    // visible scroll movement over an entire playthrough (confirmed live:
-    // window.scrollY stayed pinned at 0 for 10+ real seconds of playback
-    // with "smooth", despite scrollIntoView being called correctly on the
-    // right element every time).
-    for (const event of due) {
-      const graphicalNote = event.graphicalNote as unknown as { getSVGGElement?: () => SVGGElement };
-      const svgElement = graphicalNote.getSVGGElement?.();
-      if (svgElement) {
-        const rect = svgElement.getBoundingClientRect();
-        const alreadyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-        if (!alreadyVisible) svgElement.scrollIntoView({ block: "center", behavior: "auto" });
-        break;
+    // Scrolls the CONTAINER's own scrollTop directly, not
+    // element.scrollIntoView() -- that walks up and can scroll the whole
+    // window too, which in "both" view mode pushes the waterfall/piano
+    // (what you actually play from) below the fold as a long piece
+    // progresses. Computing the target manually confines scrolling to this
+    // panel only, matching how NotationPreviewStrip already behaves.
+    //
+    // behavior MUST be instant, not smooth-animated: songTimeS updates
+    // roughly every 120ms during playback, faster than a smooth scroll
+    // animation completes -- each new update interrupted and restarted the
+    // previous one before it ever progressed, netting zero visible scroll
+    // movement over an entire playthrough (confirmed live with
+    // scrollIntoView({behavior:"smooth"}): position stayed pinned for 10+
+    // real seconds of playback despite firing correctly every time).
+    const container = containerRef.current;
+    if (container) {
+      for (const event of due) {
+        const graphicalNote = event.graphicalNote as unknown as { getSVGGElement?: () => SVGGElement };
+        const svgElement = graphicalNote.getSVGGElement?.();
+        if (svgElement) {
+          const svgRect = svgElement.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const alreadyVisible = svgRect.top >= containerRect.top && svgRect.bottom <= containerRect.bottom;
+          if (!alreadyVisible) {
+            const targetTop = svgRect.top - containerRect.top + container.scrollTop;
+            container.scrollTop = targetTop - container.clientHeight / 2;
+          }
+          break;
+        }
       }
     }
   }, [songTimeS]);
 
-  return <div ref={containerRef} className="osmd-container overflow-x-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40" />;
+  return (
+    <div
+      ref={containerRef}
+      className="osmd-container max-h-[420px] overflow-y-auto overflow-x-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40"
+    />
+  );
 }
