@@ -14,7 +14,16 @@ describe("keyboardGeometry (parameterised width)", () => {
     const blackWidth = g.blackKeyWidthPx;
     expect(blackWidth).toBeCloseTo(20 * (26 / 40));
     // C#4 (61) sits on the boundary after one white key (C4)
-    expect(g.xFor(61).x).toBeCloseTo(20 - blackWidth / 2);
+    expect(g.xFor(61)!.x).toBeCloseTo(20 - blackWidth / 2);
+  });
+
+  it("returns null outside the range instead of silently stacking notes on the lowest key", () => {
+    const g = keyboardGeometry(60, 72, 20);
+    expect(g.xFor(59)).toBeNull(); // below range — used to render at x = 0
+    expect(g.xFor(73)).toBeNull(); // above range
+    expect(g.xFor(58)).toBeNull(); // black key below range — used to render at a negative x
+    expect(g.xFor(60)).not.toBeNull();
+    expect(g.xFor(72)).not.toBeNull();
   });
 
   it("defaults to the legacy 40px width when omitted", () => {

@@ -14,10 +14,10 @@ export interface KeyboardGeometry {
   widthPx: number;
   whiteKeyWidthPx: number;
   blackKeyWidthPx: number;
-  /** x/width of each MIDI note's key. The single source of truth: both the
-   *  rendered keys and the waterfall lanes read from this, so they cannot
-   *  drift apart at any zoom level. */
-  xFor: (note: number) => { x: number; width: number };
+  /** x/width of each MIDI note's key, or null if the note lies outside the range.
+   *  The single source of truth: both the rendered keys and the waterfall lanes
+   *  read from this, so they cannot drift apart at any zoom level. */
+  xFor: (note: number) => { x: number; width: number } | null;
 }
 
 /** Octave-aligned range containing the song, ≥ 2 octaves, clamped to the 88 keys. */
@@ -38,9 +38,18 @@ export function keyboardGeometry(lowestNote: number, highestNote: number, whiteK
     if (!isBlackKey(note)) whiteNotes.push(note);
   }
   const whiteIndex = new Map(whiteNotes.map((note, index) => [note, index]));
-  const xFor = (note: number): { x: number; width: number } => {
+  /**
+   * Returns null for a note outside [lowestNote, highestNote] — callers must skip it.
+   * This used to be `whiteIndex.get(note) ?? 0`, which silently stacked every
+   * out-of-range note on the lowest key (and rendered out-of-range black keys at a
+   * negative x). Play-Along must size its keyboard to union(deviceRange, songRange)
+   * so this never fires there; returning null makes a mistake loud instead of drawing
+   * a plausible-looking lie.
+   */
+  const xFor = (note: number): { x: number; width: number } | null => {
+    if (note < lowestNote || note > highestNote) return null;
     if (!isBlackKey(note)) {
-      return { x: (whiteIndex.get(note) ?? 0) * whiteKeyWidthPx, width: whiteKeyWidthPx };
+      return { x: whiteIndex.get(note)! * whiteKeyWidthPx, width: whiteKeyWidthPx };
     }
     const whiteKeysBefore = whiteNotes.filter((white) => white < note).length;
     return { x: whiteKeysBefore * whiteKeyWidthPx - blackKeyWidthPx / 2, width: blackKeyWidthPx };
@@ -107,7 +116,9 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
   ctx.fillStyle = frame.colors.lane;
   for (let note = geometry.lowestNote; note <= geometry.highestNote; note++) {
     if (note % 12 === 0) {
-      const { x } = geometry.xFor(note);
+      const lane = geometry.xFor(note);
+      if (!lane) continue;
+      const { x } = lane;
       ctx.fillRect(x, 0, 1.5, heightPx);
     }
   }
@@ -120,7 +131,12 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
     const timeToStart = note.startS - songTimeS;
     if (timeToStart > lookaheadS) continue; // not yet visible
     if (timeToStart + note.durationS < 0) continue; // fully past
-    const { x, width: keyWidth } = geometry.xFor(note.midi);
+    const rect = geometry.xFor(note.midi);
+    // A note outside the rendered range has no key to fall onto. Skip it rather
+    // than drawing it at x=0 on top of the lowest key. Play-Along sizes its
+    // geometry to union(deviceRange, songRange), so this should never fire there.
+    if (!rect) continue;
+    const { x, width: keyWidth } = rect;
     const bottomY = heightPx - timeToStart * pxPerSecond;
     const noteHeight = Math.max(6, note.durationS * pxPerSecond);
     const topY = bottomY - noteHeight;

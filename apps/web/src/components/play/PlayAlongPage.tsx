@@ -207,9 +207,15 @@ export default function PlayAlongPage() {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           const dpr = window.devicePixelRatio || 1;
-          if (canvas.width !== geometry.widthPx * dpr) {
-            canvas.width = geometry.widthPx * dpr;
-            canvas.height = WATERFALL_HEIGHT_PX * dpr;
+          // Round before comparing: canvas.width is an integer setter, so once
+          // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
+          // unrounded comparison is NEVER equal — the canvas would be reallocated
+          // and its context reset on every single frame, at 60fps.
+          const targetWidth = Math.round(geometry.widthPx * dpr);
+          const targetHeight = Math.round(WATERFALL_HEIGHT_PX * dpr);
+          if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
           }
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           drawWaterfall(ctx, {
