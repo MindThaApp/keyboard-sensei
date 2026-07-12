@@ -79,8 +79,17 @@ export function OsmdNotation({ notationBytes, songTimeS }: { notationBytes: Arra
     // outside React worked fine, isolating the bug to this guard.
     let cancelled = false;
 
+    // autoResize: false -- OSMD's autoResize registers a window "resize"
+    // listener with no corresponding removeEventListener anywhere in the
+    // package and no dispose()/destroy() API; osmd.clear() (in this
+    // effect's cleanup) only clears the drawn SVG, not that listener. With
+    // autoResize on, every song navigation (notationBytes changes -> new
+    // OpenSheetMusicDisplay instance) leaks the entire previous instance
+    // and its GraphicalMusicSheet model for the rest of the SPA session.
+    // Confirmed via reviewer inspection of the installed OSMD build: zero
+    // "resize" removeEventListener calls exist in the package.
     const osmd = new OpenSheetMusicDisplay(container, {
-      autoResize: true,
+      autoResize: false,
       drawTitle: false,
       backend: "svg",
     });
