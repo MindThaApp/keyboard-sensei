@@ -48,6 +48,15 @@ interface Props {
   lessonId?: string | null;
   exercise?: MidiExerciseDef;
   onCompleted?: (result: ScoringResult) => void;
+  /**
+   * Fired when a recording attempt starts/stops, so a caller (e.g. song-excerpt
+   * accompaniment playback) can drive its own clock off the SAME start time and
+   * practice tempo this exercise is using, without this component knowing
+   * anything about accompaniment. Called with the clock the instant capture
+   * actually begins (after any count-in), and with `null` when the attempt is
+   * cancelled, submitted, or the component unmounts.
+   */
+  onRecordingClock?: (clock: { startTimeMs: number; effectiveBpm: number } | null) => void;
 }
 
 type Phase = "idle" | "listening" | "counting-in" | "recording" | "submitting" | "scored";
@@ -153,7 +162,7 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted }: Props) {
+export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock }: Props) {
   const { subscribe, mockAdapter } = useMidiContext();
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
@@ -187,6 +196,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const liveRafRef = useRef(0);
   const activeNoteIdsRef = useRef<string>("");
   const lastDeltaTimeoutRef = useRef<number | null>(null);
+  const onRecordingClockRef = useRef(onRecordingClock);
+  onRecordingClockRef.current = onRecordingClock;
 
   const liveDueMidis = useMemo(
     () => liveNotesRef.current.filter((n) => activeNoteIds.has(n.id)).map((n) => n.midi),
@@ -230,6 +241,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       stopPreview();
       metronome.stop();
       cancelAnimationFrame(liveRafRef.current);
+      onRecordingClockRef.current?.(null);
     },
     [],
   );
@@ -352,6 +364,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       start.current = performance.now();
       active.current = true;
       setPhase("recording");
+      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
       return;
     }
     setPhase("counting-in");
@@ -367,6 +380,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
         startLiveFollow();
+        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
       },
     });
   };
@@ -377,6 +391,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     stopLiveFollow();
     setBeat(null);
     setPhase("idle");
+    onRecordingClockRef.current?.(null);
   };
 
   const submit = async () => {
@@ -384,6 +399,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     active.current = false;
     stopLiveFollow();
     setBeat(null);
+    onRecordingClockRef.current?.(null);
     setPhase("submitting");
     try {
       const performedNotes = pairRawMidiEvents(raw.current);
