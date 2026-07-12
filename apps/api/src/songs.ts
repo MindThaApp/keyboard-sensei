@@ -74,6 +74,7 @@ const songListItem = (song: {
   duration_sec: number;
   note_count: number;
   content_rights: string;
+  notation_path: string | null;
   uploader_id: string | null;
 }, userId: string) => ({
   id: song.id,
@@ -84,6 +85,10 @@ const songListItem = (song: {
   duration_sec: song.duration_sec,
   note_count: song.note_count,
   content_rights: song.content_rights,
+  // Presence indicator only -- the real absolute filesystem path never
+  // leaves the server (same reason `file_path` itself isn't included
+  // here); fetch actual notation bytes via GET /songs/:id/notation.
+  notation_path: song.notation_path ? "available" : null,
   mine: song.uploader_id === userId,
 });
 
