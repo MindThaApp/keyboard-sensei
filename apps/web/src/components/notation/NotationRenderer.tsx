@@ -142,10 +142,10 @@ function buildStaveNote(
  * Scale width with note count instead, with overflow-x-auto on the
  * container as a fallback for anything still too wide to fit comfortably.
  */
-const NOTE_WIDTH_PX = 34;
-const BARLINE_WIDTH_PX = 14;
+export const NOTE_WIDTH_PX = 34;
+export const BARLINE_WIDTH_PX = 14;
 const KEY_SIG_ACCIDENTAL_PX = 12;
-const STAVE_MARGIN_PX = 90;
+export const STAVE_MARGIN_PX = 90;
 function computeStaveWidth(noteCount: number): number {
   return Math.max(420, noteCount * NOTE_WIDTH_PX + STAVE_MARGIN_PX);
 }
@@ -269,6 +269,40 @@ function drawStaveSystem(
 }
 
 /**
+ * The pre-draw `renderer.resize(...)` calls above size the SVG generously
+ * (clef/key-signature/margin worst-case) so nothing clips *during* drawing —
+ * VexFlow's SVG root has `overflow: hidden` by spec, so anything drawn
+ * outside the declared width/height is invisible. That fixed padding is also
+ * where a lot of empty space above/below/right-of the notes came from.
+ * After drawing, measure the ACTUAL ink extents (`getBBox`, which includes
+ * ledger lines and accidentals — anything really drawn) and shrink the SVG's
+ * viewBox/width/height down to that, with a small pad. This sizes to real
+ * content instead of guessing a smaller constant (see the "magic numbers"
+ * lesson in docs/agent-briefing.md — a previous clipping bug here came from
+ * exactly that kind of guess).
+ */
+const CONTENT_HUG_PAD_PX = 8;
+function hugContent(container: HTMLDivElement): void {
+  const svg = container.querySelector("svg");
+  if (!svg || typeof (svg as SVGGraphicsElement).getBBox !== "function") return;
+  let bbox: DOMRect;
+  try {
+    bbox = (svg as SVGGraphicsElement).getBBox();
+  } catch {
+    return; // getBBox can throw before layout in some non-browser test environments
+  }
+  if (!bbox.width || !bbox.height) return;
+  const width = bbox.width + CONTENT_HUG_PAD_PX * 2;
+  const height = bbox.height + CONTENT_HUG_PAD_PX * 2;
+  svg.setAttribute(
+    "viewBox",
+    `${bbox.x - CONTENT_HUG_PAD_PX} ${bbox.y - CONTENT_HUG_PAD_PX} ${width} ${height}`,
+  );
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+}
+
+/**
  * Renders lesson vexflowData with VexFlow. Handles the simple single-staff
  * shape and the grand-staff (treble+bass+brace) shape used in lessons. Long
  * pieces automatically wrap into multiple staff systems (like printed sheet
@@ -356,6 +390,7 @@ export default function NotationRenderer({
           );
         });
       }
+      hugContent(container);
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
