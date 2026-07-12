@@ -47,7 +47,26 @@ services:
       - api
     restart: unless-stopped
 
+  # HTTPS on the LAN so Web MIDI (navigator.requestMIDIAccess) works — browsers only
+  # allow it in a "secure context", which plain http://<lan-ip> never satisfies. Uses
+  # Caddy's own internal CA (not mkcert, not a public CA) since this is LAN-only, not
+  # exposed to the internet. Devices that want real MIDI hardware need to trust that
+  # CA once (see the deploy notes for how to fetch it from the caddy_data volume).
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - keyboard-sensei-caddy-data:/data
+      - keyboard-sensei-caddy-config:/config
+    ports:
+      - "8443:8443"
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
   keyboard-sensei-postgres-data:
   keyboard-sensei-tts-cache:
   keyboard-sensei-midi-library:
+  keyboard-sensei-caddy-data:
+  keyboard-sensei-caddy-config:
