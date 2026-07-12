@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { deleteSong, getMyPlayAlongAttempts, getSongs, updateSong, uploadSong, type Song, type SongGenre } from "../../services/api";
+import { deleteSong, fetchUrlPreview, getMyPlayAlongAttempts, getSongs, updateSong, uploadSong, type Song, type SongGenre, type UrlPreview } from "../../services/api";
+import { parsePlayAlongSong } from "../../utils/playalongSong";
+import { pianoSynth } from "../../utils/synth";
 
 const GENRES: { value: SongGenre | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -27,6 +29,116 @@ function DifficultyDots({ level }: { level: number }) {
         />
       ))}
     </span>
+  );
+}
+
+function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
+  const [url, setUrl] = useState("");
+  const [preview, setPreview] = useState<UrlPreview | null>(null);
+  const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [genre, setGenre] = useState<SongGenre>("other");
+  const [state, setState] = useState<"idle" | "fetching" | "playing" | "saving">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPreview = async () => {
+    if (!url.trim()) return;
+    setState("fetching");
+    setError(null);
+    setPreview(null);
+    try {
+      const result = await fetchUrlPreview(url.trim());
+      setPreview(result);
+      if (!title) {
+        const guess = url.split("/").pop()?.replace(/\.midi?$/i, "").replace(/[-_]/g, " ") ?? "Imported song";
+        setTitle(guess);
+      }
+      setState("idle");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not fetch that URL");
+      setState("idle");
+    }
+  };
+
+  const playPreview = () => {
+    if (!preview) return;
+    setState("playing");
+    const parsed = parsePlayAlongSong(preview.bytes);
+    let lastEnd = 0;
+    for (const note of parsed.notes) {
+      const onMs = note.startS * 1000;
+      const offMs = onMs + note.durationS * 1000;
+      lastEnd = Math.max(lastEnd, offMs);
+      setTimeout(() => pianoSynth.playNote(note.midi, 90), onMs);
+      setTimeout(() => pianoSynth.stopNote(note.midi), offMs);
+    }
+    setTimeout(() => setState("idle"), lastEnd + 150);
+  };
+
+  const confirmImport = async () => {
+    if (!preview || !title.trim()) return;
+    setState("saving");
+    setError(null);
+    try {
+      const blob = new Blob([preview.bytes], { type: "audio/midi" });
+      onDone(await uploadSong(blob, { title: title.trim(), artist: artist.trim() || "Unknown", genre, source_url: url.trim() }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+      setState("idle");
+    }
+  };
+
+  const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
+  return (
+    <section aria-label="Import from URL" className="card space-y-3 p-4">
+      <h2 className="text-sm font-semibold">Import from a URL</h2>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Paste a link to a .mid file. Imported songs are private to you, and unverified for rights — you're responsible for making sure you're allowed to use whatever you import.
+      </p>
+      <div className="flex gap-2">
+        <input
+          className={field}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.com/song.mid"
+        />
+        <button className="secondary-button whitespace-nowrap text-sm" disabled={!url.trim() || state === "fetching"} onClick={() => void fetchPreview()}>
+          {state === "fetching" ? "Fetching…" : "Fetch"}
+        </button>
+      </div>
+      {preview && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs text-slate-500">Title
+              <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label className="block text-xs text-slate-500">Artist
+              <input className={field} value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Unknown" />
+            </label>
+          </div>
+          <label className="block text-xs text-slate-500">Genre
+            <select className={field} value={genre} onChange={(e) => setGenre(e.target.value as SongGenre)}>
+              {GENRES.filter((g) => g.value !== "all").map((g) => (
+                <option key={g.value} value={g.value}>{g.label}</option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-slate-500">
+            {formatDuration(preview.durationSec)} · {preview.noteCount} notes · difficulty {preview.difficulty}
+          </p>
+          <button className="secondary-button text-sm" disabled={state === "playing"} onClick={playPreview}>
+            {state === "playing" ? "Playing…" : "▶ Preview"}
+          </button>
+        </>
+      )}
+      {error && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      <div className="flex gap-2">
+        <button className="primary-button text-sm" disabled={!preview || !title.trim() || state === "saving"} onClick={() => void confirmImport()}>
+          {state === "saving" ? "Adding…" : "Add to my library"}
+        </button>
+        <button className="secondary-button text-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </section>
   );
 }
 
@@ -137,7 +249,7 @@ export default function SongBrowserPage() {
   const [genre, setGenre] = useState<SongGenre | "all">("all");
   const [difficulty, setDifficulty] = useState<number | 0>(0);
   const [sort, setSort] = useState<"title" | "artist" | "difficulty" | "duration">("artist");
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<"file" | "url" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -181,15 +293,26 @@ export default function SongBrowserPage() {
             Pick a song, watch the notes fall, play them as they land.
           </p>
         </div>
-        <button className="secondary-button ml-auto text-sm" onClick={() => setUploading((value) => !value)}>
-          Upload MIDI
-        </button>
+        <div className="ml-auto flex gap-2">
+          <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "file" ? null : "file")); }}>
+            Upload MIDI
+          </button>
+          <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "url" ? null : "url")); }}>
+            Import from URL
+          </button>
+        </div>
       </div>
 
-      {uploading && (
+      {uploading === "file" && (
         <UploadDialog
-          onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(false); }}
-          onCancel={() => setUploading(false)}
+          onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(null); }}
+          onCancel={() => setUploading(null)}
+        />
+      )}
+      {uploading === "url" && (
+        <ImportFromUrlDialog
+          onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(null); }}
+          onCancel={() => setUploading(null)}
         />
       )}
 
