@@ -28,6 +28,7 @@ services:
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
+      - keyboard-sensei-feedback-screenshots:/app/apps/api/data/feedback-screenshots
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,8 +42,6 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL}
-    ports:
-      - "8181:80"
     depends_on:
       - api
     restart: unless-stopped
@@ -59,7 +58,7 @@ services:
       - keyboard-sensei-caddy-data:/data
       - keyboard-sensei-caddy-config:/config
     ports:
-      - "8443:8443"
+      - "8181:8181"
     depends_on:
       - web
     restart: unless-stopped
@@ -68,5 +67,6 @@ volumes:
   keyboard-sensei-postgres-data:
   keyboard-sensei-tts-cache:
   keyboard-sensei-midi-library:
+  keyboard-sensei-feedback-screenshots:
   keyboard-sensei-caddy-data:
   keyboard-sensei-caddy-config:

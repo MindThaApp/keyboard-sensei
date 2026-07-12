@@ -9,7 +9,7 @@
 	default_sni 192.168.4.4
 }
 
-https://192.168.4.4:8443, https://localhost:8443 {
+https://192.168.4.4:8181, https://localhost:8181 {
 	tls internal
 
 	reverse_proxy web:80
