@@ -36,9 +36,19 @@ const LOOKAHEAD_MIN_S = 1;
 const LOOKAHEAD_MAX_S = 8;
 const SETTINGS_KEY = "ks-playalong-settings";
 const WATERFALL_HEIGHT_PX = 320;
+// "window-size" mode holds pixels-per-second fixed instead of the window height. Picking
+// WATERFALL_HEIGHT_PX / 4 (the default lookahead) means the default look is byte-identical
+// to "note-size" mode at lookaheadS = 4 — nothing changes for existing users until they
+// touch either the mode toggle or the Visibility slider.
+const WINDOW_MODE_PX_PER_SECOND = WATERFALL_HEIGHT_PX / 4;
+const WATERFALL_MIN_HEIGHT_PX = 120;
+const WATERFALL_MAX_HEIGHT_PX = 640;
 
 type ViewMode = "falling" | "notation" | "both";
 const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
+
+type VisibilityMode = "note-size" | "window-size";
+const VISIBILITY_MODES: VisibilityMode[] = ["note-size", "window-size"];
 
 interface Settings {
   tempoPct: number;
@@ -50,9 +60,24 @@ interface Settings {
   metronomeSound: MetronomeSound;
   clickLevel: ClickLevel;
   metronomeVolume: number;
+  visibilityMode: VisibilityMode;
 }
 
-const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both", metronome: false, metronomeSound: "click", clickLevel: "beat", metronomeVolume: 0.7 };
+const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both", metronome: false, metronomeSound: "click", clickLevel: "beat", metronomeVolume: 0.7, visibilityMode: "note-size" };
+
+/**
+ * Both modes still feed the same lookaheadS into scoring (lookaheadMultiplier) — this
+ * function only decides how many pixels that lookaheadS is drawn across, never what it's
+ * worth. "note-size" keeps the window height fixed (today's behaviour, unchanged).
+ * "window-size" keeps px/second fixed instead, so the window itself grows/shrinks and the
+ * falling bars stay a constant size; clamped so a large lookahead can't blow up the page.
+ */
+function waterfallHeightPxFor(visibilityMode: VisibilityMode, lookaheadS: number): number {
+  if (visibilityMode === "window-size") {
+    return Math.min(WATERFALL_MAX_HEIGHT_PX, Math.max(WATERFALL_MIN_HEIGHT_PX, lookaheadS * WINDOW_MODE_PX_PER_SECOND));
+  }
+  return WATERFALL_HEIGHT_PX;
+}
 
 const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
@@ -72,6 +97,7 @@ function loadSettings(): Settings {
       metronomeSound: METRONOME_SOUNDS.some((s) => s.value === parsed.metronomeSound) ? (parsed.metronomeSound as MetronomeSound) : "click",
       clickLevel: CLICK_LEVELS.some((c) => c.value === parsed.clickLevel) ? (parsed.clickLevel as ClickLevel) : "beat",
       metronomeVolume: typeof parsed.metronomeVolume === "number" ? parsed.metronomeVolume : 0.7,
+      visibilityMode: VISIBILITY_MODES.includes(parsed.visibilityMode as VisibilityMode) ? (parsed.visibilityMode as VisibilityMode) : "note-size",
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -183,6 +209,10 @@ export default function PlayAlongPage() {
   );
   const quantizedNotes = useMemo(() => (parsed ? quantizeToBeats(parsed.notes, parsed.bpm) : []), [parsed]);
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
+  // Recomputed every render from settings (cheap arithmetic) so it's always in sync with
+  // whichever visibilityMode/lookaheadS produced it — both the rAF loop (via start()'s
+  // closure) and the idle preview effect below read the same value.
+  const heightPx = waterfallHeightPxFor(settings.visibilityMode, settings.lookaheadS);
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -201,6 +231,46 @@ export default function PlayAlongPage() {
       engineRef.current?.pressKey(event.note, event.timestampMs);
     });
   }, [subscribe]);
+
+  // Static preview frame: drawWaterfall is otherwise only called from inside the
+  // rAF loop, which only runs once playing — so before pressing Play the canvas
+  // was blank and Visibility had no visible effect. Render one frame at
+  // songTimeS = 0 whenever the song is parsed and we're not mid-run, and re-run
+  // whenever anything that changes the frame's appearance changes (lookahead,
+  // visibility mode's derived height, view mode, theme colors, or the keyboard
+  // geometry a resize/zoom recomputes). Purely a paint — never touches
+  // engine/scoring state, so it can't introduce any offset into the real run.
+  useEffect(() => {
+    if (phase === "playing") return;
+    if (!parsed || !geometry) return;
+    if (settings.viewMode === "notation") return; // canvas isn't rendered in this view mode
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    // Same integer-rounding fix as the rAF loop: canvas.width/height are integer
+    // setters, so an unrounded comparison against a fractional target is never
+    // equal and reallocates the canvas (and resets its context) every time this
+    // effect re-runs, e.g. on every keystroke of a settings change.
+    const targetWidth = Math.round(geometry.widthPx * dpr);
+    const targetHeight = Math.round(heightPx * dpr);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWaterfall(ctx, {
+      notes: parsed.notes,
+      judgments: [],
+      songTimeS: 0,
+      lookaheadS: settings.lookaheadS,
+      geometry,
+      heightPx,
+      colors,
+      bars: parsed.grid.bars,
+    });
+  }, [phase, parsed, geometry, settings.viewMode, settings.lookaheadS, heightPx, colors]);
 
   const start = useCallback(() => {
     if (!parsed || !geometry) return;
@@ -266,7 +336,7 @@ export default function PlayAlongPage() {
           // unrounded comparison is NEVER equal — the canvas would be reallocated
           // and its context reset on every single frame, at 60fps.
           const targetWidth = Math.round(geometry.widthPx * dpr);
-          const targetHeight = Math.round(WATERFALL_HEIGHT_PX * dpr);
+          const targetHeight = Math.round(heightPx * dpr);
           if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
             canvas.width = targetWidth;
             canvas.height = targetHeight;
@@ -278,7 +348,7 @@ export default function PlayAlongPage() {
             songTimeS: songTime,
             lookaheadS: settings.lookaheadS,
             geometry,
-            heightPx: WATERFALL_HEIGHT_PX,
+            heightPx,
             colors,
             bars: parsed.grid.bars,
           });
@@ -296,7 +366,7 @@ export default function PlayAlongPage() {
       if (!finished) rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-  }, [parsed, geometry, settings, songId, stop, colors]);
+  }, [parsed, geometry, settings, songId, stop, colors, heightPx]);
 
   const cancelRun = useCallback(() => {
     stop();
@@ -391,6 +461,29 @@ export default function PlayAlongPage() {
             </span>
           </span>
         </label>
+        <div className="flex items-center gap-1" role="radiogroup" aria-label="What Visibility resizes">
+          <span className="mr-1 text-xs text-slate-500">Visibility changes</span>
+          {([
+            { value: "note-size" as const, label: "Note size" },
+            { value: "window-size" as const, label: "Window size" },
+          ]).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={settings.visibilityMode === option.value}
+              disabled={phase === "playing"}
+              onClick={() => setSettings((s) => ({ ...s, visibilityMode: option.value }))}
+              className={`rounded-md px-2 py-1 text-xs transition-colors disabled:opacity-50 ${
+                settings.visibilityMode === option.value
+                  ? "bg-felt-600 font-medium text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
@@ -563,7 +656,7 @@ export default function PlayAlongPage() {
           {settings.viewMode !== "notation" && (
             <canvas
               ref={canvasRef}
-              style={{ width: geometry.widthPx, height: WATERFALL_HEIGHT_PX, display: "block" }}
+              style={{ width: geometry.widthPx, height: heightPx, display: "block" }}
               aria-label="Falling notes"
             />
           )}
