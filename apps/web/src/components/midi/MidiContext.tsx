@@ -93,9 +93,19 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     }
     try {
       await webAdapterRef.current!.connect();
+      const connectedDevices = webAdapterRef.current!.listDevices();
+      if (connectedDevices.length === 0) {
+        // requestMIDIAccess() only grants permission — it succeeds even with zero
+        // hardware attached (e.g. a keyboard plugged into its USB-to-DEVICE port
+        // instead of USB-to-HOST, so the OS never exposes it as a MIDI input).
+        setWebMidiConnected(false);
+        setWebMidiError("MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
+        setDevices([]);
+        return;
+      }
       setWebMidiConnected(true);
       setWebMidiError(null);
-      setDevices(webAdapterRef.current!.listDevices());
+      setDevices(connectedDevices);
     } catch (err) {
       setWebMidiConnected(false);
       setWebMidiError(err instanceof Error ? err.message : "Failed to connect to a MIDI device.");
