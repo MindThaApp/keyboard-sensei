@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { keyboardGeometry, fitWhiteKeyWidth } from "./waterfall";
+import { describe, expect, it, vi } from "vitest";
+import { keyboardGeometry, fitWhiteKeyWidth, drawWaterfall, WATERFALL_COLORS_LIGHT } from "./waterfall";
+import type { BarGridEntry } from "../../utils/playalongSong";
 
 describe("keyboardGeometry (parameterised width)", () => {
   it("scales white key x-positions with whiteKeyWidthPx", () => {
@@ -39,5 +40,86 @@ describe("fitWhiteKeyWidth", () => {
   it("returns the width that makes the range exactly fill the container", () => {
     const width = fitWhiteKeyWidth(60, 72, 400);
     expect(keyboardGeometry(60, 72, width).widthPx).toBeCloseTo(400);
+  });
+});
+
+/** Minimal fake CanvasRenderingContext2D that just records fillRect calls (with the fillStyle active at call time) — enough to assert drawWaterfall's barline behaviour without a real canvas. */
+function makeFakeCtx() {
+  const fillRectCalls: { x: number; y: number; w: number; h: number; fillStyle: unknown }[] = [];
+  const ctx = {
+    fillStyle: "",
+    globalAlpha: 1,
+    clearRect: vi.fn(),
+    fillRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      fillRectCalls.push({ x, y, w, h, fillStyle: ctx.fillStyle });
+    }),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    arcTo: vi.fn(),
+    closePath: vi.fn(),
+    fill: vi.fn(),
+  };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, fillRectCalls };
+}
+
+describe("drawWaterfall barlines", () => {
+  const geometry = keyboardGeometry(60, 72, 20);
+
+  it("draws a rounded-y 1px barline for each bar within the lookahead window, using the barline colour", () => {
+    const { ctx, fillRectCalls } = makeFakeCtx();
+    const bars: BarGridEntry[] = [
+      { timeS: 2.0, barIndex: 0, numerator: 4, denominator: 4 }, // songTime=0, lookahead=4 -> visible, timeToStart=2
+      { timeS: 10.0, barIndex: 1, numerator: 4, denominator: 4 }, // way past lookahead -> not drawn
+      { timeS: -1.0, barIndex: -1, numerator: 4, denominator: 4 }, // already passed -> not drawn
+    ];
+    drawWaterfall(ctx, {
+      notes: [],
+      judgments: [],
+      songTimeS: 0,
+      lookaheadS: 4,
+      geometry,
+      heightPx: 400,
+      colors: WATERFALL_COLORS_LIGHT,
+      bars,
+    });
+
+    const barlineCalls = fillRectCalls.filter((c) => c.fillStyle === WATERFALL_COLORS_LIGHT.barline);
+    expect(barlineCalls).toHaveLength(1);
+    // pxPerSecond = 400/4 = 100; timeToStart = 2 - 0 = 2; y = 400 - 2*100 = 200.
+    expect(barlineCalls[0]).toEqual(expect.objectContaining({ x: 0, y: 200, w: geometry.widthPx, h: 1 }));
+    expect(Number.isInteger(barlineCalls[0].y)).toBe(true);
+  });
+
+  it("rounds a fractional bar y to an integer pixel (avoids a blurred 2px line)", () => {
+    const { ctx, fillRectCalls } = makeFakeCtx();
+    const bars: BarGridEntry[] = [{ timeS: 1.997, barIndex: 0, numerator: 4, denominator: 4 }];
+    drawWaterfall(ctx, {
+      notes: [],
+      judgments: [],
+      songTimeS: 0,
+      lookaheadS: 4,
+      geometry,
+      heightPx: 400,
+      colors: WATERFALL_COLORS_LIGHT,
+      bars,
+    });
+    const barlineCalls = fillRectCalls.filter((c) => c.fillStyle === WATERFALL_COLORS_LIGHT.barline);
+    expect(barlineCalls).toHaveLength(1);
+    expect(Number.isInteger(barlineCalls[0].y)).toBe(true);
+  });
+
+  it("draws no barlines when bars is omitted (backward compatible)", () => {
+    const { ctx, fillRectCalls } = makeFakeCtx();
+    drawWaterfall(ctx, {
+      notes: [],
+      judgments: [],
+      songTimeS: 0,
+      lookaheadS: 4,
+      geometry,
+      heightPx: 400,
+      colors: WATERFALL_COLORS_LIGHT,
+    });
+    const barlineCalls = fillRectCalls.filter((c) => c.fillStyle === WATERFALL_COLORS_LIGHT.barline);
+    expect(barlineCalls).toHaveLength(0);
   });
 });
