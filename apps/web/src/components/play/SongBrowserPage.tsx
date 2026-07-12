@@ -1,6 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { deleteSong, fetchUrlPreview, getMyPlayAlongAttempts, getSongs, updateSong, uploadSong, type Song, type SongGenre, type UrlPreview } from "../../services/api";
+import {
+  deleteSong,
+  fetchUrlPreview,
+  getMyPlayAlongAttempts,
+  getSongs,
+  importArchiveEntry,
+  searchArchive,
+  updateSong,
+  uploadSong,
+  type ArchiveEntryResult,
+  type Song,
+  type SongGenre,
+  type UrlPreview,
+} from "../../services/api";
 import { parsePlayAlongSong } from "../../utils/playalongSong";
 import { pianoSynth } from "../../utils/synth";
 
@@ -32,6 +45,116 @@ function DifficultyDots({ level }: { level: number }) {
   );
 }
 
+function ArchiveBadge() {
+  return (
+    <span
+      title="Imported from the community archive; rights filtering is best-effort, not guaranteed"
+      className="rounded bg-brass-100 px-1.5 py-0.5 text-xs font-medium text-brass-700 dark:bg-brass-700/30 dark:text-brass-300"
+    >
+      From archive
+    </span>
+  );
+}
+
+function BrowseArchiveDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ArchiveEntryResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [importingId, setImportingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(() => {
+      searchArchive(trimmed)
+        .then((response) => {
+          setResults(response.results);
+          setError(null);
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : "Search failed"))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const importEntry = async (entry: ArchiveEntryResult) => {
+    setImportingId(entry.id);
+    setError(null);
+    try {
+      const result = await importArchiveEntry(entry.id);
+      onDone({
+        id: result.id,
+        title: result.title,
+        artist: result.artist,
+        genre: "classical",
+        difficulty: entry.difficulty,
+        duration_sec: entry.duration_sec,
+        note_count: entry.note_count,
+        content_rights: "archive-import",
+        notation_path: null,
+        mine: true,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setImportingId(null);
+    }
+  };
+
+  const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
+  return (
+    <section aria-label="Browse archive" className="card space-y-3 p-4">
+      <h2 className="text-sm font-semibold">Browse the archive</h2>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Search 5,625 classical/piano pieces from the community archive. Imported copies are private to you, and rights
+        filtering is best-effort, not guaranteed — you're responsible for making sure you're allowed to use whatever
+        you import.
+      </p>
+      <input
+        className={field}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by title or composer…"
+        autoFocus
+      />
+      {error && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      {searching && <p className="text-xs text-slate-500">Searching…</p>}
+      {results && (
+        <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+          {results.map((entry) => (
+            <li key={entry.id} className="flex items-center gap-3 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{entry.title}</p>
+                <p className="truncate text-xs text-slate-500">{entry.composer}</p>
+              </div>
+              <ArchiveBadge />
+              <DifficultyDots level={entry.difficulty} />
+              <span className="w-10 text-right text-xs tabular-nums text-slate-500">{formatDuration(entry.duration_sec)}</span>
+              <button
+                className="secondary-button whitespace-nowrap px-2 py-1 text-xs"
+                disabled={importingId === entry.id}
+                onClick={() => void importEntry(entry)}
+              >
+                {importingId === entry.id ? "Importing…" : "Import"}
+              </button>
+            </li>
+          ))}
+          {results.length === 0 && <li className="px-3 py-2 text-xs text-slate-500">No matches.</li>}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <button className="secondary-button text-sm" onClick={onCancel}>Close</button>
+      </div>
+    </section>
+  );
+}
+
 function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<UrlPreview | null>(null);
@@ -40,9 +163,21 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
   const [genre, setGenre] = useState<SongGenre>("other");
   const [state, setState] = useState<"idle" | "fetching" | "playing" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Scheduled preview-playback timers -- cleared on unmount and before every
+  // new preview/fetch, so navigating away or re-fetching mid-playback can't
+  // leave stray notes sounding via the module-level pianoSynth singleton.
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearScheduledPreview = () => {
+    for (const timer of timersRef.current) clearTimeout(timer);
+    timersRef.current = [];
+  };
+
+  useEffect(() => clearScheduledPreview, []);
 
   const fetchPreview = async () => {
     if (!url.trim()) return;
+    clearScheduledPreview();
     setState("fetching");
     setError(null);
     setPreview(null);
@@ -62,6 +197,7 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
 
   const playPreview = () => {
     if (!preview) return;
+    clearScheduledPreview();
     setState("playing");
     const parsed = parsePlayAlongSong(preview.bytes);
     let lastEnd = 0;
@@ -69,10 +205,10 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
       const onMs = note.startS * 1000;
       const offMs = onMs + note.durationS * 1000;
       lastEnd = Math.max(lastEnd, offMs);
-      setTimeout(() => pianoSynth.playNote(note.midi, 90), onMs);
-      setTimeout(() => pianoSynth.stopNote(note.midi), offMs);
+      timersRef.current.push(setTimeout(() => pianoSynth.playNote(note.midi, 90), onMs));
+      timersRef.current.push(setTimeout(() => pianoSynth.stopNote(note.midi), offMs));
     }
-    setTimeout(() => setState("idle"), lastEnd + 150);
+    timersRef.current.push(setTimeout(() => setState("idle"), lastEnd + 150));
   };
 
   const confirmImport = async () => {
@@ -102,7 +238,7 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com/song.mid"
         />
-        <button className="secondary-button whitespace-nowrap text-sm" disabled={!url.trim() || state === "fetching"} onClick={() => void fetchPreview()}>
+        <button className="secondary-button whitespace-nowrap text-sm" disabled={!url.trim() || state === "fetching" || state === "playing"} onClick={() => void fetchPreview()}>
           {state === "fetching" ? "Fetching…" : "Fetch"}
         </button>
       </div>
@@ -249,7 +385,7 @@ export default function SongBrowserPage() {
   const [genre, setGenre] = useState<SongGenre | "all">("all");
   const [difficulty, setDifficulty] = useState<number | 0>(0);
   const [sort, setSort] = useState<"title" | "artist" | "difficulty" | "duration">("artist");
-  const [uploading, setUploading] = useState<"file" | "url" | null>(null);
+  const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -300,6 +436,9 @@ export default function SongBrowserPage() {
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "url" ? null : "url")); }}>
             Import from URL
           </button>
+          <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "archive" ? null : "archive")); }}>
+            Browse Archive
+          </button>
         </div>
       </div>
 
@@ -312,6 +451,12 @@ export default function SongBrowserPage() {
       {uploading === "url" && (
         <ImportFromUrlDialog
           onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(null); }}
+          onCancel={() => setUploading(null)}
+        />
+      )}
+      {uploading === "archive" && (
+        <BrowseArchiveDialog
+          onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); }}
           onCancel={() => setUploading(null)}
         />
       )}
@@ -409,6 +554,7 @@ export default function SongBrowserPage() {
                     </button>
                   </>
                 )}
+                {song.content_rights === "archive-import" && <ArchiveBadge />}
                 <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
                   {song.genre}
                 </span>
