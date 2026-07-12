@@ -13,6 +13,24 @@ import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/mea
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
 const COUNT_IN_BEATS = 4;
+/** UI slider bounds (BPM). Narrower than the API's accepted tempoPct range — see tempoBpmBounds. */
+const SLIDER_MIN_BPM = 25;
+const SLIDER_MAX_BPM = 200;
+/** API-enforced tempoPct range (apps/api/src/app.ts: z.number().min(10).max(250)). */
+const MIN_TEMPO_PCT = 10;
+const MAX_TEMPO_PCT = 250;
+
+/**
+ * Derives the actual slider [min, max] BPM for a given exercise, tightened so
+ * that neither end can ever produce a tempoPct outside the API's accepted
+ * [MIN_TEMPO_PCT, MAX_TEMPO_PCT] range. Without this, e.g. a 60 BPM exercise
+ * would let a user drag to 200 BPM (333%), which the API rejects with a 400.
+ */
+function tempoBpmBounds(writtenBpm: number): { min: number; max: number } {
+  const min = Math.max(SLIDER_MIN_BPM, Math.ceil((writtenBpm * MIN_TEMPO_PCT) / 100));
+  const max = Math.min(SLIDER_MAX_BPM, Math.floor((writtenBpm * MAX_TEMPO_PCT) / 100));
+  return { min: Math.min(min, max), max };
+}
 const HIGHLIGHT_ENABLED_KEY = "ks-highlight-enabled";
 function loadHighlightEnabled(): boolean {
   try {
@@ -148,7 +166,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
-  const [tempoPct, setTempoPct] = useState<25 | 50 | 75 | 100>(100);
+  const [tempoBpm, setTempoBpm] = useState<number | null>(null);
   const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set());
   const [liveScore, setLiveScore] = useState(0);
   const [liveCombo, setLiveCombo] = useState(0);
@@ -225,7 +243,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const untimed = exercise.scoring === "untimed";
   const hasChords = exercise.expected.some((event) => event.chordGroupId !== null);
   const msPerBeat = 60_000 / exercise.tempoBpm;
-  const effectiveBpm = exercise.tempoBpm * (tempoPct / 100);
+  const { min: sliderMinBpm, max: sliderMaxBpm } = tempoBpmBounds(exercise.tempoBpm);
+  // Slider's chosen BPM IS the practice tempo; default to written tempo (100%) until the user moves it.
+  const chosenBpm = Math.min(sliderMaxBpm, Math.max(sliderMinBpm, tempoBpm ?? exercise.tempoBpm));
+  const effectiveBpm = chosenBpm;
+  const tempoPct = (chosenBpm / exercise.tempoBpm) * 100;
   const notes = [...new Set(exercise.expected.map((n) => n.note))];
   // Pad the keyboard to octave boundaries so it reads as an instrument, not a fragment.
   const low = Math.max(36, Math.min(...notes) - 2);
@@ -501,25 +523,25 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
         {!untimed && (
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1" role="radiogroup" aria-label="Practice tempo">
-              <span className="mr-1 text-xs text-slate-500">Tempo</span>
-              {([25, 50, 75, 100] as const).map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  role="radio"
-                  aria-checked={tempoPct === pct}
-                  disabled={capturing || phase === "counting-in"}
-                  onClick={() => setTempoPct(pct)}
-                  className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                    tempoPct === pct
-                      ? "bg-felt-600 font-medium text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                  } disabled:opacity-50`}
-                >
-                  {pct}%
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Tempo <span className="text-slate-400 dark:text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
+              </span>
+              <input
+                type="range"
+                min={sliderMinBpm}
+                max={sliderMaxBpm}
+                step={1}
+                value={chosenBpm}
+                disabled={capturing || phase === "counting-in"}
+                onChange={(e) => setTempoBpm(Number(e.target.value))}
+                aria-label="Practice tempo in beats per minute"
+                className="h-1.5 w-32 cursor-pointer accent-felt-600 disabled:opacity-50 sm:w-40"
+              />
+              <span className="whitespace-nowrap text-xs tabular-nums text-slate-700 dark:text-slate-200">
+                <strong className="font-medium">{Math.round(chosenBpm)} BPM</strong>{" "}
+                <span className="text-slate-400 dark:text-slate-500">({Math.round(tempoPct)}% of written tempo)</span>
+              </span>
             </div>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
