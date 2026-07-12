@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  createAdminUser,
   deleteAdminUser,
   getAdminUserProgress,
   getAdminUsers,
@@ -10,6 +11,54 @@ import {
 } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import AdminNav from "./AdminNav";
+
+function NewUserForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"user" | "admin">("user");
+  const [error, setError] = useState<string | null>(null);
+
+  const create = async () => {
+    setError(null);
+    try {
+      await createAdminUser({ email, display_name: displayName, password, role });
+      setEmail("");
+      setDisplayName("");
+      setPassword("");
+      setRole("user");
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Create failed");
+    }
+  };
+
+  const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+      <label className="block text-xs text-slate-500">Email
+        <input className={field} value={email} onChange={(e) => setEmail(e.target.value)} />
+      </label>
+      <label className="block text-xs text-slate-500">Display name
+        <input className={field} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      </label>
+      <label className="block text-xs text-slate-500">Role
+        <select className={field} value={role} onChange={(e) => setRole(e.target.value as "user" | "admin")}>
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+      </label>
+      <label className="block text-xs text-slate-500">Password
+        <input className={field} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="min 8 characters" />
+      </label>
+      {error && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+      <div className="flex gap-2">
+        <button className="primary-button text-sm" onClick={() => void create()}>Create</button>
+        <button className="secondary-button text-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 function EditUserForm({ user, onSaved, onCancel }: { user: AdminUser; onSaved: () => void; onCancel: () => void }) {
   const [email, setEmail] = useState(user.email);
@@ -120,6 +169,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = () => {
     setError(null);
@@ -142,8 +192,14 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-4">
       <AdminNav />
-      <h1 className="font-display text-2xl font-semibold">Users</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-2xl font-semibold">Users</h1>
+        <button className="secondary-button text-sm" onClick={() => setCreating(!creating)}>
+          {creating ? "Cancel" : "Add user"}
+        </button>
+      </div>
       {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
+      {creating && <NewUserForm onCreated={() => { setCreating(false); load(); }} onCancel={() => setCreating(false)} />}
       <ul className="space-y-3">
         {users?.map((user) => (
           <li key={user.id} className="card space-y-3 p-4">

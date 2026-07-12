@@ -56,13 +56,50 @@ export interface FeedbackItem {
   status: "open" | "resolved";
   created_at: string;
   user: { email: string; display_name: string } | null;
+  has_screenshot: boolean;
 }
 export const submitFeedback = (type: FeedbackType, message: string, page_path: string) =>
-  request<{ ok: true }>("/feedback", { method: "POST", body: JSON.stringify({ type, message, page_path }) });
+  request<{ id: string }>("/feedback", { method: "POST", body: JSON.stringify({ type, message, page_path }) });
+
+/**
+ * Two requests by design: the message text goes in the JSON body above (never a
+ * query string — it would end up in server access logs), then the raw bytes
+ * attach to the created row. If the image upload fails the feedback itself is
+ * already saved, which is the right way round to lose the race.
+ */
+export const submitFeedbackWithScreenshot = async (
+  type: FeedbackType,
+  message: string,
+  page_path: string,
+  screenshot: File | Blob,
+): Promise<{ ok: true }> => {
+  const { id } = await submitFeedback(type, message, page_path);
+  const token = getToken();
+  const response = await fetch(`${API_URL}/feedback/${encodeURIComponent(id)}/screenshot`, {
+    method: "POST",
+    headers: { "content-type": screenshot.type || "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: screenshot,
+  });
+  const body = await response.json().catch(() => null) as ({ ok: true } & { error?: { message?: string } }) | null;
+  if (!response.ok) throw new Error(body?.error?.message ?? `Screenshot upload failed (${response.status}) — your feedback was still saved.`);
+  return body as { ok: true };
+};
+
 export const getAdminFeedback = (status: "open" | "resolved" | "all") =>
   request<{ feedback: FeedbackItem[] }>(`/admin/feedback?status=${status}`);
 export const setFeedbackStatus = (id: string, status: "open" | "resolved") =>
   request<{ id: string; status: string }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+
+// The screenshot route is authed (admin-only), so it can't be used as a plain
+// <img src>; fetch the bytes with the bearer token and hand back a blob URL.
+export const getAdminFeedbackScreenshot = async (id: string): Promise<string> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/admin/feedback/${encodeURIComponent(id)}/screenshot`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Could not load screenshot (${response.status})`);
+  return URL.createObjectURL(await response.blob());
+};
 
 // --- Admin: users ---
 export interface AdminUser {
@@ -236,3 +273,6 @@ export const fetchUrlPreview = async (url: string): Promise<UrlPreview> => {
     difficulty: Number(response.headers.get("x-song-difficulty") ?? 1),
   };
 };
+
+export const createAdminUser = (fields: { email: string; display_name: string; password: string; role: "user" | "admin" }) =>
+  request<Pick<AdminUser, "id" | "email" | "display_name" | "role">>("/admin/users", { method: "POST", body: JSON.stringify(fields) });

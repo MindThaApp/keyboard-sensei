@@ -1,9 +1,16 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { ProgressStatus } from "@prisma/client";
+import { Prisma, ProgressStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireAdmin } from "./auth.js";
+
+const createUserSchema = z.object({
+  email: z.string().email(),
+  display_name: z.string().trim().min(1).max(80),
+  password: z.string().min(8),
+  role: z.enum(["user", "admin"]).default("user"),
+});
 
 const updateUserSchema = z
   .object({
@@ -61,6 +68,28 @@ adminUsersRouter.get("/admin/users", async (_req, res, next) => {
       })),
     });
   } catch (e) {
+    next(e);
+  }
+});
+
+adminUsersRouter.post("/admin/users", async (req, res, next) => {
+  try {
+    const input = createUserSchema.parse(req.body);
+    const user = await prisma.user.create({
+      data: {
+        email: input.email.toLowerCase(),
+        display_name: input.display_name,
+        role: input.role,
+        password_hash: await bcrypt.hash(input.password, 12),
+      },
+      select: { id: true, email: true, display_name: true, role: true },
+    });
+    res.status(201).json(user);
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(409).json({ error: { code: "email_taken", message: "A user with that email already exists" } });
+      return;
+    }
     next(e);
   }
 });
