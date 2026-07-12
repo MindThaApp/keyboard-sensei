@@ -423,7 +423,12 @@ export default function PlayAlongPage() {
         notationBytes ? (
           <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />
         ) : (
-          <NotationPreviewStrip notes={quantizedNotes} beatsPerBar={parsed.beatsPerBar} songTimeS={Math.max(0, songTimeS)} bpm={parsed.bpm} />
+          <NotationPreviewStrip
+            notes={quantizedNotes}
+            timeSignatureSegments={parsed.timeSignatureSegments}
+            songTimeS={Math.max(0, songTimeS)}
+            bpm={parsed.bpm}
+          />
         )
       )}
 
