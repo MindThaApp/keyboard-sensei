@@ -37,6 +37,15 @@ Given the NC license and the best-effort (not guaranteed) rights filtering, pref
 
 **Open implementation question, not resolved by this design** (flag during planning, don't guess): whether PianoCoRe's actual hosting (Zenodo bulk archive vs. HuggingFace dataset viewer) supports fetching one individual performance file efficiently, or whether the admin-side ingest step needs to download the full ~16GB once to a local staging area and serve individual files from there on demand (still not permanently duplicating it into every/any Song row — just a local source-of-truth cache the import-time step reads from, distinct from "hosting it as a public library"). Resolve this with a quick investigation at the start of implementation before committing to the exact ingest script design.
 
+## 3a. Real notation via MusicXML (OpenSheetMusicDisplay)
+
+PianoCoRe bundles MusicXML (real engraved notation) alongside MIDI for each piece — this is the source of the dataset's larger total size, and it's an opportunity specific to this archive: PianoCoRe-imported songs can show **actual sheet music**, not the simplified quantized preview strip built for arbitrary uploads/URL-imports (that approach was deliberately limited because raw MIDI alone has no real notation semantics — no ties, no proper beaming, no engraving — and transcribing it cleanly is a much harder, imperfect problem, which is why it stayed simplified for the general case).
+
+- **Library**: [OpenSheetMusicDisplay](https://opensheetmusicdisplay.org/) (`opensheetmusicdisplay` on npm) — an existing, actively-maintained open-source library purpose-built to render MusicXML in the browser, using VexFlow as its rendering engine underneath (same engine this app's own `NotationRenderer` already uses elsewhere) but handling the full complexity of real notation (ties, tuplets, multi-voice beaming, dynamics) that this app's hand-built renderer does not attempt. Use it directly for PianoCoRe-sourced songs rather than trying to extend `NotationRenderer`/`measureNotation.ts` to cover MusicXML — those stay scoped to the app's own authored/derived content exactly as they are today.
+- **Fetch scope, still on-demand**: per §3, when a user imports a specific PianoCoRe piece, fetch that piece's MusicXML file *alongside* its MIDI file (both are per-piece, on-demand — this doesn't change the "not the whole 16GB" design, it just means each on-demand fetch pulls two small files instead of one). Store the MusicXML file path on the resulting `Song` row (new nullable field, e.g. `notation_path`) so Play-Along can render it when present.
+- **Scope boundary**: this only applies to PianoCoRe-sourced songs, which have `notation_path` set. Direct uploads and URL-imports have no MusicXML and keep using the existing waterfall + simplified preview-strip approach — `PlayAlongPage` picks OSMD vs. the existing strip based on whether `notation_path` is present on the loaded song.
+- **Open question to resolve during implementation**: OSMD renders a full static score; integrating it with the existing real-time note-highlighting (which currently works against this app's own internal `activeNoteIds` mechanism on `NotationRenderer`) needs a compatible way to highlight/tint specific noteheads in OSMD's own rendered output (OSMD exposes APIs for this — confirm the exact approach fits during planning, not guessed here).
+
 ## 4. Data model
 
 New Prisma model, e.g. `ArchiveEntry` (kept separate from `Song` — these are catalog/index rows for pieces not yet in anyone's library, not `Song` rows themselves, which only exist once a user actually imports something):
@@ -54,6 +63,10 @@ model ArchiveEntry {
 ```
 
 Add a Postgres full-text-search index (GIN on a generated `tsvector` column combining `title`+`composer`) — this scale (5,625 rows) is trivially served by plain Postgres FTS; no dedicated search service is warranted for a single home-LAN server.
+
+`ArchiveEntry.source_ref` needs to resolve to *both* the MIDI and MusicXML file locations for a piece (per §3a), not just MIDI — settle the exact shape (e.g. a small JSON blob, or two separate ref fields) during implementation once the actual PianoCoRe hosting layout is confirmed.
+
+The existing `Song` model gains one new nullable field: `notation_path String?` — set only for PianoCoRe-sourced imports (populated at import time alongside the existing `file_path`), left `null` for direct uploads/URL-imports. This is what `PlayAlongPage` checks to decide whether to render via OSMD or fall back to the existing waterfall + preview-strip approach.
 
 ## 5. API
 
