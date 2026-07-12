@@ -4,6 +4,7 @@ import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
 import PracticeGymPage from "./components/midi/PracticeGymPage";
 import PracticeHistoryPage from "./components/progress/PracticeHistoryPage";
+import DashboardPage from "./components/dashboard/DashboardPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage, { RegistrationForm } from "./components/auth/AuthPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
@@ -111,6 +112,7 @@ export default function App() {
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
             <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
+            <NavLink to="/dashboard" className={navLinkClasses}>Dashboard</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
             {auth.user?.role === "admin" && <NavLink to="/admin/users" className={navLinkClasses}>Admin</NavLink>}
             <label className="sr-only" htmlFor="theme">Theme</label>
@@ -137,6 +139,7 @@ export default function App() {
           <Route path="/lessons/:lessonId" element={<LessonPlayerPage />} />
           <Route path="/practice-gym" element={<PracticeGymPage />} />
           <Route path="/history" element={<PracticeHistoryPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play" element={<SongBrowserPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />

@@ -23,6 +23,7 @@ import { feedbackRouter } from "./feedback.js";
 import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
 import { archiveRouter } from "./archive.js";
+import { dashboardRouter } from "./dashboard.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -217,6 +218,7 @@ app.use(feedbackRouter);
 app.use(adminUsersRouter);
 app.use(songsRouter);
 app.use(archiveRouter);
+app.use(dashboardRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
