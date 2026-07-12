@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import NotationRenderer from "../notation/NotationRenderer";
-import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
+import { groupIntoMeasures, measureIndexForBeat, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
+import { barRangeContaining, barRangesFrom, type TimeSignatureSegment } from "../../utils/playalongSong";
 
 export interface QuantizedSongNote {
   id: string;
@@ -32,7 +33,13 @@ export function quantizeToBeats(notes: PlayAlongNote[], bpm: number): QuantizedS
 
 interface Props {
   notes: QuantizedSongNote[];
-  beatsPerBar: number;
+  /**
+   * Every time-signature segment in the piece (denominator-aware bar
+   * lengths in quarter notes), not just a single scalar — 15/311 library
+   * files change meter mid-piece, so the window/measure grouping below
+   * must be able to cross a meter change without misplacing barlines.
+   */
+  timeSignatureSegments: TimeSignatureSegment[];
   songTimeS: number;
   bpm: number;
 }
@@ -40,11 +47,18 @@ interface Props {
 const WINDOW_MEASURES = 2;
 
 /** Rolling 1-2 measure grand-staff preview above the Play-Along waterfall — deliberately a small sliding window rather than full-piece transcription (see design spec §5). */
-export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bpm }: Props) {
+export default function NotationPreviewStrip({ notes, timeSignatureSegments, songTimeS, bpm }: Props) {
   const secondsPerBeat = 60 / bpm;
   const currentBeat = Math.max(0, songTimeS / secondsPerBeat);
-  const windowStart = Math.floor(currentBeat / beatsPerBar) * beatsPerBar;
-  const windowBeats = beatsPerBar * WINDOW_MEASURES;
+  const currentBar = barRangeContaining(timeSignatureSegments, currentBeat);
+  const windowStart = currentBar.start;
+  // Walk forward WINDOW_MEASURES bars from the current bar's start, correctly
+  // crossing a meter change if one falls inside this window.
+  const windowRanges = barRangesFrom(timeSignatureSegments, windowStart, WINDOW_MEASURES);
+  const windowBeats = windowRanges[windowRanges.length - 1].end - windowStart;
+  // Per-measure-index bar lengths (relative to windowStart), for groupIntoMeasures.
+  const barLengths = windowRanges.map((r) => r.beatsPerBar);
+  const barLengthsKey = barLengths.join(",");
 
   const { data, activeNoteIds } = useMemo(() => {
     const windowed = notes.filter((n) => n.startBeat >= windowStart && n.startBeat < windowStart + windowBeats);
@@ -80,20 +94,20 @@ export default function NotationPreviewStrip({ notes, beatsPerBar, songTimeS, bp
     // a full bar within the window needs a shared minMeasureCount to keep the
     // treble/bass arrays aligned bar-for-bar (see groupIntoMeasures' docstring).
     const measureCountFor = (events: BeatEvent[]): number =>
-      events.length === 0 ? 0 : Math.floor(Math.max(...events.map((e) => e.startBeat)) / beatsPerBar) + 1;
+      events.length === 0 ? 0 : measureIndexForBeat(barLengths, Math.max(...events.map((e) => e.startBeat))) + 1;
     const sharedMeasureCount = Math.max(measureCountFor(right), measureCountFor(left));
 
     return {
       data: {
         grandStaff: true,
-        treble: { clef: "treble", measures: groupIntoMeasures(right, beatsPerBar, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
-        bass: { clef: "bass", measures: groupIntoMeasures(left, beatsPerBar, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
+        treble: { clef: "treble", measures: groupIntoMeasures(right, barLengths, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
+        bass: { clef: "bass", measures: groupIntoMeasures(left, barLengths, sharedMeasureCount).map((noteList) => ({ notes: noteList })) },
       },
       activeNoteIds: active,
     };
     // Recompute only when the current sixteenth-note slot changes, not every animation frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, windowStart, windowBeats, beatsPerBar, Math.floor(currentBeat * 4)]);
+  }, [notes, windowStart, windowBeats, barLengthsKey, Math.floor(currentBeat * 4)]);
 
   return (
     // No vertical cap here: the SVG is already sized to its own content
