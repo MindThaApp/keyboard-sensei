@@ -22,7 +22,10 @@ export interface Lesson { id: string; path: LearningPathId; level: LevelId; bran
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** scoring "untimed" = only pitches (and chord togetherness) are scored — for find-the-notes drills with no pulse. Default "timed". */
 export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; expected: ExpectedNoteEvent[] }
-export type ExerciseTempoPct = 25 | 50 | 75 | 100;
+/** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
+ * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
+ * 25-200 BPM slider. The API accepts [10, 250]. */
+export type ExerciseTempoPct = number;
 export interface RawMidiEvent { note: number; velocity: number; type: "noteon" | "noteoff"; timestampMs: number }
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
 export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown";
