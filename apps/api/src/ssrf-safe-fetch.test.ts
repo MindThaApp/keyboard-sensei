@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDisallowedIp } from "./ssrf-safe-fetch.js";
+import { fetchUrlSafely, isDisallowedIp, SsrfBlockedError } from "./ssrf-safe-fetch.js";
 
 describe("isDisallowedIp", () => {
   it("blocks standard private IPv4 ranges", () => {
@@ -51,5 +51,19 @@ describe("isDisallowedIp", () => {
 
   it("fails closed on a string that isn't a recognizable IP literal", () => {
     expect(isDisallowedIp("not-an-ip")).toBe(true);
+  });
+});
+
+describe("fetchUrlSafely", () => {
+  // Regression test: undici wraps connector errors in a generic
+  // TypeError("fetch failed") with the real error only on `.cause`. A
+  // literal-IP hostname needs no real DNS query (dns.lookup short-circuits
+  // for IP literals), so this is a fast, deterministic real call into
+  // fetchUrlSafely's actual connector -- not a mock -- while still being
+  // a self-contained unit test.
+  it("throws SsrfBlockedError itself (not wrapped) when the target resolves to a blocked address", async () => {
+    await expect(
+      fetchUrlSafely("http://169.254.169.254/latest/meta-data/", { maxBytes: 1024, timeoutMs: 2000 }),
+    ).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 });
