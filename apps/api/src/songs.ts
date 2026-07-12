@@ -163,6 +163,33 @@ songsRouter.get("/songs/:id/file", async (req, res, next) => {
   }
 });
 
+songsRouter.get("/songs/:id/notation", async (req, res, next) => {
+  try {
+    const userId = uid(req);
+    const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
+    if (!song || (song.uploader_id && song.uploader_id !== userId && !(await isAdminUser(userId)))) {
+      res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
+      return;
+    }
+    if (!song.notation_path) {
+      res.status(404).json({ error: { code: "not_found", message: "This song has no notation file" } });
+      return;
+    }
+    try {
+      const bytes = await readFile(song.notation_path);
+      res.type("application/vnd.recordare.musicxml").send(bytes);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        res.status(404).json({ error: { code: "not_found", message: "Notation file not found on disk" } });
+        return;
+      }
+      throw error;
+    }
+  } catch (e) {
+    next(e);
+  }
+});
+
 const attemptSchema = z.object({
   score: z.number().min(0).max(150),
   accuracy: z.number().min(0).max(100),
