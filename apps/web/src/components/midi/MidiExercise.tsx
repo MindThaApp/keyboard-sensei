@@ -9,6 +9,7 @@ import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
 import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
+import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
@@ -33,16 +34,6 @@ function tempoBpmBounds(writtenBpm: number): { min: number; max: number } {
   const max = Math.min(SLIDER_MAX_BPM, Math.floor((writtenBpm * MAX_TEMPO_PCT) / 100));
   return { min: Math.min(min, max), max };
 }
-const HIGHLIGHT_ENABLED_KEY = "ks-highlight-enabled";
-function loadHighlightEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(HIGHLIGHT_ENABLED_KEY);
-    return raw === null ? true : raw === "true";
-  } catch {
-    return true;
-  }
-}
-
 interface Props {
   exerciseId: string;
   title: string;
@@ -592,6 +583,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                 data={notation}
                 title="Read and play"
                 activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
+                verticalRange={exerciseRange}
               />
             </div>
           </div>
@@ -720,11 +712,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                 checked={highlightEnabled}
                 onChange={(e) => {
                   setHighlightEnabled(e.target.checked);
-                  try {
-                    localStorage.setItem(HIGHLIGHT_ENABLED_KEY, String(e.target.checked));
-                  } catch {
-                    // localStorage unavailable (private browsing, etc.) — setting still applies for this session.
-                  }
+                  saveHighlightEnabled(e.target.checked);
                 }}
               />
               Highlight notes while playing

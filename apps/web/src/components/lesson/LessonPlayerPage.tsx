@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
 import TheoryCardSectionView from "./TheoryCardSectionView";
-import NotationRenderer from "../notation/NotationRenderer";
+import LiveNotationSection from "../notation/LiveNotationSection";
 import QuizSectionView from "../quiz/QuizSectionView";
 import MidiExercise from "../midi/MidiExercise";
 import MidiStatusBar from "../midi/MidiStatusBar";
@@ -122,7 +122,7 @@ export default function LessonPlayerPage() {
             case "theory-card":
               return <TheoryCardSectionView key={sectionIndex} section={section} lessonId={lesson.id} sectionIndex={sectionIndex} />;
             case "notation":
-              return <NotationRenderer key={sectionIndex} data={section.vexflowData} title={section.title} />;
+              return <LiveNotationSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
             case "quiz":
               return <QuizSectionView key={sectionIndex} section={section} />;
             case "midi-exercise":

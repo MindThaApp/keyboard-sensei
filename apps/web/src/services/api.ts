@@ -176,6 +176,7 @@ export const updateSong = (id: string, fields: Partial<{ title: string; artist: 
   request<Song>(`/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const adminUpdateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre; difficulty: number }>) =>
   request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export const adminDeleteSong = (id: string) => request<{ ok: true }>(`/admin/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getMyPlayAlongAttempts = () =>
   request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
 export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) =>

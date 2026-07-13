@@ -18,6 +18,7 @@ interface Props {
   notes: PlayAlongNote[];
   grid: SongBeatGrid;
   timeSignatureSegments: TimeSignatureSegment[];
+  verticalRange?: { lowestNote: number; highestNote: number };
 }
 
 interface Point {
@@ -238,7 +239,7 @@ const VIEWPORT_HEIGHT_PX = 240;
  * paper over the seam.
  */
 const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function ScrollingScore(
-  { notes, grid, timeSignatureSegments },
+  { notes, grid, timeSignatureSegments, verticalRange },
   ref,
 ) {
   const anchors = useMemo(() => buildQuarterBeatAnchors(grid, timeSignatureSegments), [grid, timeSignatureSegments]);
@@ -358,7 +359,13 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
     <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
       <div ref={viewportRef} className="relative overflow-hidden" style={{ height: VIEWPORT_HEIGHT_PX }}>
         <div ref={ribbonRef} className="absolute left-0 top-0 will-change-transform">
-          <NotationRenderer data={data} activeNoteIds={activeIds} maxSystemWidthPx={Infinity} onLayout={handleLayout} />
+          <NotationRenderer
+            data={data}
+            activeNoteIds={activeIds}
+            maxSystemWidthPx={Infinity}
+            onLayout={handleLayout}
+            verticalRange={verticalRange}
+          />
         </div>
       </div>
     </div>

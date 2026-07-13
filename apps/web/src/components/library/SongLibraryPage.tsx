@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  adminDeleteSong,
+  adminUpdateSong,
   deleteSong,
   fetchUrlPreview,
   getSongs,
@@ -13,6 +15,7 @@ import {
   type SongGenre,
   type UrlPreview,
 } from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 import { parsePlayAlongSong } from "../../utils/playalongSong";
 import { pianoSynth } from "../../utils/synth";
 
@@ -339,19 +342,22 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
   );
 }
 
-function EditSongRow({ song, onSaved, onCancel }: { song: Song; onSaved: (song: Song) => void; onCancel: () => void }) {
+function EditSongRow({ song, isAdmin, onSaved, onCancel }: { song: Song; isAdmin: boolean; onSaved: (song: Song) => void; onCancel: () => void }) {
   const [title, setTitle] = useState(song.title);
   const [artist, setArtist] = useState(song.artist);
   const [genre, setGenre] = useState<SongGenre>(song.genre);
+  const [difficulty, setDifficulty] = useState(song.difficulty);
   const [state, setState] = useState<"idle" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
+  const useAdminRoute = isAdmin && !song.mine;
 
   const save = async () => {
     if (!title.trim()) return;
     setState("saving");
     setError(null);
     try {
-      onSaved(await updateSong(song.id, { title: title.trim(), artist: artist.trim() || "Unknown", genre }));
+      const fields = { title: title.trim(), artist: artist.trim() || "Unknown", genre };
+      onSaved(useAdminRoute ? await adminUpdateSong(song.id, { ...fields, difficulty }) : await updateSong(song.id, fields));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save changes");
       setState("idle");
@@ -368,6 +374,19 @@ function EditSongRow({ song, onSaved, onCancel }: { song: Song; onSaved: (song: 
           <option key={g.value} value={g.value}>{g.label}</option>
         ))}
       </select>
+      {useAdminRoute && (
+        <label className="flex items-center gap-1 text-xs text-slate-500">
+          Difficulty
+          <input
+            className={`${field} w-16`}
+            type="number"
+            min={1}
+            max={5}
+            value={difficulty}
+            onChange={(e) => setDifficulty(Math.min(5, Math.max(1, Number(e.target.value) || 1)))}
+          />
+        </label>
+      )}
       <button className="primary-button px-2 py-1 text-xs" disabled={!title.trim() || state === "saving"} onClick={() => void save()}>
         {state === "saving" ? "Saving…" : "Save"}
       </button>
@@ -378,12 +397,14 @@ function EditSongRow({ song, onSaved, onCancel }: { song: Song; onSaved: (song: 
 }
 
 export default function SongLibraryPage() {
+  const { user } = useAuth();
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState<SongGenre | "all">("all");
   const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     getSongs()
@@ -403,8 +424,8 @@ export default function SongLibraryPage() {
   }, [songs, search, genre]);
 
   const removeSong = async (song: Song) => {
-    if (!window.confirm(`Delete your upload "${song.title}"?`)) return;
-    await deleteSong(song.id);
+    if (!window.confirm(`Permanently delete "${song.title}"? This cannot be undone.`)) return;
+    await (song.mine ? deleteSong(song.id) : adminDeleteSong(song.id));
     setSongs((current) => current?.filter((row) => row.id !== song.id) ?? null);
   };
 
@@ -486,6 +507,7 @@ export default function SongLibraryPage() {
               <EditSongRow
                 key={song.id}
                 song={song}
+                isAdmin={isAdmin}
                 onSaved={(updated) => {
                   setSongs((current) => current?.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)) ?? null);
                   setEditingId(null);
@@ -500,7 +522,7 @@ export default function SongLibraryPage() {
                 <p className="truncate text-sm font-medium">{song.title}</p>
                 <p className="truncate text-xs text-slate-500">{song.artist}</p>
               </div>
-              {song.mine && (
+              {(song.mine || isAdmin) && (
                 <>
                   <button
                     onClick={() => setEditingId(song.id)}
