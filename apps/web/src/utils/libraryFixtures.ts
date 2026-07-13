@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -8,17 +8,17 @@ import path from "node:path";
  * The library is volume-mounted and GITIGNORED, so it does not exist on a clean
  * checkout. Suites that depend on it must skip rather than fail.
  *
- * NOTE: check for actual .mid FILES, not just the directory. CI had the directory
- * present but empty, so an existsSync(dir) guard passed and every test then died on
- * ENOENT — the guard has to prove the fixtures are really there.
+ * Two false starts, both of which shipped a red CI:
+ *  - existsSync(dir) alone: CI had the directory but no files -> guard passed, tests
+ *    then died on ENOENT.
+ *  - "does the dir contain ANY .mid file": apps/api's own upload tests WRITE real .mid
+ *    files into this very directory (they don't mock the filesystem), so by the time
+ *    the web suite runs the dir is non-empty -> guard passed again, same ENOENT.
+ *
+ * So probe for a SPECIFIC seeded fixture that only the real library provides.
  */
 export const MIDI_LIBRARY_DIR = path.resolve(__dirname, "../../../api/data/midi-library");
 
-export function hasLibraryFixtures(): boolean {
-  try {
-    if (!existsSync(MIDI_LIBRARY_DIR)) return false;
-    return readdirSync(MIDI_LIBRARY_DIR).some((f) => f.endsWith(".mid"));
-  } catch {
-    return false;
-  }
-}
+const PROBE = "abba-dancing-queen.mid";
+
+export const hasLibraryFixtures = (): boolean => existsSync(path.join(MIDI_LIBRARY_DIR, PROBE));
