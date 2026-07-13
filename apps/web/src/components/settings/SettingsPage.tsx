@@ -381,7 +381,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    // Full-bleed: Settings shows a keyboard, and the app shell caps content at
+    // max-w-5xl (1024px), which left it cramped.
+    <div className="mx-[calc(50%-50vw)] w-screen space-y-6 px-4">
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Settings sections">
         {SETTINGS_TABS.map((tab) => (
