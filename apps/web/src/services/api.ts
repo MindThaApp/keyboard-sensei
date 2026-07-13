@@ -292,3 +292,21 @@ export interface InstrumentInfo {
   created_at: string;
 }
 export const getInstruments = () => request<{ instruments: InstrumentInfo[] }>("/instruments");
+export const deleteInstrument = (id: string) => request<{ ok: true }>(`/instruments/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const uploadInstrument = async (
+  file: File | Blob,
+  meta: { name: string; description: string; category: InstrumentCategory },
+): Promise<InstrumentInfo> => {
+  const token = getToken();
+  const params = new URLSearchParams({ name: meta.name, description: meta.description, category: meta.category });
+  const response = await fetch(`${API_URL}/instruments/upload?${params}`, {
+    method: "POST",
+    headers: { "content-type": file.type || "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const body = await response.json().catch(() => null) as (InstrumentInfo & { error?: { message?: string } }) | null;
+  if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
+  return body as InstrumentInfo;
+};
+export const importInstrumentFromUrl = (fields: { url: string; name: string; description: string; category: InstrumentCategory }) =>
+  request<InstrumentInfo>("/instruments/import-url", { method: "POST", body: JSON.stringify(fields) });

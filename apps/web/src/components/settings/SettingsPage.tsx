@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useAuth } from "../../contexts/AuthContext";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
 import InstrumentSection from "./InstrumentSection";
+import SongLibrarySection from "./SongLibrarySection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
@@ -356,14 +358,54 @@ function MidiSection() {
   );
 }
 
+type SettingsTab = "account" | "instruments" | "midi" | "narration" | "library";
+
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: "account", label: "Account" },
+  { id: "instruments", label: "Instruments" },
+  { id: "midi", label: "MIDI" },
+  { id: "narration", label: "Narration" },
+  { id: "library", label: "Library" },
+];
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+  return value === "account" || value === "instruments" || value === "midi" || value === "narration" || value === "library";
+}
+
 export default function SettingsPage() {
+  const [params, setParams] = useSearchParams();
+  const activeTab = isSettingsTab(params.get("tab")) ? params.get("tab") : "account";
+
+  function selectTab(tab: SettingsTab) {
+    setParams(tab === "account" ? {} : { tab });
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
-      <AccountSection />
-      <InstrumentSection />
-      <NarrationSection />
-      <MidiSection />
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Settings sections">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => selectTab(tab.id)}
+            className={`rounded-t-md px-3 py-2 text-sm transition-colors ${
+              activeTab === tab.id
+                ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === "account" && <AccountSection />}
+      {activeTab === "instruments" && <InstrumentSection />}
+      {activeTab === "midi" && <MidiSection />}
+      {activeTab === "narration" && <NarrationSection />}
+      {activeTab === "library" && <SongLibrarySection />}
     </div>
   );
 }
