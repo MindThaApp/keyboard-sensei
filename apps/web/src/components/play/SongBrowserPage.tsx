@@ -18,6 +18,30 @@ const formatDuration = (seconds: number): string => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
+/**
+ * Whether the sheet music is REAL engraved notation shipped with the song
+ * (MusicXML, from an archive import) or reconstructed from the MIDI. The API
+ * returns notation_path as a presence indicator only ("available" | null) — it
+ * never leaks the real filesystem path.
+ */
+function NotationBadge({ engraved }: { engraved: boolean }) {
+  return engraved ? (
+    <span
+      title="Ships with real engraved sheet music (MusicXML) — what you see is the published score"
+      className="hidden shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 sm:inline dark:bg-emerald-900/40 dark:text-emerald-300"
+    >
+      Engraved
+    </span>
+  ) : (
+    <span
+      title="Sheet music is reconstructed from the MIDI — accurate pitches and rhythm, but not a published engraving"
+      className="hidden shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400"
+    >
+      Generated
+    </span>
+  );
+}
+
 function DifficultyDots({ level }: { level: number }) {
   return (
     <span aria-label={`Difficulty ${level} of 5`} className="inline-flex gap-0.5">
@@ -158,6 +182,7 @@ export default function SongBrowserPage() {
                   <p className="truncate text-xs text-slate-500">{song.artist}</p>
                 </div>
                 {song.content_rights === "archive-import" && <ArchiveBadge />}
+                <NotationBadge engraved={song.notation_path !== null} />
                 <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
                   {song.genre}
                 </span>
