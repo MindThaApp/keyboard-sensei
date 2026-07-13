@@ -1,10 +1,15 @@
 export interface KeyRange { lowestNote: number; highestNote: number }
-export type KeyboardRangeMode = "auto" | "explicit";
+export type KeyboardRangeMode = "auto" | "calibrated" | "explicit";
 export type KeyboardSize = 25 | 37 | 49 | 61 | 76 | 88;
 export interface KeyboardRangePreference {
   mode: KeyboardRangeMode;
   range: KeyRange;
   keys?: KeyboardSize;
+}
+export interface KeyboardDeviceIdentity {
+  id?: string;
+  name?: string;
+  manufacturer?: string;
 }
 
 /** A real piano: A0-C8. The on-screen keyboard never goes outside this. */
@@ -51,9 +56,8 @@ export function growRange(range: KeyRange, note: number): KeyRange {
   };
 }
 
-/** The span that covers both ranges. Play-Along needs this: the keyboard must show
- *  every key the *song* uses (or those notes would be unplayable and render off-key)
- *  as well as every key the *device* has. */
+/** The span that covers both ranges. Kept as pure range logic for callers/tests that
+ *  need an inclusive display span, not as the default piano view. */
 export function unionRange(a: KeyRange, b: KeyRange): KeyRange {
   return {
     lowestNote: snapDown(Math.min(a.lowestNote, b.lowestNote)),
@@ -61,7 +65,14 @@ export function unionRange(a: KeyRange, b: KeyRange): KeyRange {
   };
 }
 
-const storageKey = (deviceName: string) => `keyboard-sensei-range:${deviceName}`;
+export function deviceIdentityKey(device: KeyboardDeviceIdentity): string {
+  const manufacturer = device.manufacturer?.trim();
+  const name = device.name?.trim();
+  if (manufacturer || name) return `${manufacturer ?? ""}::${name ?? ""}`;
+  return device.id?.trim() || "unknown-midi-device";
+}
+
+const storageKey = (deviceKey: string) => `keyboard-sensei-range:${deviceKey}`;
 
 function normalizeRange(range: KeyRange): KeyRange {
   return { lowestNote: snapDown(range.lowestNote), highestNote: snapUp(range.highestNote) };
@@ -104,8 +115,9 @@ export function loadRangePreference(deviceName: string): KeyboardRangePreference
     }
     const storedRange = "range" in parsed ? parsed.range : parsed;
     if (typeof storedRange?.lowestNote !== "number" || typeof storedRange?.highestNote !== "number") return null;
+    const mode = parsed.mode === "calibrated" ? "calibrated" : "auto";
     return {
-      mode: "auto",
+      mode,
       range: normalizeRange({ lowestNote: storedRange.lowestNote, highestNote: storedRange.highestNote }),
     };
   } catch {
@@ -119,4 +131,14 @@ export function explicitRangePreference(keys: KeyboardSize): KeyboardRangePrefer
 
 export function autoRangePreference(range: KeyRange = DEFAULT_RANGE): KeyboardRangePreference {
   return { mode: "auto", range };
+}
+
+export function calibratedRangePreference(lowNote: number, highNote: number): KeyboardRangePreference {
+  return {
+    mode: "calibrated",
+    range: normalizeRange({
+      lowestNote: Math.min(lowNote, highNote),
+      highestNote: Math.max(lowNote, highNote),
+    }),
+  };
 }
