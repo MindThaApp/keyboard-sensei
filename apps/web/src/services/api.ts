@@ -1,6 +1,6 @@
 import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const TOKEN_KEY = "keyboard-sensei-access-token";
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -56,13 +56,50 @@ export interface FeedbackItem {
   status: "open" | "resolved";
   created_at: string;
   user: { email: string; display_name: string } | null;
+  has_screenshot: boolean;
 }
 export const submitFeedback = (type: FeedbackType, message: string, page_path: string) =>
-  request<{ ok: true }>("/feedback", { method: "POST", body: JSON.stringify({ type, message, page_path }) });
+  request<{ id: string }>("/feedback", { method: "POST", body: JSON.stringify({ type, message, page_path }) });
+
+/**
+ * Two requests by design: the message text goes in the JSON body above (never a
+ * query string — it would end up in server access logs), then the raw bytes
+ * attach to the created row. If the image upload fails the feedback itself is
+ * already saved, which is the right way round to lose the race.
+ */
+export const submitFeedbackWithScreenshot = async (
+  type: FeedbackType,
+  message: string,
+  page_path: string,
+  screenshot: File | Blob,
+): Promise<{ ok: true }> => {
+  const { id } = await submitFeedback(type, message, page_path);
+  const token = getToken();
+  const response = await fetch(`${API_URL}/feedback/${encodeURIComponent(id)}/screenshot`, {
+    method: "POST",
+    headers: { "content-type": screenshot.type || "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: screenshot,
+  });
+  const body = await response.json().catch(() => null) as ({ ok: true } & { error?: { message?: string } }) | null;
+  if (!response.ok) throw new Error(body?.error?.message ?? `Screenshot upload failed (${response.status}) — your feedback was still saved.`);
+  return body as { ok: true };
+};
+
 export const getAdminFeedback = (status: "open" | "resolved" | "all") =>
   request<{ feedback: FeedbackItem[] }>(`/admin/feedback?status=${status}`);
 export const setFeedbackStatus = (id: string, status: "open" | "resolved") =>
   request<{ id: string; status: string }>(`/admin/feedback/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+
+// The screenshot route is authed (admin-only), so it can't be used as a plain
+// <img src>; fetch the bytes with the bearer token and hand back a blob URL.
+export const getAdminFeedbackScreenshot = async (id: string): Promise<string> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/admin/feedback/${encodeURIComponent(id)}/screenshot`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Could not load screenshot (${response.status})`);
+  return URL.createObjectURL(await response.blob());
+};
 
 // --- Admin: users ---
 export interface AdminUser {
@@ -123,6 +160,7 @@ export interface PlayAlongAttemptSummary {
   score: number;
   accuracy: number;
   tempo_pct: number;
+  tempo_bpm: number | null;
   lookahead_s: number;
   wait_mode: boolean;
   created_at: string;
@@ -138,9 +176,10 @@ export const updateSong = (id: string, fields: Partial<{ title: string; artist: 
   request<Song>(`/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const adminUpdateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre; difficulty: number }>) =>
   request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export const adminDeleteSong = (id: string) => request<{ ok: true }>(`/admin/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getMyPlayAlongAttempts = () =>
   request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
-export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; lookahead_s: number; wait_mode: boolean }) =>
+export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) =>
   request<{ id: string; score: number; accuracy: number }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
 
 // --- Dashboard ---
@@ -236,3 +275,38 @@ export const fetchUrlPreview = async (url: string): Promise<UrlPreview> => {
     difficulty: Number(response.headers.get("x-song-difficulty") ?? 1),
   };
 };
+
+export const createAdminUser = (fields: { email: string; display_name: string; password: string; role: "user" | "admin" }) =>
+  request<Pick<AdminUser, "id" | "email" | "display_name" | "role">>("/admin/users", { method: "POST", body: JSON.stringify(fields) });
+
+// --- Instruments (sampled voices) ---
+export type InstrumentCategory = "piano" | "keys" | "more";
+export interface InstrumentInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: InstrumentCategory;
+  content_rights: string;
+  source_url: string | null;
+  mine: boolean;
+  created_at: string;
+}
+export const getInstruments = () => request<{ instruments: InstrumentInfo[] }>("/instruments");
+export const deleteInstrument = (id: string) => request<{ ok: true }>(`/instruments/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const uploadInstrument = async (
+  file: File | Blob,
+  meta: { name: string; description: string; category: InstrumentCategory },
+): Promise<InstrumentInfo> => {
+  const token = getToken();
+  const params = new URLSearchParams({ name: meta.name, description: meta.description, category: meta.category });
+  const response = await fetch(`${API_URL}/instruments/upload?${params}`, {
+    method: "POST",
+    headers: { "content-type": file.type || "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const body = await response.json().catch(() => null) as (InstrumentInfo & { error?: { message?: string } }) | null;
+  if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
+  return body as InstrumentInfo;
+};
+export const importInstrumentFromUrl = (fields: { url: string; name: string; description: string; category: InstrumentCategory }) =>
+  request<InstrumentInfo>("/instruments/import-url", { method: "POST", body: JSON.stringify(fields) });

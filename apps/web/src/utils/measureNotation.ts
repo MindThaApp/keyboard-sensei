@@ -54,11 +54,46 @@ function restsForGap(beats: number): NoteData[] {
 }
 
 /**
+ * A bar length in quarter notes, either constant for the whole piece (the
+ * common case) or an array giving each measure's own length by index — for
+ * a window that crosses a mid-piece meter change, where bars are NOT all
+ * the same length. An index past the end of the array reuses the last
+ * entry (the window's trailing bar has nothing further to compare against).
+ */
+export type BarLengths = number | number[];
+
+function barLengthAt(barLengths: BarLengths, measureIndex: number): number {
+  if (typeof barLengths === "number") return barLengths;
+  return barLengths[measureIndex] ?? barLengths[barLengths.length - 1] ?? 4;
+}
+
+function barStartBeat(barLengths: BarLengths, measureIndex: number): number {
+  if (typeof barLengths === "number") return measureIndex * barLengths;
+  let start = 0;
+  for (let i = 0; i < measureIndex; i++) start += barLengthAt(barLengths, i);
+  return start;
+}
+
+/** Finds the measure index containing `beat`, honouring variable per-measure bar lengths. */
+export function measureIndexForBeat(barLengths: BarLengths, beat: number): number {
+  if (typeof barLengths === "number") return Math.floor(beat / barLengths);
+  let index = 0;
+  let start = 0;
+  while (start + barLengthAt(barLengths, index) <= beat + 1e-9) {
+    start += barLengthAt(barLengths, index);
+    index++;
+  }
+  return index;
+}
+
+/**
  * Groups already startBeat-deduplicated events (one per distinct startBeat —
  * callers combine simultaneous/chord notes into a single BeatEvent before
- * calling this) into measures of `beatsPerBar` beats each, filling any
- * leading or trailing gap in a measure with rests so barlines land at their
- * correct visual position even when a phrase doesn't fully fill every bar.
+ * calling this) into measures, filling any leading or trailing gap in a
+ * measure with rests so barlines land at their correct visual position even
+ * when a phrase doesn't fully fill every bar. `beatsPerBar` may be a single
+ * constant (the common case) or a per-measure-index array for a span that
+ * crosses a mid-piece meter change, where bars are not all the same length.
  *
  * Every measure index from 0 through the highest occupied measure (or
  * through `minMeasureCount - 1`, if that's higher) gets an entry in the
@@ -70,13 +105,13 @@ function restsForGap(beats: number): NoteData[] {
  * `minMeasureCount` to both calls so a hand that rests for a full bar
  * doesn't fall out of alignment with the other hand.
  */
-export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: number, minMeasureCount?: number): NoteData[][] {
+export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: BarLengths, minMeasureCount?: number): NoteData[][] {
   const sorted = [...events].sort((a, b) => a.startBeat - b.startBeat);
 
   const eventsByMeasure = new Map<number, BeatEvent[]>();
   let highestMeasureIndex = -1;
   for (const event of sorted) {
-    const measureIndex = Math.floor(event.startBeat / beatsPerBar);
+    const measureIndex = measureIndexForBeat(beatsPerBar, event.startBeat);
     eventsByMeasure.set(measureIndex, [...(eventsByMeasure.get(measureIndex) ?? []), event]);
     highestMeasureIndex = Math.max(highestMeasureIndex, measureIndex);
   }
@@ -85,15 +120,16 @@ export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: number, minM
   const measures: NoteData[][] = [];
 
   for (let measureIndex = 0; measureIndex <= lastMeasureIndex; measureIndex++) {
+    const barLength = barLengthAt(beatsPerBar, measureIndex);
     const measureEvents = eventsByMeasure.get(measureIndex);
     if (!measureEvents) {
-      measures.push(restsForGap(beatsPerBar));
+      measures.push(restsForGap(barLength));
       continue;
     }
 
     const measure: NoteData[] = [];
     let beatsUsedInMeasure = 0;
-    const measureStartBeat = measureIndex * beatsPerBar;
+    const measureStartBeat = barStartBeat(beatsPerBar, measureIndex);
     const leadGap = measureEvents[0].startBeat - measureStartBeat;
     if (leadGap > 1e-6) {
       measure.push(...restsForGap(leadGap));
@@ -103,7 +139,7 @@ export function groupIntoMeasures(events: BeatEvent[], beatsPerBar: number, minM
       measure.push({ ids: event.ids, keys: event.keys, duration: beatsToVexDuration(event.durationBeats) });
       beatsUsedInMeasure += event.durationBeats;
     }
-    const trailingGap = beatsPerBar - beatsUsedInMeasure;
+    const trailingGap = barLength - beatsUsedInMeasure;
     if (trailingGap > 1e-6) measure.push(...restsForGap(trailingGap));
     measures.push(measure);
   }

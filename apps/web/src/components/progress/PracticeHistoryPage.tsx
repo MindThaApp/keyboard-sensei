@@ -56,7 +56,7 @@ function PlayAlongRow({ attempt }: { attempt: PlayAlongAttemptSummary }) {
           {attempt.title}
         </Link>
         <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-          {attempt.artist} · {attempt.tempo_pct}% tempo · {attempt.lookahead_s}s visibility · accuracy {Math.round(attempt.accuracy)}%
+          {attempt.artist} · {attempt.tempo_bpm ? `${Math.round(attempt.tempo_bpm)} BPM` : `${Math.round(attempt.tempo_pct)}% tempo`} · {attempt.lookahead_s}s visibility · accuracy {Math.round(attempt.accuracy)}%
         </p>
       </div>
       <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{new Date(attempt.created_at).toLocaleString()}</span>

@@ -31,6 +31,7 @@ model User {
   progress           UserProgress[]
   feedback           Feedback[]
   songs              Song[]
+  instruments        Instrument[]
   playalong_attempts PlayAlongAttempt[]
   achievements       UserAchievement[]
 }
@@ -53,6 +54,10 @@ model Feedback {
   page_path  String
   user_agent String
   status     String   @default("open")
+  // Filename within FEEDBACK_SCREENSHOT_DIR, not a path -- served via
+  // GET /admin/feedback/:id/screenshot behind requireAdmin, never returned
+  // to clients directly (see the notation_path lesson in songs.ts).
+  screenshot String?
   created_at DateTime @default(now())
   user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
 }
@@ -75,6 +80,19 @@ model Song {
   attempts       PlayAlongAttempt[]
 }
 
+model Instrument {
+  id             String   @id @default(cuid())
+  name           String
+  description    String
+  category       String
+  pack_path      String
+  source_url     String?
+  uploader_id    String?
+  content_rights String
+  created_at     DateTime @default(now())
+  uploader       User?    @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
+}
+
 model ArchiveEntry {
   id           String @id @default(cuid())
   title        String
@@ -91,7 +109,16 @@ model PlayAlongAttempt {
   song_id     String
   score       Float
   accuracy    Float
-  tempo_pct   Int
+  // Playback rate as a percentage of the song's own tempo. Continuous since
+  // 2026-07-12 (was Int 25/50/75/100). This is the authoritative field: it is
+  // meaningful for every song, including the rubato/tempo-curve performance
+  // MIDIs the library is built from.
+  tempo_pct   Float
+  // Absolute BPM the user chose, recorded only when the song had a single
+  // stable tempo to derive it from. NULL for every pre-2026-07-12 row and for
+  // any song whose MIDI has a tempo curve — Song has no bpm column and
+  // tempos[0] is a fiction for those, so this is display-only, never scored.
+  tempo_bpm   Float?
   lookahead_s Float
   wait_mode   Boolean
   created_at  DateTime @default(now())

@@ -22,6 +22,7 @@ import { currentTtsPeriod, ensureTtsUsage, getOrCreateNarration, summarizeUsage,
 import { feedbackRouter } from "./feedback.js";
 import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
+import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { dashboardRouter } from "./dashboard.js";
 
@@ -68,7 +69,9 @@ const performedSchema = z.object({
   durationMs: z.number().nonnegative().nullable(),
 });
 
-const tempoPctSchema = z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(100)]);
+// Continuous since 2026-07-12 (was the literal union 25|50|75|100). Lessons drive
+// this from a real 25-200 BPM slider against the exercise's authored tempoBpm.
+const tempoPctSchema = z.number().min(10).max(250);
 
 const performanceSchema = z
   .object({
@@ -217,6 +220,7 @@ app.use(requireAuth);
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
 app.use(songsRouter);
+app.use(instrumentsRouter);
 app.use(archiveRouter);
 app.use(dashboardRouter);
 

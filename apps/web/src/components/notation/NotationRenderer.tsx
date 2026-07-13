@@ -11,6 +11,7 @@ import {
   Dot,
   type RenderContext,
 } from "vexflow";
+import { midiToVexKey } from "../../utils/measureNotation";
 
 interface NoteData {
   ids?: string[];
@@ -36,6 +37,22 @@ interface GrandStaffData {
 }
 
 type NotationData = SimpleStaveData | GrandStaffData;
+export interface NotationVerticalRange {
+  lowestNote: number;
+  highestNote: number;
+}
+
+interface StaveYGeometry {
+  getYForLine(line: number): number;
+  getYForNote(line: number): number;
+}
+
+interface CropBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 function isGrandStaffData(data: Record<string, unknown>): boolean {
   return data.grandStaff === true && !!data.treble && !!data.bass;
@@ -142,10 +159,10 @@ function buildStaveNote(
  * Scale width with note count instead, with overflow-x-auto on the
  * container as a fallback for anything still too wide to fit comfortably.
  */
-const NOTE_WIDTH_PX = 34;
-const BARLINE_WIDTH_PX = 14;
+export const NOTE_WIDTH_PX = 34;
+export const BARLINE_WIDTH_PX = 14;
 const KEY_SIG_ACCIDENTAL_PX = 12;
-const STAVE_MARGIN_PX = 90;
+export const STAVE_MARGIN_PX = 90;
 function computeStaveWidth(noteCount: number): number {
   return Math.max(420, noteCount * NOTE_WIDTH_PX + STAVE_MARGIN_PX);
 }
@@ -234,6 +251,10 @@ function drawStaveSystem(
   keySignature: string | undefined,
   timeSignature: string | undefined,
   activeNoteIds: Set<string> | undefined,
+  /** When provided, each drawn note's post-format x pixel is appended here,
+   *  once per id in its `NoteData.ids` — the primitive ScrollingScore uses
+   *  to build its beat→x cursor mapping (see NotationRenderer's `onLayout`). */
+  positions?: { id: string; x: number }[],
 ): Stave {
   const stave = new Stave(x, y, width);
   stave.addClef(clef);
@@ -243,13 +264,16 @@ function drawStaveSystem(
 
   const sigAccidentals = keySignatureAccidentals(keySignature);
   const tickables: (StaveNote | BarNote)[] = [];
+  const noteEntries: { note: StaveNote; ids?: string[] }[] = [];
   let noteCount = 0;
   measures.forEach((measure, measureIndex) => {
     // One voice for the whole system; BarNote tickables (tick-free by
     // design) render the barlines between measure groups.
     if (measureIndex > 0) tickables.push(new BarNote());
     measure.forEach((n) => {
-      tickables.push(buildStaveNote(n, clef, sigAccidentals, activeNoteIds));
+      const staveNote = buildStaveNote(n, clef, sigAccidentals, activeNoteIds);
+      tickables.push(staveNote);
+      if (positions) noteEntries.push({ note: staveNote, ids: n.ids });
       noteCount += 1;
     });
   });
@@ -265,7 +289,98 @@ function drawStaveSystem(
     voice.draw(context, stave);
   }
 
+  // getAbsoluteX() is only meaningful once the voice has been formatted and
+  // drawn above — it reads back the x the Formatter actually assigned.
+  if (positions) {
+    for (const { note, ids } of noteEntries) {
+      if (!ids || ids.length === 0) continue;
+      const noteX = note.getAbsoluteX();
+      for (const id of ids) positions.push({ id, x: noteX });
+    }
+  }
+
   return stave;
+}
+
+/**
+ * The pre-draw `renderer.resize(...)` calls above size the SVG generously
+ * (clef/key-signature/margin worst-case) so nothing clips *during* drawing —
+ * VexFlow's SVG root has `overflow: hidden` by spec, so anything drawn
+ * outside the declared width/height is invisible. That fixed padding is also
+ * where a lot of empty space above/below/right-of the notes came from.
+ * After drawing, measure the ACTUAL ink extents (`getBBox`, which includes
+ * ledger lines and accidentals — anything really drawn) and shrink the SVG's
+ * viewBox/width/height down to that, with a small pad. This sizes to real
+ * content instead of guessing a smaller constant (see the "magic numbers"
+ * lesson in docs/agent-briefing.md — a previous clipping bug here came from
+ * exactly that kind of guess).
+ */
+// Breathing room around the cropped ink. getBBox() returns the GEOMETRY box, which
+// in some browsers excludes stroke width, so a hairline stem or ledger line can sit
+// a pixel or two outside it. Keep this comfortably above zero: clipping a low note
+// is far worse than a few px of margin.
+const CONTENT_HUG_PAD_PX = 10;
+const NOTEHEAD_RADIUS_IN_STAFF_SPACES = 0.5;
+const EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES = 0.35;
+
+function staffSpacePx(stave: StaveYGeometry): number {
+  return Math.abs(stave.getYForLine(1) - stave.getYForLine(0));
+}
+
+function midiStaffLine(note: number, clef: string): number {
+  const staveNote = new StaveNote({ keys: [midiToVexKey(note)], duration: "q", clef });
+  return staveNote.getKeyProps()[0].line;
+}
+
+function yForMidi(stave: StaveYGeometry, note: number, clef: string): number {
+  return stave.getYForNote(midiStaffLine(note, clef));
+}
+
+export function expandCropBoxForVerticalRange(
+  box: CropBox,
+  verticalRange: NotationVerticalRange | undefined,
+  staves: { treble?: StaveYGeometry; bass?: StaveYGeometry; single?: { stave: StaveYGeometry; clef: string } },
+): CropBox {
+  if (!verticalRange) return box;
+  const topStave = staves.treble ?? staves.single?.stave;
+  const bottomStave = staves.bass ?? staves.single?.stave;
+  const topClef = staves.treble ? "treble" : staves.single?.clef;
+  const bottomClef = staves.bass ? "bass" : staves.single?.clef;
+  if (!topStave || !bottomStave || !topClef || !bottomClef) return box;
+
+  const topPad = staffSpacePx(topStave) * (NOTEHEAD_RADIUS_IN_STAFF_SPACES + EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES);
+  const bottomPad = staffSpacePx(bottomStave) * (NOTEHEAD_RADIUS_IN_STAFF_SPACES + EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES);
+  const requiredTop = yForMidi(topStave, verticalRange.highestNote, topClef) - topPad;
+  const requiredBottom = yForMidi(bottomStave, verticalRange.lowestNote, bottomClef) + bottomPad;
+
+  const top = Math.min(box.y, requiredTop);
+  const bottom = Math.max(box.y + box.height, requiredBottom);
+  return { ...box, y: top, height: bottom - top };
+}
+
+function hugContent(
+  container: HTMLDivElement,
+  verticalRange?: NotationVerticalRange,
+  staves: { treble?: Stave; bass?: Stave; single?: { stave: Stave; clef: string } } = {},
+): void {
+  const svg = container.querySelector("svg");
+  if (!svg || typeof (svg as SVGGraphicsElement).getBBox !== "function") return;
+  let bbox: DOMRect;
+  try {
+    bbox = (svg as SVGGraphicsElement).getBBox();
+  } catch {
+    return; // getBBox can throw before layout in some non-browser test environments
+  }
+  if (!bbox.width || !bbox.height) return;
+  const cropBox = expandCropBoxForVerticalRange(bbox, verticalRange, staves);
+  const width = cropBox.width + CONTENT_HUG_PAD_PX * 2;
+  const height = cropBox.height + CONTENT_HUG_PAD_PX * 2;
+  svg.setAttribute(
+    "viewBox",
+    `${cropBox.x - CONTENT_HUG_PAD_PX} ${cropBox.y - CONTENT_HUG_PAD_PX} ${width} ${height}`,
+  );
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
 }
 
 /**
@@ -278,25 +393,42 @@ export default function NotationRenderer({
   data,
   title,
   activeNoteIds,
+  maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
+  onLayout,
+  verticalRange,
 }: {
   data: Record<string, unknown>;
   title?: string;
   /** ExpectedNoteEvent ids (or play-along note ids) currently due to be played — tinted on the stave. */
   activeNoteIds?: Set<string>;
+  /** Width (px) at which a system wraps to a new line. Callers that need a
+   *  height that never jumps (e.g. a rolling preview strip) can pass
+   *  Infinity to force exactly one system regardless of note density. */
+  maxSystemWidthPx?: number;
+  /** Fires once per render with each drawn note's post-format absolute x pixel
+   *  (one entry per id in its `NoteData.ids`) — how ScrollingScore learns
+   *  where each beat landed on the ribbon. Read via a ref internally, so it
+   *  need not be memoized by the caller and never re-triggers this effect. */
+  onLayout?: (positions: { id: string; x: number }[]) => void;
+  verticalRange?: NotationVerticalRange;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onLayoutRef = useRef(onLayout);
+  onLayoutRef.current = onLayout;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     container.innerHTML = "";
+    const positions: { id: string; x: number }[] = [];
+    const rangeStaves: { treble?: Stave; bass?: Stave; single?: { stave: Stave; clef: string } } = {};
 
     try {
       if (isGrandStaffData(data)) {
         const grandStaffData = data as unknown as GrandStaffData;
         const trebleMeasures = measuresOf(grandStaffData.treble);
         const bassMeasures = measuresOf(grandStaffData.bass);
-        const systems = chunkGrandStaffIntoSystems(trebleMeasures, bassMeasures, MAX_SYSTEM_WIDTH_PX);
+        const systems = chunkGrandStaffIntoSystems(trebleMeasures, bassMeasures, maxSystemWidthPx);
         const widths = systems.map(({ treble, bass }) =>
           Math.max(
             systemWidth(treble, grandStaffData.treble.keySignature),
@@ -316,13 +448,15 @@ export default function NotationRenderer({
           const trebleStave = drawStaveSystem(
             context, system.treble, grandStaffData.treble.clef, 20, y, widths[i] - 40,
             grandStaffData.treble.keySignature, i === 0 ? grandStaffData.treble.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
           const bassStave = drawStaveSystem(
             context, system.bass, grandStaffData.bass.clef, 20, y + 90, widths[i] - 40,
             grandStaffData.bass.keySignature, i === 0 ? grandStaffData.bass.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
+          rangeStaves.treble ??= trebleStave;
+          rangeStaves.bass ??= bassStave;
           const brace = new StaveConnector(trebleStave, bassStave);
           brace.setType("brace");
           brace.setContext(context).draw();
@@ -333,7 +467,7 @@ export default function NotationRenderer({
       } else {
         const staveData = data as unknown as SimpleStaveData;
         const measures = measuresOf(staveData);
-        const chunks = chunkMeasuresIntoSystems(measures, MAX_SYSTEM_WIDTH_PX);
+        const chunks = chunkMeasuresIntoSystems(measures, maxSystemWidthPx);
         const widths = chunks.map((chunk) => systemWidth(chunk, staveData.keySignature));
         const width = Math.max(...widths, 420);
         const totalHeight = chunks.length * SINGLE_STAVE_HEIGHT_PX + Math.max(chunks.length - 1, 0) * SYSTEM_GAP_PX;
@@ -344,23 +478,26 @@ export default function NotationRenderer({
 
         chunks.forEach((chunk, i) => {
           const y = 20 + i * (SINGLE_STAVE_HEIGHT_PX + SYSTEM_GAP_PX);
-          drawStaveSystem(
+          const stave = drawStaveSystem(
             context, chunk, staveData.clef, 10, y, widths[i] - 20,
             staveData.keySignature, i === 0 ? staveData.timeSignature : undefined,
-            activeNoteIds,
+            activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
+          rangeStaves.single ??= { stave, clef: staveData.clef };
         });
       }
+      hugContent(container, verticalRange, rangeStaves);
+      onLayoutRef.current?.(positions);
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
         '<p class="text-sm text-rose-600">Notation could not be rendered.</p>';
     }
-  }, [data, activeNoteIds]);
+  }, [data, activeNoteIds, maxSystemWidthPx, verticalRange]);
 
   return (
     <div className="max-w-full overflow-x-auto">
-      <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-3 text-slate-900 shadow-sm">
+      <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-1 text-slate-900 shadow-sm">
         {title && <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h3>}
         <div ref={containerRef} className="overflow-x-auto" />
       </div>

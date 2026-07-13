@@ -31,6 +31,8 @@ services:
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
+      - keyboard-sensei-instruments:/app/apps/api/data/instruments
+      - keyboard-sensei-feedback-screenshots:/app/apps/api/data/feedback-screenshots
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,13 +43,32 @@ services:
   web:
     # VITE_API_URL is baked into this image at CI build time (see .github/workflows/ci.yml).
     image: ghcr.io/ramin-azizi/keyboard-sensei-web:latest
-    ports:
-      - "8181:80"
     depends_on:
       - api
+    restart: unless-stopped
+
+  # HTTPS on the LAN so Web MIDI (navigator.requestMIDIAccess) works — browsers only
+  # allow it in a "secure context", which plain http://<lan-ip> never satisfies. Uses
+  # Caddy's own internal CA (not mkcert, not a public CA) since this is LAN-only, not
+  # exposed to the internet. Devices that want real MIDI hardware need to trust that
+  # CA once (see the deploy notes for how to fetch it from the caddy_data volume).
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - keyboard-sensei-caddy-data:/data
+      - keyboard-sensei-caddy-config:/config
+    ports:
+      - "8181:8181"
+    depends_on:
+      - web
     restart: unless-stopped
 
 volumes:
   keyboard-sensei-postgres-data:
   keyboard-sensei-tts-cache:
   keyboard-sensei-midi-library:
+  keyboard-sensei-instruments:
+  keyboard-sensei-feedback-screenshots:
+  keyboard-sensei-caddy-data:
+  keyboard-sensei-caddy-config:

@@ -23,16 +23,22 @@ export class WebMidiAdapter implements MidiAdapter {
   private access: MIDIAccess | null = null;
   private noteOn: NoteOnCallback = () => undefined;
   private noteOff: NoteOffCallback = () => undefined;
+  private stateChange: (devices: MidiDeviceInfo[]) => void = () => undefined;
   static isSupported(): boolean { return typeof navigator !== "undefined" && "requestMIDIAccess" in navigator && globalThis.isSecureContext }
   async connect(): Promise<void> {
     if (!WebMidiAdapter.isSupported()) throw new Error("Web MIDI is unavailable; use MockMidiAdapter");
     this.access = await navigator.requestMIDIAccess();
     this.access.inputs.forEach(input => { input.onmidimessage = (event: MIDIMessageEvent) => this.handleMessage(event) });
+    this.access.onstatechange = () => {
+      this.access?.inputs.forEach(input => { input.onmidimessage = (event: MIDIMessageEvent) => this.handleMessage(event) });
+      this.stateChange(this.listDevices());
+    };
   }
   disconnect(): void { this.access?.inputs.forEach(input => { input.onmidimessage = null }); this.access = null }
   listDevices(): MidiDeviceInfo[] { const devices: MidiDeviceInfo[]=[]; this.access?.inputs.forEach(({id,name,manufacturer})=>devices.push({id,name:name??"MIDI input",...(manufacturer?{manufacturer}:{})})); return devices }
   onNoteOn(cb: NoteOnCallback): void { this.noteOn = cb }
   onNoteOff(cb: NoteOffCallback): void { this.noteOff = cb }
+  onStateChange(cb: (devices: MidiDeviceInfo[]) => void): void { this.stateChange = cb }
   private handleMessage(event: MIDIMessageEvent): void {
     const data = event.data;
     if (!data) return;

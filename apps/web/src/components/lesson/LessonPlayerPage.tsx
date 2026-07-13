@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
 import TheoryCardSectionView from "./TheoryCardSectionView";
-import NotationRenderer from "../notation/NotationRenderer";
+import LiveNotationSection from "../notation/LiveNotationSection";
 import QuizSectionView from "../quiz/QuizSectionView";
 import MidiExercise from "../midi/MidiExercise";
+import MidiStatusBar from "../midi/MidiStatusBar";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
 import { getLesson } from "../../services/api";
@@ -70,7 +71,8 @@ export default function LessonPlayerPage() {
   const nextUnlocked = nextLesson !== null && nextLesson.progress.status !== "locked";
 
   return (
-    <div className="space-y-6">
+    // Full-bleed, same reason as Practice Gym: the keyboard needs the width.
+    <div className="mx-[calc(50%-50vw)] w-screen space-y-6 px-4">
       <div>
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link to="/" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
@@ -110,6 +112,8 @@ export default function LessonPlayerPage() {
         </p>
       )}
 
+      {lesson.sections.some((section) => section.type === "midi-exercise") && <MidiStatusBar />}
+
       <div className="space-y-6">
         {lesson.sections.map((section, sectionIndex) => {
           switch (section.type) {
@@ -118,7 +122,7 @@ export default function LessonPlayerPage() {
             case "theory-card":
               return <TheoryCardSectionView key={sectionIndex} section={section} lessonId={lesson.id} sectionIndex={sectionIndex} />;
             case "notation":
-              return <NotationRenderer key={sectionIndex} data={section.vexflowData} title={section.title} />;
+              return <LiveNotationSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
             case "quiz":
               return <QuizSectionView key={sectionIndex} section={section} />;
             case "midi-exercise":
