@@ -453,12 +453,6 @@ export default function VirtualPiano({
     }
   }
 
-  const isFullPiano = range.lowestNote <= PIANO_LOWEST && range.highestNote >= PIANO_HIGHEST;
-
-  function showFullKeyboard() {
-    showRange({ lowestNote: PIANO_LOWEST, highestNote: PIANO_HIGHEST }, "full");
-  }
-
   const fitToggleLabel = recommendedRange && rangeView === "recommended" ? "Fit to my keyboard" : recommendedRange ? "Fit to song" : "Fit";
 
   return (
@@ -550,18 +544,7 @@ export default function VirtualPiano({
         </div>
       </div>
       <div className="mt-1 flex items-center justify-end gap-1">
-        <div className="mr-auto flex items-center gap-1">
-          {!isFullPiano && (
-            <button
-              type="button"
-              onClick={showFullKeyboard}
-              title="Show all 88 keys, sized to fit the screen"
-              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Full keyboard
-            </button>
-          )}
-        </div>
+        <div className="mr-auto flex items-center gap-1" />
         <InstrumentPicker compact />
         <button
           type="button"
