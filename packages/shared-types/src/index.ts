@@ -32,7 +32,7 @@ export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "mi
 export interface ScoringMistake { noteId: string | null; expectedNote: number | null; performedNote: number | null; chordGroupId: string | null; issue: ScoringIssue }
 export interface ScoringResult { score: number; noteAccuracy: number; timingAccuracy: number; rhythmAccuracy: number; chordAccuracy: number; feedback: string[]; mistakes: ScoringMistake[] }
 export interface MidiDeviceInfo { id: string; name: string; manufacturer?: string }
-export interface MidiAdapter { connect(): Promise<void>; disconnect(): void; listDevices(): MidiDeviceInfo[]; onNoteOn(cb: (note: number, velocity: number, timestampMs: number) => void): void; onNoteOff(cb: (note: number, timestampMs: number) => void): void }
+export interface MidiAdapter { connect(): Promise<void>; disconnect(): void; listDevices(): MidiDeviceInfo[]; onNoteOn(cb: (note: number, velocity: number, timestampMs: number) => void): void; onNoteOff(cb: (note: number, timestampMs: number) => void): void; onControlChange(cb: (controller: number, value: number) => void): void }
 
 export type LessonStatus = "locked" | "unlocked" | "completed";
 export interface LessonProgress { lessonId: string; status: LessonStatus; bestScore: number; completedAt: string | null }

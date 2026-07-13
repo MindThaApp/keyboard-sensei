@@ -450,57 +450,6 @@ export default function VirtualPiano({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="mb-1 flex items-center justify-end gap-1">
-        <div className="mr-auto flex items-center gap-1">
-          {recommendedRange && !fitsPiece && (
-            <button
-              type="button"
-              onClick={fitToPiece}
-              title="Widen the keyboard so every note this piece uses is on screen"
-              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Fit to piece
-            </button>
-          )}
-          {!isFullPiano && (
-            <button
-              type="button"
-              onClick={showFullKeyboard}
-              title="Show all 88 keys, sized to fit the screen"
-              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Full keyboard
-            </button>
-          )}
-        </div>
-        <InstrumentPicker compact />
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={zoomOut}
-          disabled={whiteKeyWidthPx <= ZOOM_MIN_PX}
-          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={zoomIn}
-          disabled={whiteKeyWidthPx >= ZOOM_MAX_PX}
-          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          aria-label="Fit whole keyboard"
-          onClick={zoomToFit}
-          className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
-        >
-          Fit
-        </button>
-      </div>
       <div className={scrollable ? "w-full overflow-x-auto pb-1" : "w-full"}>
         <div
           className="relative mx-auto select-none"
@@ -586,6 +535,57 @@ export default function VirtualPiano({
             onPointerCancel={handleHandlePointerUp}
           />
         </div>
+      </div>
+      <div className="mt-1 flex items-center justify-end gap-1">
+        <div className="mr-auto flex items-center gap-1">
+          {recommendedRange && !fitsPiece && (
+            <button
+              type="button"
+              onClick={fitToPiece}
+              title="Widen the keyboard so every note this piece uses is on screen"
+              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Fit to piece
+            </button>
+          )}
+          {!isFullPiano && (
+            <button
+              type="button"
+              onClick={showFullKeyboard}
+              title="Show all 88 keys, sized to fit the screen"
+              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Full keyboard
+            </button>
+          )}
+        </div>
+        <InstrumentPicker compact />
+        <button
+          type="button"
+          aria-label="Zoom out"
+          onClick={zoomOut}
+          disabled={whiteKeyWidthPx <= ZOOM_MIN_PX}
+          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          onClick={zoomIn}
+          disabled={whiteKeyWidthPx >= ZOOM_MAX_PX}
+          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          aria-label="Fit whole keyboard"
+          onClick={zoomToFit}
+          className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
+        >
+          Fit
+        </button>
       </div>
       {!disabled && (
         <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">

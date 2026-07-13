@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useAuth } from "../../contexts/AuthContext";
+import { useTheme, type AccentTheme } from "../../contexts/ThemeContext";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
@@ -9,11 +10,61 @@ import InstrumentSection from "./InstrumentSection";
 import SongLibrarySection from "./SongLibrarySection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
+import {
+  DEFAULT_RANGE,
+  KEYBOARD_SIZE_OPTIONS,
+  autoRangePreference,
+  explicitRangePreference,
+  type KeyboardSize,
+} from "../../utils/keyboardRange";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
 const TEST_NARRATION_SECTION_INDEX = 0;
+
+const ACCENT_OPTIONS: { id: AccentTheme; label: string; swatch: string }[] = [
+  { id: "felt", label: "Felt Crimson", swatch: "#b4323e" },
+  { id: "ocean", label: "Ocean", swatch: "#0284c7" },
+  { id: "forest", label: "Forest", swatch: "#16a34a" },
+  { id: "violet", label: "Violet", swatch: "#7c3aed" },
+];
+
+function AppearanceSection() {
+  const { accentTheme, setAccentTheme } = useTheme();
+
+  return (
+    <section className="card space-y-4 p-5">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Colours</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Choose an app accent. Light, dark, and midnight modes stay separate.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {ACCENT_OPTIONS.map((option) => {
+          const selected = accentTheme === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setAccentTheme(option.id)}
+              className={`flex items-center gap-3 rounded-md border p-3 text-left transition-colors ${
+                selected
+                  ? "border-felt-500 bg-felt-50 ring-1 ring-felt-500/40 dark:bg-felt-900/30"
+                  : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-500"
+              }`}
+              aria-pressed={selected}
+            >
+              <span className="h-6 w-6 rounded-full border border-black/10" style={{ backgroundColor: option.swatch }} />
+              <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function AccountSection() {
   const { user, setUser } = useAuth();
@@ -319,7 +370,14 @@ function NarrationSection() {
 }
 
 function MidiSection() {
-  const { subscribe } = useMidiContext();
+  const {
+    devices,
+    deviceRange,
+    deviceRangePreference,
+    setDeviceRangePreference,
+    subscribe,
+    sustainPedalDown,
+  } = useMidiContext();
   const [lastNote, setLastNote] = useState<string | null>(null);
   const [highlightEnabled, setHighlightEnabled] = useState(loadHighlightEnabled);
 
@@ -342,6 +400,41 @@ function MidiSection() {
       <p className="text-sm text-slate-600 dark:text-slate-300">
         Last note played: <span className="font-medium text-slate-900 dark:text-slate-100">{lastNote ?? "—"}</span>
       </p>
+      <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-56 flex-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+            My MIDI keyboard
+            <select
+              value={deviceRangePreference.mode === "explicit" ? String(deviceRangePreference.keys) : "auto"}
+              onChange={(e) => {
+                if (e.target.value === "auto") setDeviceRangePreference(autoRangePreference(deviceRange));
+                else setDeviceRangePreference(explicitRangePreference(Number(e.target.value) as KeyboardSize));
+              }}
+              className="input mt-1"
+            >
+              <option value="auto">Learn from what I play</option>
+              {KEYBOARD_SIZE_OPTIONS.map((option) => (
+                <option key={option.keys} value={option.keys}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setDeviceRangePreference(autoRangePreference(DEFAULT_RANGE))}
+            className="secondary-button"
+          >
+            Reset to what I play
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {devices[0]?.name
+            ? `${devices[0].name}: ${midiNoteToName(deviceRange.lowestNote)}-${midiNoteToName(deviceRange.highestNote)}`
+            : "Connect a MIDI keyboard to save this preference for that device."}
+        </p>
+        {sustainPedalDown && <p className="text-xs font-medium text-felt-700 dark:text-felt-300">Sustain pedal down</p>}
+      </div>
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input
           type="checkbox"
@@ -358,10 +451,11 @@ function MidiSection() {
   );
 }
 
-type SettingsTab = "account" | "instruments" | "midi" | "narration" | "library";
+type SettingsTab = "account" | "appearance" | "instruments" | "midi" | "narration" | "library";
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "account", label: "Account" },
+  { id: "appearance", label: "Colours" },
   { id: "instruments", label: "Instruments" },
   { id: "midi", label: "MIDI" },
   { id: "narration", label: "Narration" },
@@ -369,7 +463,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
 ];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
-  return value === "account" || value === "instruments" || value === "midi" || value === "narration" || value === "library";
+  return value === "account" || value === "appearance" || value === "instruments" || value === "midi" || value === "narration" || value === "library";
 }
 
 export default function SettingsPage() {
@@ -404,6 +498,7 @@ export default function SettingsPage() {
         ))}
       </div>
       {activeTab === "account" && <AccountSection />}
+      {activeTab === "appearance" && <AppearanceSection />}
       {activeTab === "instruments" && <InstrumentSection />}
       {activeTab === "midi" && <MidiSection />}
       {activeTab === "narration" && <NarrationSection />}
