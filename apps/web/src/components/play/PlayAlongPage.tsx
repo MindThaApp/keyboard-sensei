@@ -23,7 +23,6 @@ import {
   WATERFALL_COLORS_DARK,
   WATERFALL_COLORS_LIGHT,
 } from "./waterfall";
-import NotationPreviewStrip, { quantizeToBeats } from "./NotationPreviewStrip";
 import { OsmdNotation } from "./OsmdNotation";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 
@@ -45,8 +44,12 @@ const WINDOW_MODE_PX_PER_SECOND = WATERFALL_HEIGHT_PX / 4;
 const WATERFALL_MIN_HEIGHT_PX = 120;
 const WATERFALL_MAX_HEIGHT_PX = 640;
 
-type ViewMode = "falling" | "notation" | "both" | "scrolling";
-const VIEW_MODES: ViewMode[] = ["falling", "notation", "both", "scrolling"];
+// "Sheet music" IS the scrolling ribbon. There used to be a separate "Scrolling
+// score" mode alongside a static rolling-window "Sheet music", but they were two
+// answers to the same question and the ribbon is strictly the better one — it
+// shows more, never page-turns, and keeps the sounding note under your eye.
+type ViewMode = "falling" | "notation" | "both";
+const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
 
 type VisibilityMode = "note-size" | "window-size";
 const VISIBILITY_MODES: VisibilityMode[] = ["note-size", "window-size"];
@@ -227,7 +230,6 @@ export default function PlayAlongPage() {
     () => (range ? keyboardGeometry(range.lowestNote, range.highestNote, whiteKeyWidthPx) : null),
     [range, whiteKeyWidthPx],
   );
-  const quantizedNotes = useMemo(() => (parsed ? quantizeToBeats(parsed.notes, parsed.bpm) : []), [parsed]);
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
   // Recomputed every render from settings (cheap arithmetic) so it's always in sync with
   // whichever visibilityMode/lookaheadS produced it — both the rAF loop (via start()'s
@@ -310,7 +312,7 @@ export default function PlayAlongPage() {
   // rather than showing songTimeS = 0's real cursor position.
   useEffect(() => {
     if (phase === "playing") return;
-    if (settings.viewMode !== "scrolling") return;
+    if (settings.viewMode === "falling") return;
     scrollingScoreRef.current?.setSongTime(0);
   }, [phase, settings.viewMode, parsed]);
 
@@ -612,7 +614,6 @@ export default function PlayAlongPage() {
             { value: "falling" as const, label: "Falling notes" },
             { value: "notation" as const, label: "Sheet music" },
             { value: "both" as const, label: "Both" },
-            { value: "scrolling" as const, label: "Scrolling score" },
           ]).map((option) => (
             <button
               key={option.value}
@@ -687,25 +688,17 @@ export default function PlayAlongPage() {
         </div>
       )}
 
-      {settings.viewMode === "scrolling" && (
-        <ScrollingScore
-          ref={scrollingScoreRef}
-          notes={parsed.notes}
-          grid={parsed.grid}
-          timeSignatureSegments={parsed.timeSignatureSegments}
-          verticalRange={notationVerticalRange}
-        />
-      )}
-
-      {settings.viewMode !== "falling" && settings.viewMode !== "scrolling" && (
+      {settings.viewMode !== "falling" && (
         notationBytes ? (
+          // Archive-imported songs ship real MusicXML — render that rather than a
+          // reconstruction from the MIDI.
           <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />
         ) : (
-          <NotationPreviewStrip
-            notes={quantizedNotes}
+          <ScrollingScore
+            ref={scrollingScoreRef}
+            notes={parsed.notes}
+            grid={parsed.grid}
             timeSignatureSegments={parsed.timeSignatureSegments}
-            songTimeS={Math.max(0, songTimeS)}
-            bpm={parsed.bpm}
             verticalRange={notationVerticalRange}
           />
         )
@@ -717,7 +710,7 @@ export default function PlayAlongPage() {
           falling bars and visually detach from them. */}
       <div ref={stageRef} className="overflow-x-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="mx-auto" style={{ width: geometry.widthPx }}>
-          {settings.viewMode !== "notation" && settings.viewMode !== "scrolling" && (
+          {settings.viewMode !== "notation" && (
             <canvas
               ref={canvasRef}
               style={{ width: geometry.widthPx, height: heightPx, display: "block" }}
