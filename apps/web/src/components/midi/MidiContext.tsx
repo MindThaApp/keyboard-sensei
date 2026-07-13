@@ -14,6 +14,8 @@ import { pianoSynth } from "../../utils/synth";
 import {
   DEFAULT_RANGE,
   autoRangePreference,
+  calibratedRangePreference,
+  deviceIdentityKey,
   growRange,
   loadRangePreference,
   saveRangePreference,
@@ -22,6 +24,10 @@ import {
 } from "../../utils/keyboardRange";
 
 type RawMidiListener = (event: RawMidiEvent) => void;
+type CalibrationState =
+  | { status: "idle" }
+  | { status: "awaitingLow"; deviceKey: string }
+  | { status: "awaitingHigh"; deviceKey: string; lowNote: number };
 
 interface MidiContextValue {
   /** Drives the on-screen virtual keyboard. Always available, hardware or not. */
@@ -34,6 +40,10 @@ interface MidiContextValue {
   setDeviceRange: (r: KeyRange) => void;
   deviceRangePreference: KeyboardRangePreference;
   setDeviceRangePreference: (preference: KeyboardRangePreference) => void;
+  currentDeviceKey: string | null;
+  calibration: CalibrationState;
+  startCalibration: () => void;
+  dismissCalibration: () => void;
   sustainPedalDown: boolean;
   /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
   connectWebMidi: () => Promise<void>;
@@ -60,25 +70,33 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const [webMidiConnected, setWebMidiConnected] = useState(false);
   const [webMidiError, setWebMidiError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MidiDeviceInfo[]>([]);
+  const [currentDeviceKey, setCurrentDeviceKey] = useState<string | null>(null);
   const [deviceRange, setDeviceRangeState] = useState<KeyRange>(DEFAULT_RANGE);
   const [deviceRangePreference, setDeviceRangePreferenceState] = useState<KeyboardRangePreference>(() => autoRangePreference());
   const deviceRangePreferenceRef = useRef<KeyboardRangePreference>(deviceRangePreference);
+  const [calibration, setCalibration] = useState<CalibrationState>({ status: "idle" });
+  const calibrationRef = useRef<CalibrationState>(calibration);
   const [sustainPedalDown, setSustainPedalDown] = useState(false);
 
   const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
 
+  const setCalibrationState = useCallback((next: CalibrationState) => {
+    calibrationRef.current = next;
+    setCalibration(next);
+  }, []);
+
   const setDeviceRange = useCallback((range: KeyRange) => {
-    const name = devicesRef.current[0]?.name;
+    const key = devicesRef.current[0] ? deviceIdentityKey(devicesRef.current[0]) : null;
     const preference = autoRangePreference(range);
-    if (name) saveRangePreference(name, preference);
+    if (key) saveRangePreference(key, preference);
     deviceRangePreferenceRef.current = preference;
     setDeviceRangePreferenceState(preference);
     setDeviceRangeState(range);
   }, []);
 
   const setDeviceRangePreference = useCallback((preference: KeyboardRangePreference) => {
-    const name = devicesRef.current[0]?.name;
-    if (name) saveRangePreference(name, preference);
+    const key = devicesRef.current[0] ? deviceIdentityKey(devicesRef.current[0]) : null;
+    if (key) saveRangePreference(key, preference);
     deviceRangePreferenceRef.current = preference;
     setDeviceRangePreferenceState(preference);
     setDeviceRangeState(preference.range);
@@ -88,14 +106,45 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     devicesRef.current = connectedDevices;
     setDevices(connectedDevices);
 
-    const name = connectedDevices[0]?.name;
-    if (name) {
-      const preference = loadRangePreference(name) ?? autoRangePreference();
+    const device = connectedDevices[0];
+    if (device) {
+      const key = deviceIdentityKey(device);
+      const stored = loadRangePreference(key);
+      const preference = stored ?? autoRangePreference();
+      setCurrentDeviceKey(key);
       deviceRangePreferenceRef.current = preference;
       setDeviceRangePreferenceState(preference);
       setDeviceRangeState(preference.range);
+      const current = calibrationRef.current;
+      if (current.status !== "idle" && current.deviceKey === key) return;
+      setCalibrationState(stored ? { status: "idle" } : { status: "awaitingLow", deviceKey: key });
+    } else {
+      setCurrentDeviceKey(null);
+      setCalibrationState({ status: "idle" });
     }
-  }, []);
+  }, [setCalibrationState]);
+
+  const startCalibration = useCallback(() => {
+    const device = devicesRef.current[0];
+    if (!device) return;
+    setCalibrationState({ status: "awaitingLow", deviceKey: deviceIdentityKey(device) });
+  }, [setCalibrationState]);
+
+  const dismissCalibration = useCallback(() => {
+    const device = devicesRef.current[0];
+    if (!device) return;
+    const key = deviceIdentityKey(device);
+    const currentCalibration = calibrationRef.current;
+    const range = currentCalibration.status === "awaitingHigh"
+      ? growRange(deviceRangePreferenceRef.current.range, currentCalibration.lowNote)
+      : deviceRangePreferenceRef.current.range;
+    const preference = autoRangePreference(range);
+    saveRangePreference(key, preference);
+    deviceRangePreferenceRef.current = preference;
+    setDeviceRangePreferenceState(preference);
+    setDeviceRangeState(preference.range);
+    setCalibrationState({ status: "idle" });
+  }, [setCalibrationState]);
 
   // MidiAdapter#onNoteOn/onNoteOff have no unsubscribe (by design, per the
   // shared interface), so this registration must run exactly once even
@@ -132,13 +181,25 @@ export function MidiProvider({ children }: { children: ReactNode }) {
 
     webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
+      const currentCalibration = calibrationRef.current;
+      const calibrationHandled = currentCalibration.status !== "idle";
+      if (currentCalibration.status === "awaitingLow") {
+        setCalibrationState({ status: "awaitingHigh", deviceKey: currentCalibration.deviceKey, lowNote: note });
+      } else if (currentCalibration.status === "awaitingHigh") {
+        const preference = calibratedRangePreference(currentCalibration.lowNote, note);
+        saveRangePreference(currentCalibration.deviceKey, preference);
+        deviceRangePreferenceRef.current = preference;
+        setDeviceRangePreferenceState(preference);
+        setDeviceRangeState(preference.range);
+        setCalibrationState({ status: "idle" });
+      }
       setDeviceRangeState((current) => {
-        if (deviceRangePreferenceRef.current.mode === "explicit") return current;
+        if (calibrationHandled || deviceRangePreferenceRef.current.mode !== "auto") return current;
         const grown = growRange(current, note);
         if (grown !== current && (grown.lowestNote !== current.lowestNote || grown.highestNote !== current.highestNote)) {
-          const name = devicesRef.current[0]?.name;
+          const key = devicesRef.current[0] ? deviceIdentityKey(devicesRef.current[0]) : null;
           const preference = autoRangePreference(grown);
-          if (name) saveRangePreference(name, preference);
+          if (key) saveRangePreference(key, preference);
           deviceRangePreferenceRef.current = preference;
           setDeviceRangePreferenceState(preference);
           return grown;
@@ -165,7 +226,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         ? "Your MIDI keyboard was disconnected. Plug it back in — it should reconnect automatically."
         : null);
     });
-  }, [syncDevices]);
+  }, [syncDevices, setCalibrationState]);
 
   useEffect(() => {
     const stopEverything = () => {
@@ -249,11 +310,15 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       setDeviceRange,
       deviceRangePreference,
       setDeviceRangePreference,
+      currentDeviceKey,
+      calibration,
+      startCalibration,
+      dismissCalibration,
       sustainPedalDown,
       connectWebMidi,
       subscribe,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, sustainPedalDown, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, currentDeviceKey, calibration, startCalibration, dismissCalibration, sustainPedalDown, connectWebMidi, subscribe],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;

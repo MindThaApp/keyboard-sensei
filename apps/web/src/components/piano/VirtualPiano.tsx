@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey } from "../play/waterfall";
-import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange, unionRange } from "../../utils/keyboardRange";
+import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
 import InstrumentPicker from "../instruments/InstrumentPicker";
 
 const MIDDLE_C = 60;
@@ -23,8 +23,7 @@ export interface VirtualPianoProps {
   highestNote?: number;
   /** Overrides lowestNote/highestNote when provided. Also the range that drag-to-resize mutates. */
   range?: KeyRange;
-  /** Shaded band over the keys actually needed for the current piece, so the user doesn't
-   *  drag the range wider than necessary and shrink every key for nothing. */
+  /** The keys the current song/exercise needs; the Fit control toggles between this and the device range. */
   recommendedRange?: KeyRange;
   /** Notes to highlight as "play these next" — never shown as raw MIDI numbers, just visual key highlighting. */
   expectedNotes?: number[];
@@ -88,6 +87,7 @@ function snapUp(note: number): number {
 }
 
 const MIN_RANGE_SPAN_SEMITONES = 12; // never let dragging collapse below one octave
+type RangeView = "device" | "recommended" | "full" | "custom";
 
 function expandLow(range: KeyRange): KeyRange {
   return { ...range, lowestNote: snapDown(range.lowestNote - 12) };
@@ -123,7 +123,7 @@ export default function VirtualPiano({
   disabled = false,
   scrollable = true,
 }: VirtualPianoProps) {
-  const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange } = useMidiContext();
+  const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -146,10 +146,20 @@ export default function VirtualPiano({
     return { lowestNote, highestNote };
   }, [rangeProp, devices.length, deviceRange, lowestNote, highestNote]);
 
+  const [rangeView, setRangeView] = useState<RangeView>("device");
   const [range, setRange] = useState<KeyRange>(baseRange);
   useEffect(() => {
-    setRange(baseRange);
-  }, [baseRange.lowestNote, baseRange.highestNote]);
+    if (rangeView === "device") setRange(baseRange);
+  }, [rangeView, baseRange.lowestNote, baseRange.highestNote]);
+
+  useEffect(() => {
+    if (rangeView !== "recommended") return;
+    if (recommendedRange) setRange(recommendedRange);
+    else {
+      setRangeView("device");
+      setRange(baseRange);
+    }
+  }, [rangeView, recommendedRange, baseRange]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -168,7 +178,7 @@ export default function VirtualPiano({
     return () => observer.disconnect();
   }, []);
 
-  const deviceName = devices[0]?.name ?? "default";
+  const deviceName = currentDeviceKey ?? "default";
   // Lazy initializers read localStorage exactly once, at the state's real creation — an
   // effect-based read here would race the persist-effect below under React 18 StrictMode's
   // dev-only double-invoke (mount -> cleanup -> mount): the first pass's persist effect
@@ -220,6 +230,24 @@ export default function VirtualPiano({
     if (containerWidth) {
       setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidth)));
     }
+  }
+
+  function showRange(next: KeyRange, view: RangeView) {
+    setRangeView(view);
+    setRange(next);
+    setIsFitMode(true);
+    if (containerWidth) {
+      setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(next.lowestNote, next.highestNote, containerWidth)));
+    }
+  }
+
+  function toggleRecommendedRange() {
+    if (!recommendedRange) {
+      zoomToFit();
+      return;
+    }
+    if (rangeView === "recommended") showRange(baseRange, "device");
+    else showRange(recommendedRange, "recommended");
   }
 
   const geometry = useMemo(
@@ -405,6 +433,7 @@ export default function VirtualPiano({
         drag.accumulatedPx += DRAG_STEP_PX;
       }
       if (next !== current && containerWidth) {
+        if (rangeView !== "device") setRangeView("custom");
         setIsFitMode(true);
         setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(next.lowestNote, next.highestNote, containerWidth)));
       }
@@ -416,7 +445,7 @@ export default function VirtualPiano({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     dragRef.current = null;
-    if (devices.length > 0) {
+    if (devices.length > 0 && rangeView === "device") {
       setRange((current) => {
         setDeviceRange(current);
         return current;
@@ -424,29 +453,13 @@ export default function VirtualPiano({
     }
   }
 
-  // A shaded band across the keys was tried first and was simply ugly — a big
-  // amber overlay sitting on top of the piano whenever the range wasn't an exact
-  // match. A button is quieter: it says what it does, and it disappears once the
-  // keyboard already covers the piece.
-  const fitsPiece =
-    !recommendedRange ||
-    (range.lowestNote <= recommendedRange.lowestNote && range.highestNote >= recommendedRange.highestNote);
-
-  const fitToPiece = useCallback(() => {
-    if (!recommendedRange) return;
-    const next = unionRange(range, recommendedRange);
-    setRange(next);
-    if (devices.length > 0) setDeviceRange(next);
-  }, [recommendedRange, range, devices.length, setDeviceRange]);
-
   const isFullPiano = range.lowestNote <= PIANO_LOWEST && range.highestNote >= PIANO_HIGHEST;
 
-  /** Show all 88 keys, sized to fit the container. */
-  const showFullKeyboard = useCallback(() => {
-    const next = { lowestNote: PIANO_LOWEST, highestNote: PIANO_HIGHEST };
-    setRange(next);
-    if (devices.length > 0) setDeviceRange(next);
-  }, [devices.length, setDeviceRange]);
+  function showFullKeyboard() {
+    showRange({ lowestNote: PIANO_LOWEST, highestNote: PIANO_HIGHEST }, "full");
+  }
+
+  const fitToggleLabel = recommendedRange && rangeView === "recommended" ? "Fit to my keyboard" : recommendedRange ? "Fit to song" : "Fit";
 
   return (
     <div ref={containerRef} className="w-full">
@@ -538,16 +551,6 @@ export default function VirtualPiano({
       </div>
       <div className="mt-1 flex items-center justify-end gap-1">
         <div className="mr-auto flex items-center gap-1">
-          {recommendedRange && !fitsPiece && (
-            <button
-              type="button"
-              onClick={fitToPiece}
-              title="Widen the keyboard so every note this piece uses is on screen"
-              className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Fit to piece
-            </button>
-          )}
           {!isFullPiano && (
             <button
               type="button"
@@ -580,11 +583,11 @@ export default function VirtualPiano({
         </button>
         <button
           type="button"
-          aria-label="Fit whole keyboard"
-          onClick={zoomToFit}
+          aria-label={fitToggleLabel}
+          onClick={toggleRecommendedRange}
           className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
         >
-          Fit
+          {fitToggleLabel}
         </button>
       </div>
       {!disabled && (

@@ -3,7 +3,16 @@ import { useMidiContext } from "./MidiContext";
 
 /** Shows MIDI hardware status and never fails silently on unsupported browsers (Safari/iOS). */
 export default function MidiStatusBar() {
-  const { webMidiSupported, webMidiConnected, webMidiError, devices, subscribe, connectWebMidi } = useMidiContext();
+  const {
+    webMidiSupported,
+    webMidiConnected,
+    webMidiError,
+    devices,
+    calibration,
+    dismissCalibration,
+    subscribe,
+    connectWebMidi,
+  } = useMidiContext();
 
   // Note activity is held locally rather than on the context: a note-on fires on
   // every key press, and putting it on the shared context value would re-render
@@ -44,27 +53,46 @@ export default function MidiStatusBar() {
     showConnectButton = true;
   }
 
+  const calibrationMessage =
+    calibration.status === "awaitingLow"
+      ? "Press the lowest key on your keyboard."
+      : calibration.status === "awaitingHigh"
+        ? "Press the highest key on your keyboard."
+        : null;
+
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200">
-      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
-      <span className="flex-1">{message}</span>
-      {webMidiConnected && (
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-          <span
-            aria-hidden="true"
-            className={`h-2 w-2 rounded-full transition-colors duration-150 ${activityLit ? "bg-emerald-500 dark:bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"}`}
-          />
-          Listening — play a key to test
-        </span>
-      )}
-      {showConnectButton && (
-        <button
-          type="button"
-          onClick={() => void connectWebMidi()}
-          className="secondary-button shrink-0 px-3 py-1 text-xs"
-        >
-          Connect MIDI Keyboard
-        </button>
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200">
+        <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+        <span className="flex-1">{message}</span>
+        {webMidiConnected && (
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full transition-colors duration-150 ${activityLit ? "bg-emerald-500 dark:bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"}`}
+            />
+            Listening — play a key to test
+          </span>
+        )}
+        {showConnectButton && (
+          <button
+            type="button"
+            onClick={() => void connectWebMidi()}
+            className="secondary-button shrink-0 px-3 py-1 text-xs"
+          >
+            Connect MIDI Keyboard
+          </button>
+        )}
+      </div>
+      {calibrationMessage && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100">
+          <span className="flex-1">
+            Calibrate {devices[0]?.name ?? "this keyboard"}: {calibrationMessage}
+          </span>
+          <button type="button" onClick={dismissCalibration} className="secondary-button px-2 py-1 text-xs">
+            Skip
+          </button>
+        </div>
       )}
     </div>
   );

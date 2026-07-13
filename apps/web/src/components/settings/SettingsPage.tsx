@@ -11,7 +11,6 @@ import SongLibrarySection from "./SongLibrarySection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
 import {
-  DEFAULT_RANGE,
   KEYBOARD_SIZE_OPTIONS,
   autoRangePreference,
   explicitRangePreference,
@@ -375,6 +374,8 @@ function MidiSection() {
     deviceRange,
     deviceRangePreference,
     setDeviceRangePreference,
+    currentDeviceKey,
+    startCalibration,
     subscribe,
     sustainPedalDown,
   } = useMidiContext();
@@ -422,15 +423,16 @@ function MidiSection() {
           </label>
           <button
             type="button"
-            onClick={() => setDeviceRangePreference(autoRangePreference(DEFAULT_RANGE))}
+            onClick={startCalibration}
+            disabled={!devices[0]}
             className="secondary-button"
           >
-            Reset to what I play
+            Recalibrate
           </button>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {devices[0]?.name
-            ? `${devices[0].name}: ${midiNoteToName(deviceRange.lowestNote)}-${midiNoteToName(deviceRange.highestNote)}`
+            ? `${devices[0].name}: ${midiNoteToName(deviceRange.lowestNote)}-${midiNoteToName(deviceRange.highestNote)} (${deviceRangePreference.mode}; ${currentDeviceKey ?? "unknown device key"})`
             : "Connect a MIDI keyboard to save this preference for that device."}
         </p>
         {sustainPedalDown && <p className="text-xs font-medium text-felt-700 dark:text-felt-300">Sustain pedal down</p>}
