@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_RANGE, PIANO_HIGHEST, PIANO_LOWEST, growRange, loadRange, saveRange, unionRange } from "./keyboardRange";
+import {
+  DEFAULT_RANGE,
+  PIANO_HIGHEST,
+  PIANO_LOWEST,
+  explicitRangePreference,
+  growRange,
+  loadRange,
+  loadRangePreference,
+  saveRange,
+  saveRangePreference,
+  unionRange,
+} from "./keyboardRange";
 
 describe("growRange", () => {
   it("widens downward for a note below the range", () => {
@@ -46,6 +57,23 @@ describe("persistence", () => {
   it("round-trips a range keyed on device name", () => {
     saveRange("My Piano", { lowestNote: 21, highestNote: 108 });
     expect(loadRange("My Piano")).toEqual({ lowestNote: 21, highestNote: 108 });
+  });
+
+  it("loads old stored ranges as auto-learn preferences", () => {
+    localStorage.setItem("keyboard-sensei-range:Old Piano", JSON.stringify({ lowestNote: 36, highestNote: 96 }));
+    expect(loadRangePreference("Old Piano")).toEqual({
+      mode: "auto",
+      range: { lowestNote: 36, highestNote: 96 },
+    });
+  });
+
+  it("round-trips explicit keyboard size preferences through the existing range key", () => {
+    saveRangePreference("Small Piano", explicitRangePreference(49));
+    expect(loadRangePreference("Small Piano")).toEqual({
+      mode: "explicit",
+      keys: 49,
+      range: { lowestNote: 36, highestNote: 84 },
+    });
   });
 
   it("returns null for an unseen device", () => {

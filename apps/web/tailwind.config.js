@@ -8,15 +8,15 @@ export default {
         ink: "#1f2933",
         // The crimson felt strip that runs behind a piano's keys — primary accent.
         felt: {
-          50: "#fdf3f4",
-          100: "#f9e1e3",
-          300: "#e0808b",
-          400: "#cf5260",
-          500: "#c43d49",
-          600: "#b4323e",
-          700: "#962832",
-          800: "#7a222b",
-          900: "#621d24",
+          50: "rgb(var(--color-felt-50) / <alpha-value>)",
+          100: "rgb(var(--color-felt-100) / <alpha-value>)",
+          300: "rgb(var(--color-felt-300) / <alpha-value>)",
+          400: "rgb(var(--color-felt-400) / <alpha-value>)",
+          500: "rgb(var(--color-felt-500) / <alpha-value>)",
+          600: "rgb(var(--color-felt-600) / <alpha-value>)",
+          700: "rgb(var(--color-felt-700) / <alpha-value>)",
+          800: "rgb(var(--color-felt-800) / <alpha-value>)",
+          900: "rgb(var(--color-felt-900) / <alpha-value>)",
         },
         // Brass pedals and hinges — achievement and completed states.
         brass: {

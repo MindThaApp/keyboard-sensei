@@ -1,4 +1,5 @@
 import { API_URL, getToken } from "../services/api";
+import { SustainPedalState } from "./sustainPedal";
 
 /**
  * Maps a MIDI note number to the note-name keys the instrument sample packs
@@ -65,6 +66,7 @@ export class SampledInstrument {
   private readonly output: GainNode;
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly voices = new Map<number, ActiveVoice>();
+  private readonly sustain = new SustainPedalState();
   private loadPromise: Promise<void> | null = null;
   private loadedCount = 0;
   private readonly totalCount = MAX_MIDI_NOTE - MIN_MIDI_NOTE + 1;
@@ -114,6 +116,7 @@ export class SampledInstrument {
   playNote(midi: number, velocity = 100): void {
     const buffer = this.buffers.get(midiToSampleNoteName(midi));
     if (!buffer) return;
+    this.sustain.noteOn(midi);
     // Retriggering the same note before its release finished: cut the old
     // voice with a fast fade (not a hard stop, which clicks) before starting
     // the new one.
@@ -142,6 +145,11 @@ export class SampledInstrument {
   }
 
   stopNote(midi: number, immediate = false): void {
+    if (!immediate && !this.sustain.noteOff(midi)) return;
+    this.stopNoteNow(midi, immediate);
+  }
+
+  private stopNoteNow(midi: number, immediate = false): void {
     const voice = this.voices.get(midi);
     if (!voice) return;
     const releaseS = immediate ? IMMEDIATE_RELEASE_S : RELEASE_S;
@@ -153,10 +161,15 @@ export class SampledInstrument {
     this.voices.delete(midi);
   }
 
+  setSustainPedal(down: boolean): void {
+    for (const midi of this.sustain.setDown(down)) this.stopNoteNow(midi);
+  }
+
   /** Silences every currently-sounding note — used when the instrument is
    *  swapped out from under active playback. */
   stopAll(): void {
-    for (const midi of [...this.voices.keys()]) this.stopNote(midi, true);
+    this.sustain.clear();
+    for (const midi of [...this.voices.keys()]) this.stopNoteNow(midi, true);
   }
 }
 

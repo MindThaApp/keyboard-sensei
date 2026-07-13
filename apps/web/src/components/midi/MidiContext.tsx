@@ -13,9 +13,11 @@ import { MockMidiAdapter, WebMidiAdapter, isWebMidiSupported } from "@keyboard-s
 import { pianoSynth } from "../../utils/synth";
 import {
   DEFAULT_RANGE,
+  autoRangePreference,
   growRange,
-  loadRange,
-  saveRange,
+  loadRangePreference,
+  saveRangePreference,
+  type KeyboardRangePreference,
   type KeyRange,
 } from "../../utils/keyboardRange";
 
@@ -30,6 +32,9 @@ interface MidiContextValue {
   devices: MidiDeviceInfo[];
   deviceRange: KeyRange;
   setDeviceRange: (r: KeyRange) => void;
+  deviceRangePreference: KeyboardRangePreference;
+  setDeviceRangePreference: (preference: KeyboardRangePreference) => void;
+  sustainPedalDown: boolean;
   /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
   connectWebMidi: () => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
@@ -56,13 +61,27 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const [webMidiError, setWebMidiError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MidiDeviceInfo[]>([]);
   const [deviceRange, setDeviceRangeState] = useState<KeyRange>(DEFAULT_RANGE);
+  const [deviceRangePreference, setDeviceRangePreferenceState] = useState<KeyboardRangePreference>(() => autoRangePreference());
+  const deviceRangePreferenceRef = useRef<KeyboardRangePreference>(deviceRangePreference);
+  const [sustainPedalDown, setSustainPedalDown] = useState(false);
 
   const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
 
   const setDeviceRange = useCallback((range: KeyRange) => {
     const name = devicesRef.current[0]?.name;
-    if (name) saveRange(name, range);
+    const preference = autoRangePreference(range);
+    if (name) saveRangePreference(name, preference);
+    deviceRangePreferenceRef.current = preference;
+    setDeviceRangePreferenceState(preference);
     setDeviceRangeState(range);
+  }, []);
+
+  const setDeviceRangePreference = useCallback((preference: KeyboardRangePreference) => {
+    const name = devicesRef.current[0]?.name;
+    if (name) saveRangePreference(name, preference);
+    deviceRangePreferenceRef.current = preference;
+    setDeviceRangePreferenceState(preference);
+    setDeviceRangeState(preference.range);
   }, []);
 
   const syncDevices = useCallback((connectedDevices: MidiDeviceInfo[]) => {
@@ -70,7 +89,12 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     setDevices(connectedDevices);
 
     const name = connectedDevices[0]?.name;
-    if (name) setDeviceRangeState(loadRange(name) ?? DEFAULT_RANGE);
+    if (name) {
+      const preference = loadRangePreference(name) ?? autoRangePreference();
+      deviceRangePreferenceRef.current = preference;
+      setDeviceRangePreferenceState(preference);
+      setDeviceRangeState(preference.range);
+    }
   }, []);
 
   // MidiAdapter#onNoteOn/onNoteOff have no unsubscribe (by design, per the
@@ -99,14 +123,24 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       pianoSynth.stopNote(note);
       emit({ note, velocity: 0, type: "noteoff", timestampMs });
     });
+    mockAdapter.onControlChange((controller, value) => {
+      if (controller !== 64) return;
+      const down = value >= 64;
+      pianoSynth.setSustainPedal(down);
+      setSustainPedalDown((current) => (current === down ? current : down));
+    });
 
     webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
       setDeviceRangeState((current) => {
+        if (deviceRangePreferenceRef.current.mode === "explicit") return current;
         const grown = growRange(current, note);
         if (grown !== current && (grown.lowestNote !== current.lowestNote || grown.highestNote !== current.highestNote)) {
           const name = devicesRef.current[0]?.name;
-          if (name) saveRange(name, grown);
+          const preference = autoRangePreference(grown);
+          if (name) saveRangePreference(name, preference);
+          deviceRangePreferenceRef.current = preference;
+          setDeviceRangePreferenceState(preference);
           return grown;
         }
         return current;
@@ -117,6 +151,12 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       pianoSynth.stopNote(note);
       emit({ note, velocity: 0, type: "noteoff", timestampMs });
     });
+    webAdapter.onControlChange((controller, value) => {
+      if (controller !== 64) return;
+      const down = value >= 64;
+      pianoSynth.setSustainPedal(down);
+      setSustainPedalDown((current) => (current === down ? current : down));
+    });
 
     webAdapter.onStateChange((connectedDevices) => {
       syncDevices(connectedDevices);
@@ -126,6 +166,18 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         : null);
     });
   }, [syncDevices]);
+
+  useEffect(() => {
+    const stopEverything = () => {
+      pianoSynth.stopAll();
+      setSustainPedalDown(false);
+    };
+    window.addEventListener("pagehide", stopEverything);
+    return () => {
+      window.removeEventListener("pagehide", stopEverything);
+      pianoSynth.stopAll();
+    };
+  }, []);
 
   const connectWebMidi = useCallback(async () => {
     if (!webMidiSupported) {
@@ -195,10 +247,13 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       devices,
       deviceRange,
       setDeviceRange,
+      deviceRangePreference,
+      setDeviceRangePreference,
+      sustainPedalDown,
       connectWebMidi,
       subscribe,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, sustainPedalDown, connectWebMidi, subscribe],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;

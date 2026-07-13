@@ -1,5 +1,6 @@
 import { registerAudioContext } from "./audioUnlock";
 import { previewChord, SampledInstrument } from "./sampler";
+import { SustainPedalState } from "./sustainPedal";
 
 const A4_MIDI_NOTE = 69;
 const A4_FREQUENCY_HZ = 440;
@@ -60,6 +61,7 @@ export class PianoSynth {
   private samplerCache = new Map<string, SampledInstrument>();
   private activeSampler: SampledInstrument | null = null;
   private activeInstrumentId: string | null = null;
+  private readonly sustain = new SustainPedalState();
   /** Which engine actually produced the currently-sounding voice for a note, so
    *  stopNote() releases the right one even if the selected instrument changed
    *  between the note-on and note-off (e.g. the user switched voices mid-note). */
@@ -138,6 +140,7 @@ export class PianoSynth {
   }
 
   playNote(note: number, velocity = 100): void {
+    this.sustain.noteOn(note);
     if (this.activeSampler && this.activeSampler.isLoaded && this.activeSampler.hasSample(note)) {
       this.activeSampler.playNote(note, velocity);
       this.noteEngine.set(note, this.activeSampler);
@@ -148,6 +151,23 @@ export class PianoSynth {
   }
 
   stopNote(note: number, immediate = false): void {
+    if (!immediate && !this.sustain.noteOff(note)) return;
+    this.stopNoteNow(note, immediate);
+  }
+
+  setSustainPedal(down: boolean): void {
+    for (const sampler of this.samplerCache.values()) sampler.setSustainPedal(down);
+    for (const note of this.sustain.setDown(down)) this.stopNoteNow(note);
+  }
+
+  stopAll(): void {
+    this.sustain.clear();
+    for (const sampler of this.samplerCache.values()) sampler.stopAll();
+    for (const note of [...this.noteEngine.keys()]) this.stopNoteNow(note, true);
+    for (const note of [...this.voices.keys()]) this.stopSynthNote(note, true);
+  }
+
+  private stopNoteNow(note: number, immediate = false): void {
     const engine = this.noteEngine.get(note);
     this.noteEngine.delete(note);
     if (engine instanceof SampledInstrument) {

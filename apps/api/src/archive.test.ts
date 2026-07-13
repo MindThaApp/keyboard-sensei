@@ -350,7 +350,11 @@ describe("POST /archive/:id/import", () => {
 // mark this specific test as needing network access and keep it minimal").
 // Confirms fetchArchiveRowBytes's base64-decode + real endpoint shape still
 // works against the actual live service, not just our own mocked shape of it.
-describe("POST /archive/:id/import (live network)", () => {
+// Opt-in: this suite makes a REAL call to HuggingFace's dataset server. Leaving it
+// on by default means any third-party outage, rate limit or slow response turns CI
+// red for reasons that have nothing to do with this codebase — which has already
+// happened. Run it deliberately with LIVE_NETWORK_TESTS=1.
+describe.skipIf(!process.env.LIVE_NETWORK_TESTS)("POST /archive/:id/import (live network)", () => {
   it("fetches a real PianoCoRe row's MIDI and MXL bytes end-to-end", async () => {
     vi.clearAllMocks();
     prismaMock.archiveEntry.findUnique.mockResolvedValue({
