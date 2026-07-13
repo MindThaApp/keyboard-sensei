@@ -1,8 +1,10 @@
 import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
+import type { BarGridEntry } from "../../utils/playalongSong";
 
 /** Must match VirtualPiano's key layout so notes land on their keys. */
 export const WHITE_KEY_WIDTH_PX = 40;
 export const BLACK_KEY_WIDTH_PX = 26;
+const BLACK_KEY_RATIO = BLACK_KEY_WIDTH_PX / WHITE_KEY_WIDTH_PX;
 
 const BLACK_KEY_PITCH_CLASSES = new Set([1, 3, 6, 8, 10]);
 export const isBlackKey = (note: number): boolean => BLACK_KEY_PITCH_CLASSES.has(((note % 12) + 12) % 12);
@@ -11,8 +13,12 @@ export interface KeyboardGeometry {
   lowestNote: number;
   highestNote: number;
   widthPx: number;
-  /** x/width of each MIDI note's key, matching VirtualPiano rendering. */
-  xFor: (note: number) => { x: number; width: number };
+  whiteKeyWidthPx: number;
+  blackKeyWidthPx: number;
+  /** x/width of each MIDI note's key, or null if the note lies outside the range.
+   *  The single source of truth: both the rendered keys and the waterfall lanes
+   *  read from this, so they cannot drift apart at any zoom level. */
+  xFor: (note: number) => { x: number; width: number } | null;
 }
 
 /** Octave-aligned range containing the song, ≥ 2 octaves, clamped to the 88 keys. */
@@ -26,20 +32,37 @@ export function pianoRangeFor(pitchMin: number, pitchMax: number): { lowestNote:
   return { lowestNote: Math.max(21, low), highestNote: Math.min(108, high) };
 }
 
-export function keyboardGeometry(lowestNote: number, highestNote: number): KeyboardGeometry {
+export function keyboardGeometry(lowestNote: number, highestNote: number, whiteKeyWidthPx: number = WHITE_KEY_WIDTH_PX): KeyboardGeometry {
+  const blackKeyWidthPx = whiteKeyWidthPx * BLACK_KEY_RATIO;
   const whiteNotes: number[] = [];
   for (let note = lowestNote; note <= highestNote; note++) {
     if (!isBlackKey(note)) whiteNotes.push(note);
   }
   const whiteIndex = new Map(whiteNotes.map((note, index) => [note, index]));
-  const xFor = (note: number): { x: number; width: number } => {
+  /**
+   * Returns null for a note outside [lowestNote, highestNote] — callers must skip it.
+   * This used to be `whiteIndex.get(note) ?? 0`, which silently stacked every
+   * out-of-range note on the lowest key (and rendered out-of-range black keys at a
+   * negative x). Play-Along must size its keyboard to union(deviceRange, songRange)
+   * so this never fires there; returning null makes a mistake loud instead of drawing
+   * a plausible-looking lie.
+   */
+  const xFor = (note: number): { x: number; width: number } | null => {
+    if (note < lowestNote || note > highestNote) return null;
     if (!isBlackKey(note)) {
-      return { x: (whiteIndex.get(note) ?? 0) * WHITE_KEY_WIDTH_PX, width: WHITE_KEY_WIDTH_PX };
+      return { x: whiteIndex.get(note)! * whiteKeyWidthPx, width: whiteKeyWidthPx };
     }
     const whiteKeysBefore = whiteNotes.filter((white) => white < note).length;
-    return { x: whiteKeysBefore * WHITE_KEY_WIDTH_PX - BLACK_KEY_WIDTH_PX / 2, width: BLACK_KEY_WIDTH_PX };
+    return { x: whiteKeysBefore * whiteKeyWidthPx - blackKeyWidthPx / 2, width: blackKeyWidthPx };
   };
-  return { lowestNote, highestNote, widthPx: whiteNotes.length * WHITE_KEY_WIDTH_PX, xFor };
+  return { lowestNote, highestNote, widthPx: whiteNotes.length * whiteKeyWidthPx, whiteKeyWidthPx, blackKeyWidthPx, xFor };
+}
+
+/** White-key width that makes [lowestNote, highestNote] exactly fill containerPx. */
+export function fitWhiteKeyWidth(lowestNote: number, highestNote: number, containerPx: number): number {
+  let whiteCount = 0;
+  for (let n = lowestNote; n <= highestNote; n++) if (!isBlackKey(n)) whiteCount++;
+  return whiteCount > 0 ? containerPx / whiteCount : WHITE_KEY_WIDTH_PX;
 }
 
 export interface WaterfallColors {
@@ -49,6 +72,7 @@ export interface WaterfallColors {
   missed: string;
   lane: string;
   hitLine: string;
+  barline: string;
 }
 
 export const WATERFALL_COLORS_LIGHT: WaterfallColors = {
@@ -58,6 +82,7 @@ export const WATERFALL_COLORS_LIGHT: WaterfallColors = {
   missed: "#fb7185", // rose-400
   lane: "rgba(15, 23, 42, 0.04)",
   hitLine: "rgba(180, 50, 62, 0.55)",
+  barline: "rgba(15, 23, 42, 0.14)",
 };
 
 export const WATERFALL_COLORS_DARK: WaterfallColors = {
@@ -67,6 +92,7 @@ export const WATERFALL_COLORS_DARK: WaterfallColors = {
   missed: "#fb7185",
   lane: "rgba(255, 255, 255, 0.04)",
   hitLine: "rgba(207, 82, 96, 0.6)",
+  barline: "rgba(255, 255, 255, 0.14)",
 };
 
 export interface WaterfallFrame {
@@ -78,6 +104,8 @@ export interface WaterfallFrame {
   heightPx: number;
   colors: WaterfallColors;
   waitingPitches?: Set<number>;
+  /** Falling barlines, in song seconds (see buildBeatGrid). Optional so older callers/tests keep compiling. */
+  bars?: BarGridEntry[];
 }
 
 /**
@@ -94,12 +122,29 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
   ctx.fillStyle = frame.colors.lane;
   for (let note = geometry.lowestNote; note <= geometry.highestNote; note++) {
     if (note % 12 === 0) {
-      const { x } = geometry.xFor(note);
+      const lane = geometry.xFor(note);
+      if (!lane) continue;
+      const { x } = lane;
       ctx.fillRect(x, 0, 1.5, heightPx);
     }
   }
 
   const pxPerSecond = heightPx / lookaheadS;
+
+  // Falling barlines: same transform as the notes below (bar.timeS in place of
+  // note.startS), drawn before the note loop so notes paint on top of them,
+  // not the other way round. Bars only, not every beat — at typical lookahead
+  // that's ~8 beat lines on screen and reads as noise.
+  if (frame.bars) {
+    ctx.fillStyle = colors.barline;
+    for (const bar of frame.bars) {
+      const timeToStart = bar.timeS - songTimeS;
+      if (timeToStart < 0 || timeToStart > lookaheadS) continue;
+      const y = Math.round(heightPx - timeToStart * pxPerSecond);
+      ctx.fillRect(0, y, width, 1);
+    }
+  }
+
   // Recently passed notes remain briefly visible below the hit line…no,
   // the hit line IS the bottom; passed portions simply slide out of view.
   for (let i = 0; i < notes.length; i++) {
@@ -107,7 +152,12 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
     const timeToStart = note.startS - songTimeS;
     if (timeToStart > lookaheadS) continue; // not yet visible
     if (timeToStart + note.durationS < 0) continue; // fully past
-    const { x, width: keyWidth } = geometry.xFor(note.midi);
+    const rect = geometry.xFor(note.midi);
+    // A note outside the rendered range has no key to fall onto. Skip it rather
+    // than drawing it at x=0 on top of the lowest key. Play-Along sizes its
+    // geometry to union(deviceRange, songRange), so this should never fire there.
+    if (!rect) continue;
+    const { x, width: keyWidth } = rect;
     const bottomY = heightPx - timeToStart * pxPerSecond;
     const noteHeight = Math.max(6, note.durationS * pxPerSecond);
     const topY = bottomY - noteHeight;

@@ -95,6 +95,12 @@ const songListItem = (song: {
 /** Song library routes; mounted behind requireAuth. */
 export const songsRouter: Router = Router();
 
+const deleteSongRow = async (song: { id: string; file_path: string; uploader_id: string | null }) => {
+  await prisma.song.delete({ where: { id: song.id } });
+  // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
+  if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
+};
+
 songsRouter.get("/songs", async (req, res, next) => {
   try {
     const userId = uid(req);
@@ -135,6 +141,7 @@ songsRouter.get("/songs/attempts/me", async (req, res, next) => {
         score: row.score,
         accuracy: row.accuracy,
         tempo_pct: row.tempo_pct,
+        tempo_bpm: row.tempo_bpm,
         lookahead_s: row.lookahead_s,
         wait_mode: row.wait_mode,
         created_at: row.created_at.toISOString(),
@@ -196,9 +203,14 @@ songsRouter.get("/songs/:id/notation", async (req, res, next) => {
 });
 
 const attemptSchema = z.object({
-  score: z.number().min(0).max(150),
+  // 160, not 150: with continuous tempo and look-ahead the multipliers can reach
+  // 1.5 (they are capped there), so a strong fast run scores above the old 150
+  // ceiling. Leaving it at 150 meant Zod rejected the attempt with a 400 — i.e.
+  // the user's best runs were exactly the ones that failed to save.
+  score: z.number().min(0).max(160),
   accuracy: z.number().min(0).max(100),
-  tempo_pct: z.union([z.literal(25), z.literal(50), z.literal(75), z.literal(100)]),
+  tempo_pct: z.number().min(10).max(250),
+  tempo_bpm: z.number().min(20).max(400).nullish(),
   lookahead_s: z.number().min(0.5).max(10),
   wait_mode: z.boolean(),
 });
@@ -318,9 +330,7 @@ songsRouter.delete("/songs/:id", async (req, res, next) => {
       res.status(403).json({ error: { code: "forbidden", message: "You can only delete songs you uploaded" } });
       return;
     }
-    await prisma.song.delete({ where: { id: song.id } });
-    // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
-    if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
+    await deleteSongRow(song);
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -351,6 +361,20 @@ songsRouter.patch("/admin/songs/:id", requireAdmin, async (req, res, next) => {
     const input = adminSongPatchSchema.parse(req.body);
     const song = await prisma.song.update({ where: { id: z.string().parse(req.params.id) }, data: input });
     res.json(songListItem(song, uid(req)));
+  } catch (e) {
+    next(e);
+  }
+});
+
+songsRouter.delete("/admin/songs/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
+    if (!song) {
+      res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
+      return;
+    }
+    await deleteSongRow(song);
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

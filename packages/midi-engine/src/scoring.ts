@@ -2,12 +2,17 @@ import type { ExpectedNoteEvent, MidiExercise, PerformedNote, ScoringMistake, Sc
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { resolveScoreWeights } from "./config.js";
 
-export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNotes: PerformedNote[]; durationTolerancePercent?: number; tempoPct?: 25 | 50 | 75 | 100 }
+export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNotes: PerformedNote[]; durationTolerancePercent?: number; tempoPct?: number }
 const round = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent, tempoPct = 100 }: ScoreMidiExerciseParams): ScoringResult {
   const untimed = exercise.scoring === "untimed";
   const msPerBeat = (60_000 / exercise.tempoBpm) * (100 / tempoPct);
+  const rate = tempoPct / 100;
+  const toleranceScale = rate > 0 ? Math.pow(rate, -0.5) : Number.POSITIVE_INFINITY;
+  const timingTolerance = clamp(exercise.timingToleranceMs * toleranceScale, 60, 400);
+  const simultaneityWindow = clamp(exercise.simultaneityWindowMs * toleranceScale, 30, 300);
   const expected = [...exercise.expected].sort((a, b) => a.startBeat - b.startBeat);
   const performed = [...performedNotes].sort((a, b) => a.startTimestampMs - b.startTimestampMs);
   const origin = performed[0]?.startTimestampMs ?? 0;
@@ -36,14 +41,14 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
   };
   const scoreTiming = (exp: ExpectedNoteEvent, got: PerformedNote) => {
     const delta = got.startTimestampMs - targetTime(exp);
-    if (Math.abs(delta) <= exercise.timingToleranceMs) timingHits++;
+    if (Math.abs(delta) <= timingTolerance) timingHits++;
     else if (delta < 0) { add(exp, got, "early"); feedback.add(`${midiNoteToName(exp.note)} was early.`) }
     else { add(exp, got, "late"); feedback.add(`${midiNoteToName(exp.note)} was late.`) }
   };
 
   for (const exp of singles) {
     let index = performed.map((got, i) => ({ got, i })).filter(({got,i}) => !used.has(i) && got.note === exp.note).sort((a,b) => Math.abs(a.got.startTimestampMs-targetTime(exp))-Math.abs(b.got.startTimestampMs-targetTime(exp)))[0]?.i ?? -1;
-    if (index < 0 && !untimed) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= exercise.timingToleranceMs);
+    if (index < 0 && !untimed) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= timingTolerance);
     if (index < 0) { add(exp, null, "missed"); feedback.add(`You missed ${midiNoteToName(exp.note)}.`); continue }
     used.add(index); const got = performed[index]!;
     if (got.note === exp.note) pitchHits++; else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
@@ -52,7 +57,7 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
 
   for (const [groupId, chord] of groups) {
     const target = targetTime(chord[0]!);
-    const candidates = performed.map((note, index) => ({ note, index })).filter(({ note, index }) => !used.has(index) && (untimed || Math.abs(note.startTimestampMs - target) <= exercise.timingToleranceMs * 2));
+    const candidates = performed.map((note, index) => ({ note, index })).filter(({ note, index }) => !used.has(index) && (untimed || Math.abs(note.startTimestampMs - target) <= timingTolerance * 2));
     const selected: { note: PerformedNote; index: number }[] = [];
     for (const exp of chord) {
       const match = candidates.find(({ note, index }) => !selected.some((item) => item.index === index) && note.note === exp.note);
@@ -65,11 +70,11 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
     const spread = attacks.length ? Math.max(...attacks) - Math.min(...attacks) : 0;
     const delta = attacks.length ? attacks.reduce((sum, value) => sum + value, 0) / attacks.length - target : Infinity;
     if (!untimed) {
-      if (Math.abs(delta) <= exercise.timingToleranceMs) timingHits += selected.length;
+      if (Math.abs(delta) <= timingTolerance) timingHits += selected.length;
       else if (selected.length) { const issue = delta < 0 ? "early" : "late"; add(chord[0]!, selected[0]!.note, issue, groupId); feedback.add(`The chord was ${issue}.`) }
     }
-    if (spread > exercise.simultaneityWindowMs) { add(chord[0]!, selected[0]?.note ?? null, "uneven-hand-timing", groupId); feedback.add("The chord was uneven; play its notes together.") }
-    if (selected.length === chord.length && extras.length === 0 && spread <= exercise.simultaneityWindowMs && (untimed || Math.abs(delta) <= exercise.timingToleranceMs)) chordHits++;
+    if (spread > simultaneityWindow) { add(chord[0]!, selected[0]?.note ?? null, "uneven-hand-timing", groupId); feedback.add("The chord was uneven; play its notes together.") }
+    if (selected.length === chord.length && extras.length === 0 && spread <= simultaneityWindow && (untimed || Math.abs(delta) <= timingTolerance)) chordHits++;
   }
 
   performed.forEach((note, index) => { if (!used.has(index)) { add(null, note, "extra"); feedback.add(`Extra note: ${midiNoteToName(note.note)}.`) } });

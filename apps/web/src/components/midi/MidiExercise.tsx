@@ -9,20 +9,31 @@ import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
 import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
+import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
-const COUNT_IN_BEATS = 4;
-const HIGHLIGHT_ENABLED_KEY = "ks-highlight-enabled";
-function loadHighlightEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(HIGHLIGHT_ENABLED_KEY);
-    return raw === null ? true : raw === "true";
-  } catch {
-    return true;
-  }
-}
 
+const SHEET_SCALE_KEY = "ks-exercise-sheet-scale";
+const COUNT_IN_BEATS = 4;
+/** UI slider bounds (BPM). Narrower than the API's accepted tempoPct range — see tempoBpmBounds. */
+const SLIDER_MIN_BPM = 25;
+const SLIDER_MAX_BPM = 200;
+/** API-enforced tempoPct range (apps/api/src/app.ts: z.number().min(10).max(250)). */
+const MIN_TEMPO_PCT = 10;
+const MAX_TEMPO_PCT = 250;
+
+/**
+ * Derives the actual slider [min, max] BPM for a given exercise, tightened so
+ * that neither end can ever produce a tempoPct outside the API's accepted
+ * [MIN_TEMPO_PCT, MAX_TEMPO_PCT] range. Without this, e.g. a 60 BPM exercise
+ * would let a user drag to 200 BPM (333%), which the API rejects with a 400.
+ */
+function tempoBpmBounds(writtenBpm: number): { min: number; max: number } {
+  const min = Math.max(SLIDER_MIN_BPM, Math.ceil((writtenBpm * MIN_TEMPO_PCT) / 100));
+  const max = Math.min(SLIDER_MAX_BPM, Math.floor((writtenBpm * MAX_TEMPO_PCT) / 100));
+  return { min: Math.min(min, max), max };
+}
 interface Props {
   exerciseId: string;
   title: string;
@@ -30,9 +41,31 @@ interface Props {
   lessonId?: string | null;
   exercise?: MidiExerciseDef;
   onCompleted?: (result: ScoringResult) => void;
+  /**
+   * Fired when a recording attempt starts/stops, so a caller (e.g. song-excerpt
+   * accompaniment playback) can drive its own clock off the SAME start time and
+   * practice tempo this exercise is using, without this component knowing
+   * anything about accompaniment. Called with the clock the instant capture
+   * actually begins (after any count-in), and with `null` when the attempt is
+   * cancelled, submitted, or the component unmounts.
+   */
+  onRecordingClock?: (clock: { startTimeMs: number; effectiveBpm: number } | null) => void;
 }
 
-type Phase = "idle" | "listening" | "counting-in" | "recording" | "submitting" | "scored";
+type Phase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
+
+/**
+ * Converts a raw MIDI event's wall-clock timestamp (performance.now() basis)
+ * into elapsed *performance* time in ms, relative to the start of the
+ * attempt, excluding any time spent paused. `pausedMs` accumulates both
+ * genuine pause duration and any resume count-in (which also isn't
+ * performance) — see `pause`/`resumeExercise` below. This is what every
+ * timestamp handed to pairRawMidiEvents/scoring is built from, so a pause is
+ * invisible to scoring: freezing this value is the entire mechanism.
+ */
+export function elapsedPerformanceMs(rawTimestampMs: number, startTimeMs: number, pausedMs: number): number {
+  return rawTimestampMs - startTimeMs - pausedMs;
+}
 
 const LIVE_POINTS: Record<PlayAlongJudgment, number> = { perfect: 10, good: 7, ok: 4, miss: -3 };
 const WRONG_PRESS_PENALTY = 2;
@@ -135,10 +168,28 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted }: Props) {
+export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock }: Props) {
   const { subscribe, mockAdapter } = useMidiContext();
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
+
+  // The span this exercise actually uses — drives VirtualPiano's "Fit to piece"
+  // button, so the user can widen a too-narrow keyboard in one click.
+  const exerciseRange = useMemo(() => {
+    const midis = exercise?.expected?.map((n) => n.note) ?? [];
+    if (midis.length === 0) return undefined;
+    return { lowestNote: Math.min(...midis), highestNote: Math.max(...midis) };
+  }, [exercise]);
+
+  // Sheet size. The notation had no size control at all here (only Play-Along's
+  // strip had one), so a sheet that was too tall could not be shrunk.
+  const [sheetScale, setSheetScale] = useState<number>(() => {
+    const raw = Number(localStorage.getItem(SHEET_SCALE_KEY));
+    return Number.isFinite(raw) && raw >= 0.5 && raw <= 1.6 ? raw : 1;
+  });
+  useEffect(() => {
+    localStorage.setItem(SHEET_SCALE_KEY, String(sheetScale));
+  }, [sheetScale]);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [beat, setBeat] = useState<{ index: number; isCountIn: boolean } | null>(null);
@@ -148,7 +199,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
-  const [tempoPct, setTempoPct] = useState<25 | 50 | 75 | 100>(100);
+  const [tempoBpm, setTempoBpm] = useState<number | null>(null);
   const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set());
   const [liveScore, setLiveScore] = useState(0);
   const [liveCombo, setLiveCombo] = useState(0);
@@ -157,6 +208,10 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const raw = useRef<RawMidiEvent[]>([]);
   const start = useRef(0);
   const active = useRef(false);
+  /** Total ms of the current attempt spent paused (or in a resume count-in), subtracted out of every performance timestamp. */
+  const pausedMs = useRef(0);
+  /** Wall-clock moment the current pause began; null when not paused. */
+  const pauseStart = useRef<number | null>(null);
   const previewTimeouts = useRef<number[]>([]);
   const previewSounding = useRef<Set<number>>(new Set());
   const metronomeOnRef = useRef(metronomeOn);
@@ -169,6 +224,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const liveRafRef = useRef(0);
   const activeNoteIdsRef = useRef<string>("");
   const lastDeltaTimeoutRef = useRef<number | null>(null);
+  const onRecordingClockRef = useRef(onRecordingClock);
+  onRecordingClockRef.current = onRecordingClock;
 
   const liveDueMidis = useMemo(
     () => liveNotesRef.current.filter((n) => activeNoteIds.has(n.id)).map((n) => n.midi),
@@ -179,11 +236,12 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     () =>
       subscribe((event) => {
         if (!active.current) return;
-        raw.current.push({ ...event, timestampMs: event.timestampMs - start.current });
+        const elapsedMs = elapsedPerformanceMs(event.timestampMs, start.current, pausedMs.current);
+        raw.current.push({ ...event, timestampMs: elapsedMs });
         if (event.type !== "noteon") return;
         setPlayed(true);
         if (exercise?.scoring === "untimed") return;
-        const songTimeS = (event.timestampMs - start.current) / 1000;
+        const songTimeS = elapsedMs / 1000;
         const match = judgeNextPress(liveNotesRef.current, liveJudgmentsRef.current, event.note, songTimeS);
         if (match) {
           liveJudgmentsRef.current[match.index] = match.judgment;
@@ -212,6 +270,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       stopPreview();
       metronome.stop();
       cancelAnimationFrame(liveRafRef.current);
+      onRecordingClockRef.current?.(null);
     },
     [],
   );
@@ -225,7 +284,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const untimed = exercise.scoring === "untimed";
   const hasChords = exercise.expected.some((event) => event.chordGroupId !== null);
   const msPerBeat = 60_000 / exercise.tempoBpm;
-  const effectiveBpm = exercise.tempoBpm * (tempoPct / 100);
+  const { min: sliderMinBpm, max: sliderMaxBpm } = tempoBpmBounds(exercise.tempoBpm);
+  // Slider's chosen BPM IS the practice tempo; default to written tempo (100%) until the user moves it.
+  const chosenBpm = Math.min(sliderMaxBpm, Math.max(sliderMinBpm, tempoBpm ?? exercise.tempoBpm));
+  const effectiveBpm = chosenBpm;
+  const tempoPct = (chosenBpm / exercise.tempoBpm) * 100;
   const notes = [...new Set(exercise.expected.map((n) => n.note))];
   // Pad the keyboard to octave boundaries so it reads as an instrument, not a fragment.
   const low = Math.max(36, Math.min(...notes) - 2);
@@ -272,19 +335,27 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     setActiveNoteIds(new Set());
   };
 
-  const startLiveFollow = () => {
+  /**
+   * `preserve`: on a pause→resume, keep the judgments/score/combo already
+   * earned (only the note timings are recomputed, in case the tempo changed
+   * while paused) instead of restarting the live overlay from zero — a fresh
+   * attempt still resets everything.
+   */
+  const startLiveFollow = (preserve = false) => {
     liveNotesRef.current = liveNotesFor(exercise, effectiveBpm);
-    liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
-    liveMissCursorRef.current = 0;
-    setLiveScore(0);
-    setLiveCombo(0);
-    setLastDelta(null);
+    if (!preserve) {
+      liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
+      liveMissCursorRef.current = 0;
+      setLiveScore(0);
+      setLiveCombo(0);
+      setLastDelta(null);
+    }
     activeNoteIdsRef.current = "";
     setActiveNoteIds(new Set());
 
     const tick = () => {
       if (!active.current) return;
-      const songTimeS = (performance.now() - start.current) / 1000;
+      const songTimeS = elapsedPerformanceMs(performance.now(), start.current, pausedMs.current) / 1000;
       const notes = liveNotesRef.current;
       const judgments = liveJudgmentsRef.current;
 
@@ -325,11 +396,14 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     setResult(null);
     setError(null);
     setBeat(null);
+    pausedMs.current = 0;
+    pauseStart.current = null;
     if (untimed) {
       // No pulse to lock onto — start recording immediately, no count-in, no clicks.
       start.current = performance.now();
       active.current = true;
       setPhase("recording");
+      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
       return;
     }
     setPhase("counting-in");
@@ -345,6 +419,65 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
         startLiveFollow();
+        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      },
+    });
+  };
+
+  /**
+   * Pauses recording without discarding the attempt: stops the metronome and
+   * the live-follow loop, and marks the wall-clock moment so `resumeExercise`
+   * can fold the gap (plus any resume count-in) into `pausedMs`, keeping
+   * every performance timestamp — already-captured and yet-to-come — on the
+   * same clock as an unpaused run. Notes already played stay in `raw.current`.
+   */
+  const pause = () => {
+    if (phase !== "recording") return;
+    metronome.stop();
+    active.current = false;
+    cancelAnimationFrame(liveRafRef.current);
+    pauseStart.current = performance.now();
+    setBeat(null);
+    setPhase("paused");
+    onRecordingClockRef.current?.(null);
+  };
+
+  /**
+   * Resumes a paused attempt. Re-runs the count-in (its clicks aren't
+   * recorded, same as the initial count-in — see elapsedPerformanceMs) using
+   * whatever tempo/metronome settings are current, so a tempo change made
+   * while paused takes effect from here on. `start.current` and
+   * `raw.current` are untouched, so this continues the same attempt.
+   */
+  const resumeExercise = () => {
+    if (phase !== "paused") return;
+    const unfreeze = () => {
+      if (pauseStart.current !== null) {
+        pausedMs.current += performance.now() - pauseStart.current;
+        pauseStart.current = null;
+      }
+    };
+    if (untimed) {
+      unfreeze();
+      active.current = true;
+      setPhase("recording");
+      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      return;
+    }
+    setPhase("counting-in");
+    metronome.start({
+      bpm: effectiveBpm,
+      countInBeats: COUNT_IN_BEATS,
+      sound: metronomeSettingsRef.current.sound,
+      volume: metronomeSettingsRef.current.volume,
+      onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
+      onGo: () => {
+        unfreeze();
+        active.current = true;
+        setPhase("recording");
+        if (!metronomeOnRef.current) metronome.stop();
+        startLiveFollow(true);
+        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
       },
     });
   };
@@ -354,7 +487,10 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     active.current = false;
     stopLiveFollow();
     setBeat(null);
+    pausedMs.current = 0;
+    pauseStart.current = null;
     setPhase("idle");
+    onRecordingClockRef.current?.(null);
   };
 
   const submit = async () => {
@@ -362,6 +498,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     active.current = false;
     stopLiveFollow();
     setBeat(null);
+    onRecordingClockRef.current?.(null);
     setPhase("submitting");
     try {
       const performedNotes = pairRawMidiEvents(raw.current);
@@ -417,11 +554,40 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       </div>
 
       {notation && (
-        <NotationRenderer
-          data={notation}
-          title="Read and play"
-          activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
-        />
+        <div>
+          <div className="mb-1 flex items-center justify-end gap-1 text-xs text-slate-500">
+            <span className="mr-1">Sheet size</span>
+            <button
+              type="button"
+              aria-label="Smaller sheet"
+              onClick={() => setSheetScale((v) => Math.max(0.5, Math.round((v - 0.1) * 10) / 10))}
+              disabled={sheetScale <= 0.5}
+              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+            >
+              −
+            </button>
+            <span className="w-10 text-center tabular-nums">{Math.round(sheetScale * 100)}%</span>
+            <button
+              type="button"
+              aria-label="Larger sheet"
+              onClick={() => setSheetScale((v) => Math.min(1.6, Math.round((v + 0.1) * 10) / 10))}
+              disabled={sheetScale >= 1.6}
+              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+            >
+              +
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <div style={{ transform: `scale(${sheetScale})`, transformOrigin: "top left", width: `${100 / sheetScale}%` }}>
+              <NotationRenderer
+                data={notation}
+                title="Read and play"
+                activeNoteIds={capturing && highlightEnabled ? activeNoteIds : undefined}
+                verticalRange={exerciseRange}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -437,6 +603,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       <VirtualPiano
         lowestNote={lowestNote}
         highestNote={highestNote}
+        recommendedRange={exerciseRange}
         expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : []}
         feedbackByNote={feedback}
       />
@@ -452,9 +619,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             </button>
           </>
         )}
-        {(phase === "counting-in" || capturing) && (
+        {(phase === "counting-in" || capturing || phase === "paused") && (
           <>
-            {!untimed && (
+            {!untimed && phase !== "paused" && (
               <div className="flex items-center gap-1.5" aria-hidden>
                 {Array.from({ length: COUNT_IN_BEATS }, (_, i) => (
                   <span
@@ -467,7 +634,11 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               </div>
             )}
             <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
-              {phase === "counting-in" ? `Count-in… ${beat ? beat.index + 1 : ""}` : "Recording — play, then submit."}
+              {phase === "counting-in"
+                ? `Count-in… ${beat ? beat.index + 1 : ""}`
+                : phase === "paused"
+                  ? "Paused — adjust tempo or settings, then resume."
+                  : "Recording — play, then submit."}
             </span>
             {capturing && !untimed && highlightEnabled && (
               <div className="flex items-center gap-3 text-xs">
@@ -495,31 +666,41 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                 Submit Attempt
               </button>
             )}
+            {capturing && (
+              <button className="secondary-button" onClick={pause}>
+                Pause
+              </button>
+            )}
+            {phase === "paused" && (
+              <button className="primary-button" onClick={resumeExercise}>
+                Resume
+              </button>
+            )}
             <button className="secondary-button" onClick={cancel}>Cancel</button>
           </>
         )}
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
         {!untimed && (
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1" role="radiogroup" aria-label="Practice tempo">
-              <span className="mr-1 text-xs text-slate-500">Tempo</span>
-              {([25, 50, 75, 100] as const).map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  role="radio"
-                  aria-checked={tempoPct === pct}
-                  disabled={capturing || phase === "counting-in"}
-                  onClick={() => setTempoPct(pct)}
-                  className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                    tempoPct === pct
-                      ? "bg-felt-600 font-medium text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                  } disabled:opacity-50`}
-                >
-                  {pct}%
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Tempo <span className="text-slate-400 dark:text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
+              </span>
+              <input
+                type="range"
+                min={sliderMinBpm}
+                max={sliderMaxBpm}
+                step={1}
+                value={chosenBpm}
+                disabled={capturing || phase === "counting-in"}
+                onChange={(e) => setTempoBpm(Number(e.target.value))}
+                aria-label="Practice tempo in beats per minute"
+                className="h-1.5 w-32 cursor-pointer accent-felt-600 disabled:opacity-50 sm:w-40"
+              />
+              <span className="whitespace-nowrap text-xs tabular-nums text-slate-700 dark:text-slate-200">
+                <strong className="font-medium">{Math.round(chosenBpm)} BPM</strong>{" "}
+                <span className="text-slate-400 dark:text-slate-500">({Math.round(tempoPct)}% of written tempo)</span>
+              </span>
             </div>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
@@ -531,11 +712,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                 checked={highlightEnabled}
                 onChange={(e) => {
                   setHighlightEnabled(e.target.checked);
-                  try {
-                    localStorage.setItem(HIGHLIGHT_ENABLED_KEY, String(e.target.checked));
-                  } catch {
-                    // localStorage unavailable (private browsing, etc.) — setting still applies for this session.
-                  }
+                  saveHighlightEnabled(e.target.checked);
                 }}
               />
               Highlight notes while playing

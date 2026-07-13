@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAdminFeedback, setFeedbackStatus, type FeedbackItem } from "../../services/api";
+import { getAdminFeedback, getAdminFeedbackScreenshot, setFeedbackStatus, type FeedbackItem } from "../../services/api";
 import AdminNav from "./AdminNav";
 
 const TYPE_BADGE: Record<string, string> = {
@@ -8,10 +8,27 @@ const TYPE_BADGE: Record<string, string> = {
   other: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
+/** Fetches its own screenshot bytes (the route is admin-only, so no plain <img src>) and opens a lightbox on click. */
+function FeedbackThumbnail({ id, onOpen }: { id: string; onOpen: (url: string) => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    getAdminFeedbackScreenshot(id).then(setUrl).catch(() => undefined);
+  }, [id]);
+
+  if (!url) return null;
+  return (
+    <button type="button" onClick={() => onOpen(url)} className="block">
+      <img src={url} alt="Feedback screenshot thumbnail" className="h-16 w-16 rounded object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
+    </button>
+  );
+}
+
 export default function AdminFeedbackPage() {
   const [filter, setFilter] = useState<"open" | "resolved" | "all">("open");
   const [items, setItems] = useState<FeedbackItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const load = (status: typeof filter) => {
     setError(null);
@@ -73,10 +90,21 @@ export default function AdminFeedbackPage() {
               </button>
             </div>
             <p className="whitespace-pre-wrap text-sm">{item.message}</p>
+            {item.has_screenshot && <FeedbackThumbnail id={item.id} onOpen={setLightboxUrl} />}
             <p className="truncate text-xs text-slate-400 dark:text-slate-500" title={item.user_agent}>{item.user_agent}</p>
           </li>
         ))}
       </ul>
+      {lightboxUrl && (
+        <div
+          role="dialog"
+          aria-label="Feedback screenshot"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img src={lightboxUrl} alt="Feedback screenshot" className="max-h-full max-w-full rounded shadow-lg" />
+        </div>
+      )}
     </div>
   );
 }

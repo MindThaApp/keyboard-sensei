@@ -11,6 +11,13 @@ import {
 import type { MidiDeviceInfo, RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { MockMidiAdapter, WebMidiAdapter, isWebMidiSupported } from "@keyboard-sensei/midi-engine";
 import { pianoSynth } from "../../utils/synth";
+import {
+  DEFAULT_RANGE,
+  growRange,
+  loadRange,
+  saveRange,
+  type KeyRange,
+} from "../../utils/keyboardRange";
 
 type RawMidiListener = (event: RawMidiEvent) => void;
 
@@ -21,6 +28,9 @@ interface MidiContextValue {
   webMidiConnected: boolean;
   webMidiError: string | null;
   devices: MidiDeviceInfo[];
+  deviceRange: KeyRange;
+  setDeviceRange: (r: KeyRange) => void;
+  /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
   connectWebMidi: () => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
   subscribe: (listener: RawMidiListener) => () => void;
@@ -40,12 +50,28 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   if (!webAdapterRef.current) webAdapterRef.current = new WebMidiAdapter();
 
   const listenersRef = useRef<Set<RawMidiListener>>(new Set());
+  const devicesRef = useRef<MidiDeviceInfo[]>([]);
 
   const [webMidiConnected, setWebMidiConnected] = useState(false);
   const [webMidiError, setWebMidiError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MidiDeviceInfo[]>([]);
+  const [deviceRange, setDeviceRangeState] = useState<KeyRange>(DEFAULT_RANGE);
 
   const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
+
+  const setDeviceRange = useCallback((range: KeyRange) => {
+    const name = devicesRef.current[0]?.name;
+    if (name) saveRange(name, range);
+    setDeviceRangeState(range);
+  }, []);
+
+  const syncDevices = useCallback((connectedDevices: MidiDeviceInfo[]) => {
+    devicesRef.current = connectedDevices;
+    setDevices(connectedDevices);
+
+    const name = connectedDevices[0]?.name;
+    if (name) setDeviceRangeState(loadRange(name) ?? DEFAULT_RANGE);
+  }, []);
 
   // MidiAdapter#onNoteOn/onNoteOff have no unsubscribe (by design, per the
   // shared interface), so this registration must run exactly once even
@@ -76,13 +102,30 @@ export function MidiProvider({ children }: { children: ReactNode }) {
 
     webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
+      setDeviceRangeState((current) => {
+        const grown = growRange(current, note);
+        if (grown !== current && (grown.lowestNote !== current.lowestNote || grown.highestNote !== current.highestNote)) {
+          const name = devicesRef.current[0]?.name;
+          if (name) saveRange(name, grown);
+          return grown;
+        }
+        return current;
+      });
       emit({ note, velocity, type: "noteon", timestampMs });
     });
     webAdapter.onNoteOff((note, timestampMs) => {
       pianoSynth.stopNote(note);
       emit({ note, velocity: 0, type: "noteoff", timestampMs });
     });
-  }, []);
+
+    webAdapter.onStateChange((connectedDevices) => {
+      syncDevices(connectedDevices);
+      setWebMidiConnected(connectedDevices.length > 0);
+      setWebMidiError(connectedDevices.length === 0
+        ? "Your MIDI keyboard was disconnected. Plug it back in — it should reconnect automatically."
+        : null);
+    });
+  }, [syncDevices]);
 
   const connectWebMidi = useCallback(async () => {
     if (!webMidiSupported) {
@@ -92,7 +135,12 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      await webAdapterRef.current!.connect();
+      await Promise.race([
+        webAdapterRef.current!.connect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("The browser didn't respond to the MIDI request. Unplug your keyboard, plug it back in, then reload the page.")), 5000),
+        ),
+      ]);
       const connectedDevices = webAdapterRef.current!.listDevices();
       if (connectedDevices.length === 0) {
         // requestMIDIAccess() only grants permission — it succeeds even with zero
@@ -100,17 +148,36 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         // instead of USB-to-HOST, so the OS never exposes it as a MIDI input).
         setWebMidiConnected(false);
         setWebMidiError("MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
-        setDevices([]);
+        syncDevices([]);
         return;
       }
       setWebMidiConnected(true);
       setWebMidiError(null);
-      setDevices(connectedDevices);
+      syncDevices(connectedDevices);
     } catch (err) {
       setWebMidiConnected(false);
       setWebMidiError(err instanceof Error ? err.message : "Failed to connect to a MIDI device.");
     }
-  }, [webMidiSupported]);
+  }, [webMidiSupported, syncDevices]);
+
+  // Web MIDI permission, once granted, persists for the origin — but the adapter's
+  // onmidimessage handlers are rebuilt on every page load, so hardware input stays
+  // dead until connect() runs again. Without this, a reload (or opening a lesson /
+  // play-along page directly) silently drops the keyboard with no way to notice.
+  // Only reconnect when permission is ALREADY granted, so a first-time visitor is
+  // never hit with an unprompted permission dialog — they connect via MidiStatusBar.
+  useEffect(() => {
+    if (!webMidiSupported) return;
+    void (async () => {
+      try {
+        const status = await navigator.permissions.query({ name: "midi" } as unknown as PermissionDescriptor);
+        if (status.state === "granted") await connectWebMidi();
+      } catch {
+        // Browser's Permissions API doesn't recognise "midi" — fall back to the
+        // explicit Connect button rather than prompting on load.
+      }
+    })();
+  }, [webMidiSupported, connectWebMidi]);
 
   const subscribe = useCallback((listener: RawMidiListener) => {
     listenersRef.current.add(listener);
@@ -126,10 +193,12 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       webMidiConnected,
       webMidiError,
       devices,
+      deviceRange,
+      setDeviceRange,
       connectWebMidi,
       subscribe,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, connectWebMidi, subscribe],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;
@@ -140,4 +209,3 @@ export function useMidiContext(): MidiContextValue {
   if (!ctx) throw new Error("useMidiContext must be used within a MidiProvider");
   return ctx;
 }
-

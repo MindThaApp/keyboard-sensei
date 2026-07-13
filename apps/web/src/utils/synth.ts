@@ -1,3 +1,6 @@
+import { registerAudioContext } from "./audioUnlock";
+import { previewChord, SampledInstrument } from "./sampler";
+
 const A4_MIDI_NOTE = 69;
 const A4_FREQUENCY_HZ = 440;
 
@@ -11,6 +14,25 @@ interface Voice {
   filter: BiquadFilterNode;
 }
 
+const INSTRUMENT_STORAGE_KEY = "keyboard-sensei-instrument-id";
+
+function loadStoredInstrumentId(): string | null {
+  try {
+    return localStorage.getItem(INSTRUMENT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredInstrumentId(id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(INSTRUMENT_STORAGE_KEY);
+    else localStorage.setItem(INSTRUMENT_STORAGE_KEY, id);
+  } catch {
+    // Private browsing / storage disabled — the choice just won't persist across reloads.
+  }
+}
+
 /**
  * Dependency-free Web Audio piano voice. Not a sample library, but shaped to
  * behave like one: three layered partials (fundamental + soft octave + faint
@@ -18,15 +40,89 @@ interface Voice {
  * (bright hammer strike settling into a mellow body), a velocity-sensitive
  * two-stage decay (pianos keep decaying while held), and a shared compressor
  * so chords don't clip.
+ *
+ * This class is also the FACADE for the whole app's piano voice: every
+ * existing caller (MidiContext, playalongEngine, accompanimentPlayer,
+ * VirtualPiano) only ever calls playNote/stopNote on the `pianoSynth`
+ * singleton below, and keeps working completely unchanged.
+ * `useInstrument()` swaps in a real sampled voice
+ * (apps/web/src/utils/sampler.ts) underneath; when none is selected, or the
+ * selected one is still loading its 88 samples, playback silently falls back
+ * to this oscillator synth so the keyboard is never silent.
  */
 export class PianoSynth {
   private ctx: AudioContext | null = null;
   private master: DynamicsCompressorNode | null = null;
   private voices = new Map<number, Voice>();
 
+  /** Instruments already switched to, keyed by id — switching back to a
+   *  previously-loaded instrument is instant, samples aren't re-fetched. */
+  private samplerCache = new Map<string, SampledInstrument>();
+  private activeSampler: SampledInstrument | null = null;
+  private activeInstrumentId: string | null = null;
+  /** Which engine actually produced the currently-sounding voice for a note, so
+   *  stopNote() releases the right one even if the selected instrument changed
+   *  between the note-on and note-off (e.g. the user switched voices mid-note). */
+  private noteEngine = new Map<number, "synth" | SampledInstrument>();
+
+  constructor() {
+    const storedId = loadStoredInstrumentId();
+    if (storedId) void this.useInstrument(storedId);
+  }
+
+  get currentInstrumentId(): string | null {
+    return this.activeInstrumentId;
+  }
+
+  /**
+   * Switches the active voice. `null` reverts to the built-in oscillator
+   * synth. Resolves once the instrument's samples have fully loaded — but
+   * callers do NOT need to await this for the keyboard to keep working: the
+   * synth fallback covers playback the instant this is called, before the
+   * returned promise settles.
+   */
+  async useInstrument(instrumentId: string | null): Promise<void> {
+    this.activeInstrumentId = instrumentId;
+    saveStoredInstrumentId(instrumentId);
+
+    if (instrumentId === null) {
+      this.activeSampler = null;
+      return;
+    }
+
+    const ctx = this.ensureContext();
+    let sampler = this.samplerCache.get(instrumentId);
+    if (!sampler) {
+      sampler = new SampledInstrument(instrumentId, ctx, this.master!);
+      this.samplerCache.set(instrumentId, sampler);
+    }
+    this.activeSampler = sampler;
+    await sampler.load();
+  }
+
+  /** For a picker UI to show load progress without reaching into internals. */
+  instrumentLoadState(instrumentId: string): { loaded: boolean; progress: number } {
+    const sampler = this.samplerCache.get(instrumentId);
+    if (!sampler) return { loaded: false, progress: 0 };
+    return { loaded: sampler.isLoaded, progress: sampler.loadProgress };
+  }
+
+  /** Plays a short C-E-G chord on the given instrument (fetching just those
+   *  three notes, not the full 88-sample pack), so a picker can preview a
+   *  voice before committing to a full download. */
+  async previewInstrument(instrumentId: string, midiNotes: number[] = [60, 64, 67]): Promise<void> {
+    const ctx = this.ensureContext();
+    await previewChord(instrumentId, midiNotes, ctx, this.master!);
+  }
+
   private ensureContext(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      // A MIDI note-on is NOT a user gesture, so resume() here is ignored by the
+      // browser until the user actually clicks something. Register instead, and
+      // audioUnlock resumes us on the first real gesture. Without this, a MIDI
+      // keyboard lights up the on-screen keys but makes no sound until you click.
+      registerAudioContext(this.ctx);
       this.master = this.ctx.createDynamicsCompressor();
       this.master.threshold.value = -18;
       this.master.knee.value = 12;
@@ -42,8 +138,28 @@ export class PianoSynth {
   }
 
   playNote(note: number, velocity = 100): void {
+    if (this.activeSampler && this.activeSampler.isLoaded && this.activeSampler.hasSample(note)) {
+      this.activeSampler.playNote(note, velocity);
+      this.noteEngine.set(note, this.activeSampler);
+      return;
+    }
+    this.playSynthNote(note, velocity);
+    this.noteEngine.set(note, "synth");
+  }
+
+  stopNote(note: number, immediate = false): void {
+    const engine = this.noteEngine.get(note);
+    this.noteEngine.delete(note);
+    if (engine instanceof SampledInstrument) {
+      engine.stopNote(note, immediate);
+      return;
+    }
+    this.stopSynthNote(note, immediate);
+  }
+
+  private playSynthNote(note: number, velocity: number): void {
     const ctx = this.ensureContext();
-    this.stopNote(note, true);
+    this.stopSynthNote(note, true);
 
     const now = ctx.currentTime;
     const frequency = midiToFrequency(note);
@@ -89,7 +205,7 @@ export class PianoSynth {
     this.voices.set(note, { oscillators, gain, filter });
   }
 
-  stopNote(note: number, immediate = false): void {
+  private stopSynthNote(note: number, immediate = false): void {
     const voice = this.voices.get(note);
     if (!voice || !this.ctx) return;
     const releaseTime = immediate ? 0.02 : 0.25;
