@@ -114,7 +114,10 @@ export default function SkillAssessmentPage({
   };
 
   return (
-    <main className="mx-auto max-w-3xl space-y-5 px-4 py-8">
+    // Was max-w-3xl (768px) — narrower than the rest of the app, which made the
+    // keyboard on this page (the first thing a new user sees) tiny. Full-bleed,
+    // like every other page that shows a piano.
+    <main className="mx-[calc(50%-50vw)] w-screen space-y-5 px-4 py-8">
       <div>
         <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
           Optional skill assessment
