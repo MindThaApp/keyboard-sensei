@@ -3,6 +3,7 @@ import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange, unionRange } from "../../utils/keyboardRange";
+import InstrumentPicker from "../instruments/InstrumentPicker";
 
 const MIDDLE_C = 60;
 /** Classic "typing keyboard as piano" layout, one row of white/black keys starting at C4. */
@@ -472,6 +473,7 @@ export default function VirtualPiano({
             </button>
           )}
         </div>
+        <InstrumentPicker compact />
         <button
           type="button"
           aria-label="Zoom out"

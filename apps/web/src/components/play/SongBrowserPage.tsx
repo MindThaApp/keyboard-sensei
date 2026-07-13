@@ -88,7 +88,7 @@ export default function SongBrowserPage() {
             Pick a song, watch the notes fall, play them as they land.
           </p>
         </div>
-        <Link to="/library" className="ml-auto text-sm text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+        <Link to="/settings?tab=library" className="ml-auto text-sm text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
           Manage library →
         </Link>
       </div>

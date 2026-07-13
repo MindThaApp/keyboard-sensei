@@ -112,7 +112,6 @@ export default function App() {
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
             <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
-            <NavLink to="/library" className={navLinkClasses}>Library</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/dashboard" className={navLinkClasses}>Dashboard</NavLink>
             <NavLink to="/settings" className={navLinkClasses}>Settings</NavLink>
