@@ -249,9 +249,11 @@ export default function NotationPreviewStrip({ notes, timeSignatureSegments, son
   return (
     <div
       ref={containerRef}
-      className="mb-2 space-y-1 rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40"
+      className="relative mb-2 rounded-lg border border-slate-200 bg-white/60 p-1 dark:border-slate-800 dark:bg-slate-900/40"
     >
-      <div className="flex items-center justify-end gap-1">
+      {/* Overlaid, not stacked: as its own row this toolbar pushed the staff down
+          by its full height, which read as dead space above the notes. */}
+      <div className="absolute right-1 top-1 z-10 flex items-center gap-1 rounded bg-white/80 px-1 backdrop-blur-sm dark:bg-slate-900/80">
         <span className="text-[11px] text-slate-400">Sheet size</span>
         <button
           type="button"
