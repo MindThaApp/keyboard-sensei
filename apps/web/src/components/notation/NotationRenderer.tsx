@@ -298,7 +298,11 @@ function drawStaveSystem(
  * lesson in docs/agent-briefing.md — a previous clipping bug here came from
  * exactly that kind of guess).
  */
-const CONTENT_HUG_PAD_PX = 8;
+// Breathing room around the cropped ink. getBBox() returns the GEOMETRY box, which
+// in some browsers excludes stroke width, so a hairline stem or ledger line can sit
+// a pixel or two outside it. Keep this comfortably above zero: clipping a low note
+// is far worse than a few px of margin.
+const CONTENT_HUG_PAD_PX = 10;
 function hugContent(container: HTMLDivElement): void {
   const svg = container.querySelector("svg");
   if (!svg || typeof (svg as SVGGraphicsElement).getBBox !== "function") return;
@@ -427,7 +431,7 @@ export default function NotationRenderer({
 
   return (
     <div className="max-w-full overflow-x-auto">
-      <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-3 text-slate-900 shadow-sm">
+      <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-1 text-slate-900 shadow-sm">
         {title && <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h3>}
         <div ref={containerRef} className="overflow-x-auto" />
       </div>
