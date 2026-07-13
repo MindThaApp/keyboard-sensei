@@ -235,11 +235,12 @@ export const getSongNotationFile = async (id: string): Promise<ArrayBuffer | nul
 
 export const uploadSong = async (
   file: File | Blob,
-  meta: { title: string; artist: string; genre: SongGenre; source_url?: string },
+  meta: { title: string; artist: string; genre: SongGenre; source_url?: string; origin?: "upload" | "recording" },
 ): Promise<Song> => {
   const token = getToken();
   const params = new URLSearchParams({ title: meta.title, artist: meta.artist, genre: meta.genre });
   if (meta.source_url) params.set("source_url", meta.source_url);
+  if (meta.origin) params.set("origin", meta.origin);
   const response = await fetch(`${API_URL}/songs/upload?${params}`, {
     method: "POST",
     headers: { "content-type": "audio/midi", ...(token ? { authorization: `Bearer ${token}` } : {}) },
