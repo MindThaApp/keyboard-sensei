@@ -215,6 +215,10 @@ export default function PlayAlongPage() {
   }, [phase]);
 
   const range = useMemo(() => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : null), [parsed]);
+  const notationVerticalRange = useMemo(
+    () => (parsed ? { lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax } : undefined),
+    [parsed],
+  );
   const whiteKeyWidthPx = useMemo(
     () => (range && stageWidth > 0 ? fitWhiteKeyWidth(range.lowestNote, range.highestNote, stageWidth) : undefined),
     [range, stageWidth],
@@ -689,6 +693,7 @@ export default function PlayAlongPage() {
           notes={parsed.notes}
           grid={parsed.grid}
           timeSignatureSegments={parsed.timeSignatureSegments}
+          verticalRange={notationVerticalRange}
         />
       )}
 
@@ -701,6 +706,7 @@ export default function PlayAlongPage() {
             timeSignatureSegments={parsed.timeSignatureSegments}
             songTimeS={Math.max(0, songTimeS)}
             bpm={parsed.bpm}
+            verticalRange={notationVerticalRange}
           />
         )
       )}

@@ -13,6 +13,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   song: {
     create: vi.fn(),
+    delete: vi.fn(),
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
@@ -142,6 +143,12 @@ function mockSongsDb(rows: SongRow[]) {
       return songs.get(song.id);
     },
   );
+  prismaMock.song.delete.mockImplementation(async ({ where }: { where: { id: string } }) => {
+    const song = songs.get(where.id);
+    if (!song) throw new Error("Song not found");
+    songs.delete(song.id);
+    return song;
+  });
   prismaMock.song.findUniqueOrThrow.mockImplementation(async ({ where }: { where: { id: string } }) => {
     const song = songs.get(where.id);
     if (!song) throw new Error("Song not found");
@@ -483,5 +490,39 @@ describe("PATCH /songs/:id", () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toMatchObject({ code: "validation_error" });
     expect(prismaMock.song.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /admin/songs/:id", () => {
+  it("lets an admin delete a song they do not own", async () => {
+    const songs = mockSongsDb([uploadedSong({ id: "song-other-1", uploader_id: "owner-1" })]);
+
+    const response = await callSongsRouter({
+      method: "DELETE",
+      url: "/admin/songs/song-other-1",
+      userId: "admin-1",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(songs.has("song-other-1")).toBe(false);
+    expect(prismaMock.song.delete).toHaveBeenCalledWith({ where: { id: "song-other-1" } });
+  });
+
+  it("does not let a non-admin delete another user's song", async () => {
+    const songs = mockSongsDb([uploadedSong({ id: "song-other-1", uploader_id: "owner-1" })]);
+
+    const response = await callSongsRouter({
+      method: "DELETE",
+      url: "/admin/songs/song-other-1",
+      userId: "other-user",
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      error: { code: "forbidden", message: "Admin access required" },
+    });
+    expect(songs.has("song-other-1")).toBe(true);
+    expect(prismaMock.song.delete).not.toHaveBeenCalled();
   });
 });

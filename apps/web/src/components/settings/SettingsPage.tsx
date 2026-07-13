@@ -7,6 +7,7 @@ import VirtualPiano from "../piano/VirtualPiano";
 import InstrumentSection from "./InstrumentSection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
+import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
@@ -318,6 +319,7 @@ function NarrationSection() {
 function MidiSection() {
   const { subscribe } = useMidiContext();
   const [lastNote, setLastNote] = useState<string | null>(null);
+  const [highlightEnabled, setHighlightEnabled] = useState(loadHighlightEnabled);
 
   useEffect(() => {
     return subscribe((event) => {
@@ -338,6 +340,17 @@ function MidiSection() {
       <p className="text-sm text-slate-600 dark:text-slate-300">
         Last note played: <span className="font-medium text-slate-900 dark:text-slate-100">{lastNote ?? "—"}</span>
       </p>
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+        <input
+          type="checkbox"
+          checked={highlightEnabled}
+          onChange={(e) => {
+            setHighlightEnabled(e.target.checked);
+            saveHighlightEnabled(e.target.checked);
+          }}
+        />
+        Highlight notes as I play them
+      </label>
       <VirtualPiano />
     </section>
   );

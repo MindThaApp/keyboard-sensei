@@ -42,6 +42,7 @@ interface Props {
   timeSignatureSegments: TimeSignatureSegment[];
   songTimeS: number;
   bpm: number;
+  verticalRange?: { lowestNote: number; highestNote: number };
 }
 
 const MIN_WINDOW_MEASURES = 1;
@@ -119,7 +120,7 @@ function loadScale(): number {
 }
 
 /** Rolling grand-staff preview above the Play-Along waterfall. The measure window adapts to fill the available width (see estimateWindowMeasures) while always rendering as exactly one system — maxSystemWidthPx={Infinity} below — so its footprint never jumps as note density changes bar to bar. */
-export default function NotationPreviewStrip({ notes, timeSignatureSegments, songTimeS, bpm }: Props) {
+export default function NotationPreviewStrip({ notes, timeSignatureSegments, songTimeS, bpm, verticalRange }: Props) {
   const secondsPerBeat = 60 / bpm;
   const currentBeat = Math.max(0, songTimeS / secondsPerBeat);
   const currentBar = barRangeContaining(timeSignatureSegments, currentBeat);
@@ -228,21 +229,6 @@ export default function NotationPreviewStrip({ notes, timeSignatureSegments, son
     return () => observer.disconnect();
   }, []);
 
-  // The rendered SVG now hugs its own ink (see NotationRenderer's hugContent),
-  // which can vary by a few px bar-to-bar depending on how far ledger lines
-  // reach. A high-water mark keeps the strip's occupied height from ever
-  // SHRINKING mid-song — the exact regression this component used to guard
-  // against with a fixed constant — while still tightening once real content
-  // is smaller than the old fixed pad. Resets when the song (notes array)
-  // changes.
-  const stableHeightRef = useRef(0);
-  const notesRef = useRef(notes);
-  if (notesRef.current !== notes) {
-    notesRef.current = notes;
-    stableHeightRef.current = 0;
-  }
-  if (naturalSize.height > stableHeightRef.current) stableHeightRef.current = naturalSize.height;
-
   const decreaseScale = () => setScale((s) => Math.max(SCALE_MIN, Math.round((s - SCALE_STEP) * 1000) / 1000));
   const increaseScale = () => setScale((s) => Math.min(SCALE_MAX, Math.round((s + SCALE_STEP) * 1000) / 1000));
 
@@ -279,11 +265,16 @@ export default function NotationPreviewStrip({ notes, timeSignatureSegments, son
         className="overflow-x-auto"
         style={{
           width: naturalSize.width > 0 ? naturalSize.width * scale : undefined,
-          height: stableHeightRef.current > 0 ? stableHeightRef.current * scale : undefined,
+          height: naturalSize.height > 0 ? naturalSize.height * scale : undefined,
         }}
       >
         <div ref={notationBoxRef} style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: "fit-content" }}>
-          <NotationRenderer data={data} activeNoteIds={activeNoteIds} maxSystemWidthPx={Infinity} />
+          <NotationRenderer
+            data={data}
+            activeNoteIds={activeNoteIds}
+            maxSystemWidthPx={Infinity}
+            verticalRange={verticalRange}
+          />
         </div>
       </div>
     </div>

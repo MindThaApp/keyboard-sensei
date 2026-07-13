@@ -95,6 +95,12 @@ const songListItem = (song: {
 /** Song library routes; mounted behind requireAuth. */
 export const songsRouter: Router = Router();
 
+const deleteSongRow = async (song: { id: string; file_path: string; uploader_id: string | null }) => {
+  await prisma.song.delete({ where: { id: song.id } });
+  // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
+  if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
+};
+
 songsRouter.get("/songs", async (req, res, next) => {
   try {
     const userId = uid(req);
@@ -324,9 +330,7 @@ songsRouter.delete("/songs/:id", async (req, res, next) => {
       res.status(403).json({ error: { code: "forbidden", message: "You can only delete songs you uploaded" } });
       return;
     }
-    await prisma.song.delete({ where: { id: song.id } });
-    // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
-    if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
+    await deleteSongRow(song);
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -357,6 +361,20 @@ songsRouter.patch("/admin/songs/:id", requireAdmin, async (req, res, next) => {
     const input = adminSongPatchSchema.parse(req.body);
     const song = await prisma.song.update({ where: { id: z.string().parse(req.params.id) }, data: input });
     res.json(songListItem(song, uid(req)));
+  } catch (e) {
+    next(e);
+  }
+});
+
+songsRouter.delete("/admin/songs/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
+    if (!song) {
+      res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
+      return;
+    }
+    await deleteSongRow(song);
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

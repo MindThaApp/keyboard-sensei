@@ -11,6 +11,7 @@ import {
   Dot,
   type RenderContext,
 } from "vexflow";
+import { midiToVexKey } from "../../utils/measureNotation";
 
 interface NoteData {
   ids?: string[];
@@ -36,6 +37,22 @@ interface GrandStaffData {
 }
 
 type NotationData = SimpleStaveData | GrandStaffData;
+export interface NotationVerticalRange {
+  lowestNote: number;
+  highestNote: number;
+}
+
+interface StaveYGeometry {
+  getYForLine(line: number): number;
+  getYForNote(line: number): number;
+}
+
+interface CropBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 function isGrandStaffData(data: Record<string, unknown>): boolean {
   return data.grandStaff === true && !!data.treble && !!data.bass;
@@ -303,7 +320,49 @@ function drawStaveSystem(
 // a pixel or two outside it. Keep this comfortably above zero: clipping a low note
 // is far worse than a few px of margin.
 const CONTENT_HUG_PAD_PX = 10;
-function hugContent(container: HTMLDivElement): void {
+const NOTEHEAD_RADIUS_IN_STAFF_SPACES = 0.5;
+const EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES = 0.35;
+
+function staffSpacePx(stave: StaveYGeometry): number {
+  return Math.abs(stave.getYForLine(1) - stave.getYForLine(0));
+}
+
+function midiStaffLine(note: number, clef: string): number {
+  const staveNote = new StaveNote({ keys: [midiToVexKey(note)], duration: "q", clef });
+  return staveNote.getKeyProps()[0].line;
+}
+
+function yForMidi(stave: StaveYGeometry, note: number, clef: string): number {
+  return stave.getYForNote(midiStaffLine(note, clef));
+}
+
+export function expandCropBoxForVerticalRange(
+  box: CropBox,
+  verticalRange: NotationVerticalRange | undefined,
+  staves: { treble?: StaveYGeometry; bass?: StaveYGeometry; single?: { stave: StaveYGeometry; clef: string } },
+): CropBox {
+  if (!verticalRange) return box;
+  const topStave = staves.treble ?? staves.single?.stave;
+  const bottomStave = staves.bass ?? staves.single?.stave;
+  const topClef = staves.treble ? "treble" : staves.single?.clef;
+  const bottomClef = staves.bass ? "bass" : staves.single?.clef;
+  if (!topStave || !bottomStave || !topClef || !bottomClef) return box;
+
+  const topPad = staffSpacePx(topStave) * (NOTEHEAD_RADIUS_IN_STAFF_SPACES + EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES);
+  const bottomPad = staffSpacePx(bottomStave) * (NOTEHEAD_RADIUS_IN_STAFF_SPACES + EXTRA_VERTICAL_CLEARANCE_IN_STAFF_SPACES);
+  const requiredTop = yForMidi(topStave, verticalRange.highestNote, topClef) - topPad;
+  const requiredBottom = yForMidi(bottomStave, verticalRange.lowestNote, bottomClef) + bottomPad;
+
+  const top = Math.min(box.y, requiredTop);
+  const bottom = Math.max(box.y + box.height, requiredBottom);
+  return { ...box, y: top, height: bottom - top };
+}
+
+function hugContent(
+  container: HTMLDivElement,
+  verticalRange?: NotationVerticalRange,
+  staves: { treble?: Stave; bass?: Stave; single?: { stave: Stave; clef: string } } = {},
+): void {
   const svg = container.querySelector("svg");
   if (!svg || typeof (svg as SVGGraphicsElement).getBBox !== "function") return;
   let bbox: DOMRect;
@@ -313,11 +372,12 @@ function hugContent(container: HTMLDivElement): void {
     return; // getBBox can throw before layout in some non-browser test environments
   }
   if (!bbox.width || !bbox.height) return;
-  const width = bbox.width + CONTENT_HUG_PAD_PX * 2;
-  const height = bbox.height + CONTENT_HUG_PAD_PX * 2;
+  const cropBox = expandCropBoxForVerticalRange(bbox, verticalRange, staves);
+  const width = cropBox.width + CONTENT_HUG_PAD_PX * 2;
+  const height = cropBox.height + CONTENT_HUG_PAD_PX * 2;
   svg.setAttribute(
     "viewBox",
-    `${bbox.x - CONTENT_HUG_PAD_PX} ${bbox.y - CONTENT_HUG_PAD_PX} ${width} ${height}`,
+    `${cropBox.x - CONTENT_HUG_PAD_PX} ${cropBox.y - CONTENT_HUG_PAD_PX} ${width} ${height}`,
   );
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
@@ -335,6 +395,7 @@ export default function NotationRenderer({
   activeNoteIds,
   maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
   onLayout,
+  verticalRange,
 }: {
   data: Record<string, unknown>;
   title?: string;
@@ -349,6 +410,7 @@ export default function NotationRenderer({
    *  where each beat landed on the ribbon. Read via a ref internally, so it
    *  need not be memoized by the caller and never re-triggers this effect. */
   onLayout?: (positions: { id: string; x: number }[]) => void;
+  verticalRange?: NotationVerticalRange;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onLayoutRef = useRef(onLayout);
@@ -359,6 +421,7 @@ export default function NotationRenderer({
     if (!container) return;
     container.innerHTML = "";
     const positions: { id: string; x: number }[] = [];
+    const rangeStaves: { treble?: Stave; bass?: Stave; single?: { stave: Stave; clef: string } } = {};
 
     try {
       if (isGrandStaffData(data)) {
@@ -392,6 +455,8 @@ export default function NotationRenderer({
             grandStaffData.bass.keySignature, i === 0 ? grandStaffData.bass.timeSignature : undefined,
             activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
+          rangeStaves.treble ??= trebleStave;
+          rangeStaves.bass ??= bassStave;
           const brace = new StaveConnector(trebleStave, bassStave);
           brace.setType("brace");
           brace.setContext(context).draw();
@@ -413,21 +478,22 @@ export default function NotationRenderer({
 
         chunks.forEach((chunk, i) => {
           const y = 20 + i * (SINGLE_STAVE_HEIGHT_PX + SYSTEM_GAP_PX);
-          drawStaveSystem(
+          const stave = drawStaveSystem(
             context, chunk, staveData.clef, 10, y, widths[i] - 20,
             staveData.keySignature, i === 0 ? staveData.timeSignature : undefined,
             activeNoteIds, onLayoutRef.current ? positions : undefined,
           );
+          rangeStaves.single ??= { stave, clef: staveData.clef };
         });
       }
-      hugContent(container);
+      hugContent(container, verticalRange, rangeStaves);
       onLayoutRef.current?.(positions);
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
         '<p class="text-sm text-rose-600">Notation could not be rendered.</p>';
     }
-  }, [data, activeNoteIds, maxSystemWidthPx]);
+  }, [data, activeNoteIds, maxSystemWidthPx, verticalRange]);
 
   return (
     <div className="max-w-full overflow-x-auto">
