@@ -1,13 +1,129 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
+const staticShellExtensions = new Set([
+  ".html",
+  ".js",
+  ".css",
+  ".png",
+  ".webmanifest",
+]);
+const neverPrecacheExtensions = new Set([
+  ".flac",
+  ".mp3",
+  ".ogg",
+  ".wav",
+]);
+
+type StaticShellFile = {
+  url: string;
+  digest: string;
+};
+
+async function listStaticShellFiles(dir: string, prefix = ""): Promise<StaticShellFile[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const relativePath = path.posix.join(prefix, entry.name);
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        return listStaticShellFiles(fullPath, relativePath);
+      }
+
+      if (!entry.isFile() || entry.name === "sw.js" || entry.name.endsWith(".map")) {
+        return [];
+      }
+
+      const extension = path.extname(entry.name).toLowerCase();
+      if (neverPrecacheExtensions.has(extension) || !staticShellExtensions.has(extension)) {
+        return [];
+      }
+
+      const digest = crypto
+        .createHash("sha256")
+        .update(await fs.readFile(fullPath))
+        .digest("hex")
+        .slice(0, 12);
+
+      return [{ url: `/${relativePath}`, digest }];
+    }),
+  );
+
+  return files.flat();
+}
+
+function serviceWorkerSource(staticShellUrls: string[], cacheVersion: string) {
+  return `const CACHE_NAME = "keyboard-sensei-shell-${cacheVersion}";
+const STATIC_SHELL_URLS = ${JSON.stringify(staticShellUrls, null, 2)};
+const AUDIO_EXTENSION_PATTERN = /\\.(?:mp3|ogg|wav|flac)(?:$|[?#])/i;
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_SHELL_URLS))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys
+        .filter((key) => key.startsWith("keyboard-sensei-shell-") && key !== CACHE_NAME)
+        .map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return;
+  if (url.pathname.includes("/samples/") || AUDIO_EXTENSION_PATTERN.test(url.pathname)) return;
+
+  if (STATIC_SHELL_URLS.includes(url.pathname)) {
+    event.respondWith(caches.match(request).then((response) => response || fetch(request)));
+    return;
+  }
+
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
+  }
+});
+`;
+}
+
+function pwaServiceWorkerPlugin() {
+  return {
+    name: "keyboard-sensei-pwa-service-worker",
+    apply: "build" as const,
+    async writeBundle(options: { dir?: string }) {
+      const outDir = options.dir ? path.resolve(__dirname, options.dir) : path.resolve(__dirname, "dist");
+      const staticShellFiles = (await listStaticShellFiles(outDir)).sort((a, b) => a.url.localeCompare(b.url));
+      const cacheVersion = crypto
+        .createHash("sha256")
+        .update(staticShellFiles.map((file) => `${file.url}:${file.digest}`).join("\n"))
+        .digest("hex")
+        .slice(0, 12);
+      const staticShellUrls = staticShellFiles.map((file) => file.url);
+
+      await fs.writeFile(path.join(outDir, "sw.js"), serviceWorkerSource(staticShellUrls, cacheVersion));
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), pwaServiceWorkerPlugin()],
   resolve: {
     alias: {
       "@keyboard-sensei/shared-types": path.resolve(
@@ -34,4 +150,3 @@ export default defineConfig({
     },
   },
 });
-

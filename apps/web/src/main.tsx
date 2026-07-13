@@ -12,3 +12,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ThemeProvider><BrowserRouter><AuthProvider><MidiProvider><App /></MidiProvider></AuthProvider></BrowserRouter></ThemeProvider>
   </React.StrictMode>,
 );
+
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js");
+  });
+}
