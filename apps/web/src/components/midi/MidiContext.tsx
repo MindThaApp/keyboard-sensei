@@ -24,6 +24,8 @@ import {
 } from "../../utils/keyboardRange";
 
 type RawMidiListener = (event: RawMidiEvent) => void;
+export interface MidiControlChangeEvent { controller: number; value: number; timestampMs: number }
+type ControlChangeListener = (event: MidiControlChangeEvent) => void;
 type CalibrationState =
   | { status: "idle" }
   | { status: "awaitingLow"; deviceKey: string }
@@ -49,6 +51,8 @@ interface MidiContextValue {
   connectWebMidi: () => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
   subscribe: (listener: RawMidiListener) => () => void;
+  /** Subscribes to control-change events from both MIDI sources. */
+  subscribeControlChange: (listener: ControlChangeListener) => () => void;
 }
 
 const MidiContext = createContext<MidiContextValue | null>(null);
@@ -65,6 +69,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   if (!webAdapterRef.current) webAdapterRef.current = new WebMidiAdapter();
 
   const listenersRef = useRef<Set<RawMidiListener>>(new Set());
+  const controlChangeListenersRef = useRef<Set<ControlChangeListener>>(new Set());
   const devicesRef = useRef<MidiDeviceInfo[]>([]);
 
   const [webMidiConnected, setWebMidiConnected] = useState(false);
@@ -163,6 +168,10 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     const emit = (event: RawMidiEvent) => {
       for (const listener of listenersRef.current) listener(event);
     };
+    const emitControlChange = (controller: number, value: number) => {
+      const event = { controller, value, timestampMs: Date.now() };
+      for (const listener of controlChangeListenersRef.current) listener(event);
+    };
 
     mockAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
@@ -174,6 +183,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     });
     mockAdapter.onControlChange((controller, value) => {
       if (controller !== 64) return;
+      emitControlChange(controller, value);
       const down = value >= 64;
       pianoSynth.setSustainPedal(down);
       setSustainPedalDown((current) => (current === down ? current : down));
@@ -214,6 +224,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     });
     webAdapter.onControlChange((controller, value) => {
       if (controller !== 64) return;
+      emitControlChange(controller, value);
       const down = value >= 64;
       pianoSynth.setSustainPedal(down);
       setSustainPedalDown((current) => (current === down ? current : down));
@@ -299,6 +310,13 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const subscribeControlChange = useCallback((listener: ControlChangeListener) => {
+    controlChangeListenersRef.current.add(listener);
+    return () => {
+      controlChangeListenersRef.current.delete(listener);
+    };
+  }, []);
+
   const value = useMemo<MidiContextValue>(
     () => ({
       mockAdapter: mockAdapterRef.current!,
@@ -317,8 +335,9 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       sustainPedalDown,
       connectWebMidi,
       subscribe,
+      subscribeControlChange,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, currentDeviceKey, calibration, startCalibration, dismissCalibration, sustainPedalDown, connectWebMidi, subscribe],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, currentDeviceKey, calibration, startCalibration, dismissCalibration, sustainPedalDown, connectWebMidi, subscribe, subscribeControlChange],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;

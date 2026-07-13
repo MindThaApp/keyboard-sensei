@@ -15,6 +15,7 @@ import SongBrowserPage from "./components/play/SongBrowserPage";
 import PlayAlongPage from "./components/play/PlayAlongPage";
 import SongLibraryPage from "./components/library/SongLibraryPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
+import RecordingPage from "./components/record/RecordingPage";
 import { useAuth } from "./contexts/AuthContext";
 import { useTheme, type Theme } from "./contexts/ThemeContext";
 import { applyAssessmentPlacement } from "./services/api";
@@ -111,6 +112,7 @@ export default function App() {
           <nav className="flex items-center gap-1 text-sm">
             <NavLink to="/" end className={navLinkClasses}>Lessons</NavLink>
             <NavLink to="/practice-gym" className={navLinkClasses}>Practice Gym</NavLink>
+            <NavLink to="/record" className={navLinkClasses}>Record</NavLink>
             <NavLink to="/play" className={navLinkClasses}>Play</NavLink>
             <NavLink to="/history" className={navLinkClasses}>History</NavLink>
             <NavLink to="/dashboard" className={navLinkClasses}>Dashboard</NavLink>
@@ -139,6 +141,7 @@ export default function App() {
           <Route path="/" element={<LessonListPage />} />
           <Route path="/lessons/:lessonId" element={<LessonPlayerPage />} />
           <Route path="/practice-gym" element={<PracticeGymPage />} />
+          <Route path="/record" element={<RecordingPage />} />
           <Route path="/history" element={<PracticeHistoryPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/settings" element={<SettingsPage />} />

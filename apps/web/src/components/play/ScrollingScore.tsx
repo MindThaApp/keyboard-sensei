@@ -1,6 +1,6 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
-import NotationRenderer from "../notation/NotationRenderer";
+import NotationRenderer, { type NotationRendererHandle } from "../notation/NotationRenderer";
 import { groupIntoMeasures, measureIndexForBeat, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
 import { barRangesFrom, type SongBeatGrid, type TimeSignatureSegment } from "../../utils/playalongSong";
 
@@ -9,8 +9,8 @@ export interface ScrollingScoreHandle {
    *  ribbon's transform directly on the DOM (a ref), never via setState, so
    *  this never triggers a React re-render at 60fps (see
    *  docs/agent-briefing.md's "do not setState every frame" lesson). The
-   *  currently-sounding note IDs are also tracked here, but only setState
-   *  when that SET actually changes (see activeIdsRef below). */
+   *  currently-sounding note IDs are also tracked here, but only mutate SVG
+   *  classes when that SET actually changes (see activeIdsRef below). */
   setSongTime: (songTimeS: number) => void;
 }
 
@@ -252,6 +252,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const ribbonRef = useRef<HTMLDivElement>(null);
+  const notationRef = useRef<NotationRendererHandle>(null);
   // Beat -> rendered x px, refreshed by NotationRenderer's onLayout whenever
   // it (re)draws (once, since the whole piece renders in a single pass).
   // Read every frame by setSongTime below but never itself causes a
@@ -261,11 +262,9 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
   const beatXSplineRef = useRef<MonotoneCubicSpline>({ xs: [], ys: [], ms: [] });
   const idToBeatRef = useRef<Map<string, number>>(new Map());
   // The currently-highlighted note ids. Compared by VALUE every frame in
-  // setSongTime; only calls setState (and so only re-renders
-  // NotationRenderer) when the SET actually changes — at the rate notes
-  // strike, not at 60fps.
+  // setSongTime; only mutates NotationRenderer's already-drawn SVG classes
+  // when the SET actually changes — at the rate notes strike, not at 60fps.
   const activeIdsRef = useRef<Set<string>>(new Set());
-  const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
 
   const data = useMemo(() => {
     const idToBeat = new Map<string, number>();
@@ -319,7 +318,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
         const t = Math.max(0, songTimeS);
         const beat = lerpSeries(anchors, t);
 
-        // Which note ids are sounding right now — setState only on a real change.
+        // Which note ids are sounding right now — update the SVG class only on a real change.
         const nextActive = new Set<string>();
         for (const n of scrollNotes) {
           if (n.startBeat <= beat && beat < n.startBeat + n.durationBeats) nextActive.add(n.id);
@@ -329,7 +328,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
           nextActive.size !== prevActive.size || [...nextActive].some((id) => !prevActive.has(id));
         if (changed) {
           activeIdsRef.current = nextActive;
-          setActiveIds(nextActive);
+          notationRef.current?.setActiveNoteIds(nextActive);
         }
 
         const viewport = viewportRef.current;
@@ -360,8 +359,8 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
       <div ref={viewportRef} className="relative overflow-hidden" style={{ height: VIEWPORT_HEIGHT_PX }}>
         <div ref={ribbonRef} className="absolute left-0 top-0 will-change-transform">
           <NotationRenderer
+            ref={notationRef}
             data={data}
-            activeNoteIds={activeIds}
             maxSystemWidthPx={Infinity}
             onLayout={handleLayout}
             verticalRange={verticalRange}
