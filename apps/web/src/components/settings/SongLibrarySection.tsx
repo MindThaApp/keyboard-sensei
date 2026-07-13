@@ -28,6 +28,22 @@ const GENRES: { value: SongGenre | "all"; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+type SourceFilter = "all" | "recordings" | "uploads" | "library";
+
+const SOURCES: { value: SourceFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "recordings", label: "My recordings" },
+  { value: "uploads", label: "My uploads" },
+  { value: "library", label: "Library" },
+];
+
+const matchesSource = (song: Song, source: SourceFilter): boolean => {
+  if (source === "recordings") return song.mine && song.content_rights === "user-recording";
+  if (source === "uploads") return song.mine && (song.content_rights === "user-upload" || song.content_rights === "user-import-url");
+  if (source === "library") return !song.mine;
+  return true;
+};
+
 const formatDuration = (seconds: number): string => {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
@@ -54,6 +70,14 @@ function ArchiveBadge() {
       className="rounded bg-brass-100 px-1.5 py-0.5 text-xs font-medium text-brass-700 dark:bg-brass-700/30 dark:text-brass-300"
     >
       From archive
+    </span>
+  );
+}
+
+function RecordingBadge() {
+  return (
+    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+      Recording
     </span>
   );
 }
@@ -438,6 +462,7 @@ export default function SongLibrarySection() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState<SongGenre | "all">("all");
+  const [source, setSource] = useState<SourceFilter>("all");
   const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
@@ -454,10 +479,11 @@ export default function SongLibrarySection() {
     const filtered = songs.filter(
       (song) =>
         (genre === "all" || song.genre === genre) &&
+        matchesSource(song, source) &&
         (!query || song.title.toLowerCase().includes(query) || song.artist.toLowerCase().includes(query)),
     );
     return [...filtered].sort((a, b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title));
-  }, [songs, search, genre]);
+  }, [songs, search, genre, source]);
 
   const removeSong = async (song: Song) => {
     if (!window.confirm(`Permanently delete "${song.title}"? This cannot be undone.`)) return;
@@ -529,6 +555,21 @@ export default function SongLibrarySection() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1">
+          {SOURCES.map((item) => (
+            <button
+              key={item.value}
+              onClick={() => setSource(item.value)}
+              className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                source === item.value
+                  ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         {visible && <span className="text-xs text-slate-400">{visible.length} songs</span>}
       </div>
 
@@ -574,6 +615,7 @@ export default function SongLibrarySection() {
                 </>
               )}
               {song.content_rights === "archive-import" && <ArchiveBadge />}
+              {song.content_rights === "user-recording" && <RecordingBadge />}
               <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
                 {song.genre}
               </span>

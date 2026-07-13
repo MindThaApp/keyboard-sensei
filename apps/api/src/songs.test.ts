@@ -421,6 +421,42 @@ describe("POST /songs/upload", () => {
       }),
     });
   });
+
+  it("stores recording uploads as user-recording", async () => {
+    vi.clearAllMocks();
+    const bytes = Buffer.from(buildMidi(80));
+    const created = uploadedSong({
+      id: "song-recording-1",
+      title: "Recorded Song",
+      artist: "Me",
+      content_rights: "user-recording",
+      file_path: "pending",
+    });
+    const updated = uploadedSong({ ...created, file_path: "/tmp/upload-song-recording-1.mid" });
+    prismaMock.song.create.mockResolvedValueOnce(created);
+    prismaMock.song.update.mockResolvedValueOnce(updated);
+
+    const response = await callSongsRouter({
+      method: "POST",
+      url: "/songs/upload?title=Recorded%20Song&artist=Me&origin=recording",
+      userId: "owner-1",
+      headers: { "content-type": "audio/midi", "content-length": String(bytes.length) },
+      rawBody: bytes,
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ id: "song-recording-1", content_rights: "user-recording", mine: true });
+    expect(prismaMock.song.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Recorded Song",
+        artist: "Me",
+        genre: "other",
+        content_rights: "user-recording",
+        source_url: null,
+        uploader_id: "owner-1",
+      }),
+    });
+  });
 });
 
 describe("PATCH /songs/:id", () => {

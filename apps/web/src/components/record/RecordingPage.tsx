@@ -144,6 +144,7 @@ export default function RecordingPage() {
         title: title.trim(),
         artist: artist.trim() || "Me",
         genre,
+        origin: "recording",
       });
       navigate("/settings?tab=library");
     } catch (e) {

@@ -28,6 +28,7 @@ const uploadQuerySchema = z.object({
   artist: z.string().trim().min(1).max(120).default("Unknown"),
   genre: z.enum(["classical", "pop", "film", "game", "jazz", "other"]).default("other"),
   source_url: z.string().trim().url().max(2000).optional(),
+  origin: z.enum(["upload", "recording"]).optional(),
 });
 
 // Light in-memory rate limit: 10 URL-fetch attempts per user per hour. This
@@ -301,7 +302,7 @@ songsRouter.post(
           difficulty: metadata.difficulty,
           duration_sec: metadata.durationSec,
           note_count: metadata.noteCount,
-          content_rights: query.source_url ? "user-import-url" : "user-upload",
+          content_rights: query.source_url ? "user-import-url" : query.origin === "recording" ? "user-recording" : "user-upload",
           source_url: query.source_url ?? null,
           file_path: "pending",
           uploader_id: userId,
