@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   Renderer,
   Stave,
@@ -37,6 +37,9 @@ interface GrandStaffData {
 }
 
 type NotationData = SimpleStaveData | GrandStaffData;
+export interface NotationRendererHandle {
+  setActiveNoteIds: (activeNoteIds?: Set<string>) => void;
+}
 export interface NotationVerticalRange {
   lowestNote: number;
   highestNote: number;
@@ -125,19 +128,12 @@ function measuresOf(data: SimpleStaveData): NoteData[][] {
   return data.notes && data.notes.length > 0 ? [data.notes] : [];
 }
 
-/** Felt-crimson (matches the app's accent color) used to tint note(s) currently due to be played. */
-const ACTIVE_NOTE_COLOR = "#b4323e";
-
 function buildStaveNote(
   n: NoteData,
   clef: string,
   sigAccidentals: Record<string, string>,
-  activeNoteIds?: Set<string>,
 ): StaveNote {
   const staveNote = new StaveNote({ keys: n.keys, duration: n.duration, clef });
-  if (activeNoteIds && n.ids?.some((id) => activeNoteIds.has(id))) {
-    staveNote.setStyle({ fillStyle: ACTIVE_NOTE_COLOR, strokeStyle: ACTIVE_NOTE_COLOR });
-  }
   n.keys.forEach((key, keyIndex) => {
     const accidental = accidentalFromKey(key);
     if (!accidental) return;
@@ -250,7 +246,7 @@ function drawStaveSystem(
   width: number,
   keySignature: string | undefined,
   timeSignature: string | undefined,
-  activeNoteIds: Set<string> | undefined,
+  noteElementsById: Map<string, SVGElement>,
   /** When provided, each drawn note's post-format x pixel is appended here,
    *  once per id in its `NoteData.ids` — the primitive ScrollingScore uses
    *  to build its beat→x cursor mapping (see NotationRenderer's `onLayout`). */
@@ -271,9 +267,9 @@ function drawStaveSystem(
     // design) render the barlines between measure groups.
     if (measureIndex > 0) tickables.push(new BarNote());
     measure.forEach((n) => {
-      const staveNote = buildStaveNote(n, clef, sigAccidentals, activeNoteIds);
+      const staveNote = buildStaveNote(n, clef, sigAccidentals);
       tickables.push(staveNote);
-      if (positions) noteEntries.push({ note: staveNote, ids: n.ids });
+      noteEntries.push({ note: staveNote, ids: n.ids });
       noteCount += 1;
     });
   });
@@ -297,6 +293,12 @@ function drawStaveSystem(
       const noteX = note.getAbsoluteX();
       for (const id of ids) positions.push({ id, x: noteX });
     }
+  }
+  for (const { note, ids } of noteEntries) {
+    if (!ids || ids.length === 0) continue;
+    const el = note.getSVGElement();
+    if (!el) continue;
+    for (const id of ids) noteElementsById.set(id, el);
   }
 
   return stave;
@@ -358,6 +360,25 @@ export function expandCropBoxForVerticalRange(
   return { ...box, y: top, height: bottom - top };
 }
 
+function syncActiveNoteElements(
+  noteElementsById: Map<string, SVGElement>,
+  previouslyActiveElements: Set<SVGElement>,
+  activeNoteIds?: Set<string>,
+): Set<SVGElement> {
+  for (const el of previouslyActiveElements) el.classList.remove("note-active");
+
+  const nextActiveElements = new Set<SVGElement>();
+  if (activeNoteIds) {
+    for (const id of activeNoteIds) {
+      const el = noteElementsById.get(id);
+      if (!el) continue;
+      el.classList.add("note-active");
+      nextActiveElements.add(el);
+    }
+  }
+  return nextActiveElements;
+}
+
 function hugContent(
   container: HTMLDivElement,
   verticalRange?: NotationVerticalRange,
@@ -389,14 +410,7 @@ function hugContent(
  * pieces automatically wrap into multiple staff systems (like printed sheet
  * music) instead of one long horizontally-scrolling line.
  */
-export default function NotationRenderer({
-  data,
-  title,
-  activeNoteIds,
-  maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
-  onLayout,
-  verticalRange,
-}: {
+const NotationRenderer = forwardRef<NotationRendererHandle, {
   data: Record<string, unknown>;
   title?: string;
   /** ExpectedNoteEvent ids (or play-along note ids) currently due to be played — tinted on the stave. */
@@ -411,16 +425,46 @@ export default function NotationRenderer({
    *  need not be memoized by the caller and never re-triggers this effect. */
   onLayout?: (positions: { id: string; x: number }[]) => void;
   verticalRange?: NotationVerticalRange;
-}) {
+}>(function NotationRenderer({
+  data,
+  title,
+  activeNoteIds,
+  maxSystemWidthPx = MAX_SYSTEM_WIDTH_PX,
+  onLayout,
+  verticalRange,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onLayoutRef = useRef(onLayout);
+  const activeNoteIdsRef = useRef(activeNoteIds);
+  const noteElementsByIdRef = useRef<Map<string, SVGElement>>(new Map());
+  const activeNoteElementsRef = useRef<Set<SVGElement>>(new Set());
   onLayoutRef.current = onLayout;
+
+  const applyActiveNoteIds = (nextActiveNoteIds?: Set<string>) => {
+    activeNoteIdsRef.current = nextActiveNoteIds;
+    activeNoteElementsRef.current = syncActiveNoteElements(
+      noteElementsByIdRef.current,
+      activeNoteElementsRef.current,
+      nextActiveNoteIds,
+    );
+  };
+
+  useImperativeHandle(ref, () => ({
+    setActiveNoteIds: applyActiveNoteIds,
+  }));
+
+  useEffect(() => {
+    applyActiveNoteIds(activeNoteIds);
+  }, [activeNoteIds]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     container.innerHTML = "";
     const positions: { id: string; x: number }[] = [];
+    const noteElementsById = new Map<string, SVGElement>();
+    noteElementsByIdRef.current = noteElementsById;
+    activeNoteElementsRef.current = new Set();
     const rangeStaves: { treble?: Stave; bass?: Stave; single?: { stave: Stave; clef: string } } = {};
 
     try {
@@ -448,12 +492,12 @@ export default function NotationRenderer({
           const trebleStave = drawStaveSystem(
             context, system.treble, grandStaffData.treble.clef, 20, y, widths[i] - 40,
             grandStaffData.treble.keySignature, i === 0 ? grandStaffData.treble.timeSignature : undefined,
-            activeNoteIds, onLayoutRef.current ? positions : undefined,
+            noteElementsById, onLayoutRef.current ? positions : undefined,
           );
           const bassStave = drawStaveSystem(
             context, system.bass, grandStaffData.bass.clef, 20, y + 90, widths[i] - 40,
             grandStaffData.bass.keySignature, i === 0 ? grandStaffData.bass.timeSignature : undefined,
-            activeNoteIds, onLayoutRef.current ? positions : undefined,
+            noteElementsById, onLayoutRef.current ? positions : undefined,
           );
           rangeStaves.treble ??= trebleStave;
           rangeStaves.bass ??= bassStave;
@@ -481,19 +525,24 @@ export default function NotationRenderer({
           const stave = drawStaveSystem(
             context, chunk, staveData.clef, 10, y, widths[i] - 20,
             staveData.keySignature, i === 0 ? staveData.timeSignature : undefined,
-            activeNoteIds, onLayoutRef.current ? positions : undefined,
+            noteElementsById, onLayoutRef.current ? positions : undefined,
           );
           rangeStaves.single ??= { stave, clef: staveData.clef };
         });
       }
       hugContent(container, verticalRange, rangeStaves);
+      activeNoteElementsRef.current = syncActiveNoteElements(
+        noteElementsById,
+        activeNoteElementsRef.current,
+        activeNoteIdsRef.current,
+      );
       onLayoutRef.current?.(positions);
     } catch (err) {
       console.error("Failed to render notation", err);
       container.innerHTML =
         '<p class="text-sm text-rose-600">Notation could not be rendered.</p>';
     }
-  }, [data, activeNoteIds, maxSystemWidthPx, verticalRange]);
+  }, [data, maxSystemWidthPx, verticalRange]);
 
   return (
     <div className="max-w-full overflow-x-auto">
@@ -503,4 +552,6 @@ export default function NotationRenderer({
       </div>
     </div>
   );
-}
+});
+
+export default NotationRenderer;

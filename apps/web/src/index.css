@@ -66,4 +66,9 @@ html[data-theme="midnight"] body { background: radial-gradient(circle at top, #1
   .card { @apply rounded-xl border border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900; }
   /* The felt strip: the thin crimson rule that runs behind a piano's keys. */
   .felt-strip { @apply h-[3px] w-full bg-gradient-to-r from-felt-700 via-felt-500 to-felt-700; }
+  .vf-stavenote.note-active,
+  .vf-stavenote.note-active * {
+    fill: #b4323e;
+    stroke: #b4323e;
+  }
 }
