@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
-import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey } from "../play/waterfall";
+import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey, type KeyboardGeometry } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
 import InstrumentPicker from "../instruments/InstrumentPicker";
 
@@ -35,6 +35,16 @@ export interface VirtualPianoProps {
    *  waterfall canvas) in one shared horizontal scroll container — an inner scroller here
    *  would let the piano scroll independently and visually detach from that other element. */
   scrollable?: boolean;
+  /**
+   * Forces rendering against this exact geometry instead of computing one from
+   * lowestNote/highestNote/range/deviceRange/zoom — required whenever another element
+   * (Play-Along's falling-note canvas) must draw notes on these same key positions.
+   * Without this, a connected MIDI device's range silently wins over lowestNote/highestNote
+   * (see baseRange below) and a persisted manual zoom silently wins over fit-to-width,
+   * so the canvas and the keys drift onto two different geometries. Also hides the
+   * zoom/fit/drag-resize controls, which would otherwise change nothing visible.
+   */
+  geometryOverride?: KeyboardGeometry;
 }
 
 const ZOOM_MIN_PX = 12;
@@ -122,6 +132,7 @@ export default function VirtualPiano({
   showLabels = true,
   disabled = false,
   scrollable = true,
+  geometryOverride,
 }: VirtualPianoProps) {
   const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
@@ -206,16 +217,22 @@ export default function VirtualPiano({
   }, [deviceName]);
 
   // While in Fit mode (default, or after clicking Fit), recompute on every container resize
-  // so the whole keyboard stays visible without a manual re-zoom.
+  // so the whole keyboard stays visible without a manual re-zoom. Skipped entirely when a
+  // geometryOverride is forcing the render geometry — this would just be wasted work that
+  // never reaches the screen.
   useEffect(() => {
-    if (!isFitMode || !containerWidth) return;
+    if (geometryOverride || !isFitMode || !containerWidth) return;
     setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidth)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFitMode, containerWidth, range.lowestNote, range.highestNote]);
+  }, [geometryOverride, isFitMode, containerWidth, range.lowestNote, range.highestNote]);
 
+  // Never persist a geometryOverride-driven width as the user's manual zoom preference —
+  // it's keyed only by device name, so it would otherwise leak Play-Along's fit-to-song
+  // width into every other page that shows this same device's keyboard.
   useEffect(() => {
+    if (geometryOverride) return;
     saveZoom(deviceName, whiteKeyWidthPx);
-  }, [deviceName, whiteKeyWidthPx]);
+  }, [geometryOverride, deviceName, whiteKeyWidthPx]);
 
   function zoomOut() {
     setIsFitMode(false);
@@ -250,22 +267,26 @@ export default function VirtualPiano({
     else showRange(recommendedRange, "recommended");
   }
 
-  const geometry = useMemo(
+  const computedGeometry = useMemo(
     () => keyboardGeometry(range.lowestNote, range.highestNote, whiteKeyWidthPx),
     [range.lowestNote, range.highestNote, whiteKeyWidthPx],
   );
+  // The single source of truth for rendering. When a parent supplies one, it always wins —
+  // see the geometryOverride prop doc for why (device range / persisted zoom must not
+  // silently diverge from a canvas drawing notes against this same geometry elsewhere).
+  const geometry = geometryOverride ?? computedGeometry;
 
   const notes = useMemo(() => {
     const list: number[] = [];
-    for (let n = range.lowestNote; n <= range.highestNote; n++) list.push(n);
+    for (let n = geometry.lowestNote; n <= geometry.highestNote; n++) list.push(n);
     return list;
-  }, [range.lowestNote, range.highestNote]);
+  }, [geometry.lowestNote, geometry.highestNote]);
 
   const whiteNotes = useMemo(() => notes.filter((n) => !isBlackKey(n)), [notes]);
   const blackNotes = useMemo(() => notes.filter((n) => isBlackKey(n)), [notes]);
   const expectedSet = useMemo(() => new Set(expectedNotes), [expectedNotes]);
 
-  const whiteKeyHeightPx = whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO;
+  const whiteKeyHeightPx = geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO;
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
 
   function press(note: number) {
@@ -346,7 +367,7 @@ export default function VirtualPiano({
       const offset = KEY_TO_SEMITONE_OFFSET[e.key.toLowerCase()];
       if (offset === undefined) return null;
       const note = MIDDLE_C + offset;
-      if (note < range.lowestNote || note > range.highestNote) return null;
+      if (note < geometry.lowestNote || note > geometry.highestNote) return null;
       return note;
     }
 
@@ -376,7 +397,7 @@ export default function VirtualPiano({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disabled, range.lowestNote, range.highestNote]);
+  }, [disabled, geometry.lowestNote, geometry.highestNote]);
 
   function keyColorClasses(note: number, isBlack: boolean): string {
     const feedback = feedbackByNote[note];
@@ -515,63 +536,71 @@ export default function VirtualPiano({
               />
             );
           })}
-          <div
-            role="slider"
-            aria-label="Lower end of keyboard range"
-            aria-valuenow={range.lowestNote}
-            aria-valuemin={PIANO_LOWEST}
-            aria-valuemax={PIANO_HIGHEST}
-            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
-            style={{ left: 0, height: whiteKeyHeightPx }}
-            onPointerDown={(e) => handleHandlePointerDown("left", e)}
-            onPointerMove={handleHandlePointerMove}
-            onPointerUp={handleHandlePointerUp}
-            onPointerCancel={handleHandlePointerUp}
-          />
-          <div
-            role="slider"
-            aria-label="Upper end of keyboard range"
-            aria-valuenow={range.highestNote}
-            aria-valuemin={PIANO_LOWEST}
-            aria-valuemax={PIANO_HIGHEST}
-            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
-            style={{ left: geometry.widthPx, height: whiteKeyHeightPx }}
-            onPointerDown={(e) => handleHandlePointerDown("right", e)}
-            onPointerMove={handleHandlePointerMove}
-            onPointerUp={handleHandlePointerUp}
-            onPointerCancel={handleHandlePointerUp}
-          />
+          {!geometryOverride && (
+            <>
+              <div
+                role="slider"
+                aria-label="Lower end of keyboard range"
+                aria-valuenow={range.lowestNote}
+                aria-valuemin={PIANO_LOWEST}
+                aria-valuemax={PIANO_HIGHEST}
+                className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+                style={{ left: 0, height: whiteKeyHeightPx }}
+                onPointerDown={(e) => handleHandlePointerDown("left", e)}
+                onPointerMove={handleHandlePointerMove}
+                onPointerUp={handleHandlePointerUp}
+                onPointerCancel={handleHandlePointerUp}
+              />
+              <div
+                role="slider"
+                aria-label="Upper end of keyboard range"
+                aria-valuenow={range.highestNote}
+                aria-valuemin={PIANO_LOWEST}
+                aria-valuemax={PIANO_HIGHEST}
+                className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+                style={{ left: geometry.widthPx, height: whiteKeyHeightPx }}
+                onPointerDown={(e) => handleHandlePointerDown("right", e)}
+                onPointerMove={handleHandlePointerMove}
+                onPointerUp={handleHandlePointerUp}
+                onPointerCancel={handleHandlePointerUp}
+              />
+            </>
+          )}
         </div>
       </div>
       <div className="mt-1 flex items-center justify-end gap-1">
         <div className="mr-auto flex items-center gap-1" />
         <InstrumentPicker compact />
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={zoomOut}
-          disabled={whiteKeyWidthPx <= ZOOM_MIN_PX}
-          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={zoomIn}
-          disabled={whiteKeyWidthPx >= ZOOM_MAX_PX}
-          className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          aria-label={fitToggleLabel}
-          onClick={toggleRecommendedRange}
-          className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
-        >
-          {fitToggleLabel}
-        </button>
+        {!geometryOverride && (
+          <>
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={zoomOut}
+              disabled={whiteKeyWidthPx <= ZOOM_MIN_PX}
+              className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={zoomIn}
+              disabled={whiteKeyWidthPx >= ZOOM_MAX_PX}
+              className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              aria-label={fitToggleLabel}
+              onClick={toggleRecommendedRange}
+              className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
+            >
+              {fitToggleLabel}
+            </button>
+          </>
+        )}
       </div>
       {!disabled && (
         <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">

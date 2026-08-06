@@ -718,12 +718,10 @@ export default function PlayAlongPage() {
             />
           )}
           <VirtualPiano
-            lowestNote={range.lowestNote}
-            highestNote={range.highestNote}
+            geometryOverride={geometry}
             showLabels={false}
             expectedNotes={waitingNotes}
             scrollable={false}
-            recommendedRange={{ lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax }}
           />
         </div>
       </div>
