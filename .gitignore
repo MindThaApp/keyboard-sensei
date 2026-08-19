@@ -15,3 +15,9 @@ apps/api/data/feedback-screenshots
 # downloads. Both the manifest and the packs are volume-mounted, not committed —
 # run that script server-side after a deploy, then reseed.
 apps/api/scripts/instrument-manifest.json
+
+# Local tooling state, not project source — previously lived outside the repo
+# entirely (this directory used to be one level up from the git root) until the
+# 2026-08-19 move flattened piano-learning-app/ into this folder.
+/.claude/
+/.playwright-mcp/
