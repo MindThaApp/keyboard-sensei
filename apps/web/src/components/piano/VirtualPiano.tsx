@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
-import { keyboardGeometry, fitWhiteKeyWidth, isBlackKey, type KeyboardGeometry } from "../play/waterfall";
+import { isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
+import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
 
 const MIDDLE_C = 60;
@@ -23,7 +24,7 @@ export interface VirtualPianoProps {
   highestNote?: number;
   /** Overrides lowestNote/highestNote when provided. Also the range that drag-to-resize mutates. */
   range?: KeyRange;
-  /** The keys the current song/exercise needs; the Fit control toggles between this and the device range. */
+  /** The keys the current song/exercise needs; the "Auto-fit keys" cycle's tight-fit step. */
   recommendedRange?: KeyRange;
   /** Notes to highlight as "play these next" — never shown as raw MIDI numbers, just visual key highlighting. */
   expectedNotes?: number[];
@@ -36,85 +37,18 @@ export interface VirtualPianoProps {
    *  would let the piano scroll independently and visually detach from that other element. */
   scrollable?: boolean;
   /**
-   * Forces rendering against this exact geometry instead of computing one from
-   * lowestNote/highestNote/range/deviceRange/zoom — required whenever another element
-   * (Play-Along's falling-note canvas) must draw notes on these same key positions.
-   * Without this, a connected MIDI device's range silently wins over lowestNote/highestNote
-   * (see baseRange below) and a persisted manual zoom silently wins over fit-to-width,
-   * so the canvas and the keys drift onto two different geometries. Also hides the
-   * zoom/fit/drag-resize controls, which would otherwise change nothing visible.
+   * Forces rendering (and the range/zoom/fit/drag controls) from this externally-owned
+   * KeyboardSizing instead of instantiating one internally — required whenever another
+   * element (Play-Along's falling-note canvas) must draw notes on these same key
+   * positions. The controls still render and stay interactive; they just mutate the
+   * caller's shared state instead of a private one, so nothing can drift apart.
    */
-  geometryOverride?: KeyboardGeometry;
+  sizing?: KeyboardSizing;
 }
 
-const ZOOM_MIN_PX = 12;
-const ZOOM_MAX_PX = 72;
-const ZOOM_STEP_PX = 4;
-const DEFAULT_WHITE_KEY_WIDTH_PX = 40;
 /** Key height scales with key width so narrow zoom levels don't render absurdly tall keys. */
 const WHITE_KEY_HEIGHT_RATIO = 4; // matches the previous fixed 40px-wide / 160px-tall (h-40) keys
 const BLACK_KEY_HEIGHT_RATIO = 24 / 40; // matches the previous fixed h-24 vs h-40 ratio
-/** Pixels of drag movement per one-octave range change. */
-const DRAG_STEP_PX = 50;
-
-function clampZoom(px: number): number {
-  return Math.min(ZOOM_MAX_PX, Math.max(ZOOM_MIN_PX, px));
-}
-
-function zoomStorageKey(deviceName: string): string {
-  return `keyboard-sensei-zoom:${deviceName}`;
-}
-
-function loadZoom(deviceName: string): number | null {
-  try {
-    const raw = localStorage.getItem(zoomStorageKey(deviceName));
-    if (!raw) return null;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? clampZoom(parsed) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveZoom(deviceName: string, px: number): void {
-  try {
-    localStorage.setItem(zoomStorageKey(deviceName), String(px));
-  } catch {
-    // Private browsing / storage disabled — zoom just won't persist this session.
-  }
-}
-
-/** A range must begin/end on a white key, mirroring keyboardRange.ts's own snap rule. */
-function snapDown(note: number): number {
-  let n = Math.min(PIANO_HIGHEST, Math.max(PIANO_LOWEST, note));
-  while (isBlackKey(n) && n > PIANO_LOWEST) n--;
-  return n;
-}
-function snapUp(note: number): number {
-  let n = Math.min(PIANO_HIGHEST, Math.max(PIANO_LOWEST, note));
-  while (isBlackKey(n) && n < PIANO_HIGHEST) n++;
-  return n;
-}
-
-const MIN_RANGE_SPAN_SEMITONES = 12; // never let dragging collapse below one octave
-type RangeView = "device" | "recommended" | "full" | "custom";
-
-function expandLow(range: KeyRange): KeyRange {
-  return { ...range, lowestNote: snapDown(range.lowestNote - 12) };
-}
-function shrinkLow(range: KeyRange): KeyRange {
-  const candidate = snapUp(range.lowestNote + 12);
-  if (candidate > range.highestNote - MIN_RANGE_SPAN_SEMITONES) return range;
-  return { ...range, lowestNote: candidate };
-}
-function expandHigh(range: KeyRange): KeyRange {
-  return { ...range, highestNote: snapUp(range.highestNote + 12) };
-}
-function shrinkHigh(range: KeyRange): KeyRange {
-  const candidate = snapDown(range.highestNote - 12);
-  if (candidate < range.lowestNote + MIN_RANGE_SPAN_SEMITONES) return range;
-  return { ...range, highestNote: candidate };
-}
 
 /**
  * Clickable/touchable on-screen piano. Emits noteon/noteoff through the
@@ -132,7 +66,7 @@ export default function VirtualPiano({
   showLabels = true,
   disabled = false,
   scrollable = true,
-  geometryOverride,
+  sizing: sizingProp,
 }: VirtualPianoProps) {
   const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
@@ -147,30 +81,6 @@ export default function VirtualPiano({
       });
     });
   }, [subscribe]);
-
-  // range prop wins outright. Otherwise: only trust deviceRange when a device is actually
-  // connected — falling back to it with zero devices would silently grow every lesson's
-  // 25-key keyboard to 61 keys for a device that doesn't exist.
-  const baseRange: KeyRange = useMemo(() => {
-    if (rangeProp) return rangeProp;
-    if (devices.length > 0) return deviceRange;
-    return { lowestNote, highestNote };
-  }, [rangeProp, devices.length, deviceRange, lowestNote, highestNote]);
-
-  const [rangeView, setRangeView] = useState<RangeView>("device");
-  const [range, setRange] = useState<KeyRange>(baseRange);
-  useEffect(() => {
-    if (rangeView === "device") setRange(baseRange);
-  }, [rangeView, baseRange.lowestNote, baseRange.highestNote]);
-
-  useEffect(() => {
-    if (rangeView !== "recommended") return;
-    if (recommendedRange) setRange(recommendedRange);
-    else {
-      setRangeView("device");
-      setRange(baseRange);
-    }
-  }, [rangeView, recommendedRange, baseRange]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -190,101 +100,32 @@ export default function VirtualPiano({
   }, []);
 
   const deviceName = currentDeviceKey ?? "default";
-  // Lazy initializers read localStorage exactly once, at the state's real creation — an
-  // effect-based read here would race the persist-effect below under React 18 StrictMode's
-  // dev-only double-invoke (mount -> cleanup -> mount): the first pass's persist effect
-  // writes the just-created default width to localStorage, and a second "restore" effect
-  // invocation would then read that back and mistake it for a real stored user preference,
-  // permanently locking Fit mode off. (Same double-invoke family of bug as the OsmdNotation
-  // ref-guard issue — verified live in a real browser, not just by inspection.)
-  const [whiteKeyWidthPx, setWhiteKeyWidthPx] = useState<number>(() => loadZoom(deviceName) ?? DEFAULT_WHITE_KEY_WIDTH_PX);
-  const [isFitMode, setIsFitMode] = useState<boolean>(() => loadZoom(deviceName) == null);
+  const hasDevice = devices.length > 0;
+  // range prop wins outright. Otherwise: only trust deviceRange when a device is actually
+  // connected — falling back to it with zero devices would silently grow every lesson's
+  // 25-key keyboard to 61 keys for a device that doesn't exist.
+  const defaultRange: KeyRange = rangeProp ?? (hasDevice ? deviceRange : { lowestNote, highestNote });
 
-  // Re-sync the zoom preference only when the device identity actually changes after mount
-  // (e.g. a MIDI keyboard gets connected) — never on the initial mount itself, which the lazy
-  // initializers above already handle without the read-after-write race described above.
-  const prevDeviceNameRef = useRef(deviceName);
-  useEffect(() => {
-    if (prevDeviceNameRef.current === deviceName) return;
-    prevDeviceNameRef.current = deviceName;
-    const stored = loadZoom(deviceName);
-    if (stored != null) {
-      setWhiteKeyWidthPx(stored);
-      setIsFitMode(false);
-    } else {
-      setIsFitMode(true);
-    }
-  }, [deviceName]);
+  // Hooks can't be called conditionally, so this always runs — its output is simply
+  // ignored (and its persistence disabled) whenever a parent supplies its own `sizing`.
+  // See the `sizing` prop doc above for why a parent needs to own this instead.
+  const ownSizing = useKeyboardSizing({
+    defaultRange,
+    tightRange: recommendedRange,
+    deviceRange,
+    hasDevice,
+    containerWidthPx: containerWidth,
+    persistenceKey: sizingProp ? null : deviceName,
+    onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
+  });
+  const sizing = sizingProp ?? ownSizing;
+  const { geometry } = sizing;
 
-  // While in Fit mode (default, or after clicking Fit), recompute on every container resize
-  // so the whole keyboard stays visible without a manual re-zoom. Skipped entirely when a
-  // geometryOverride is forcing the render geometry — this would just be wasted work that
-  // never reaches the screen.
-  useEffect(() => {
-    if (geometryOverride || !isFitMode || !containerWidth) return;
-    setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidth)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geometryOverride, isFitMode, containerWidth, range.lowestNote, range.highestNote]);
-
-  // Never persist a geometryOverride-driven width as the user's manual zoom preference —
-  // it's keyed only by device name, so it would otherwise leak Play-Along's fit-to-song
-  // width into every other page that shows this same device's keyboard.
-  useEffect(() => {
-    if (geometryOverride) return;
-    saveZoom(deviceName, whiteKeyWidthPx);
-  }, [geometryOverride, deviceName, whiteKeyWidthPx]);
-
-  function zoomOut() {
-    setIsFitMode(false);
-    setWhiteKeyWidthPx((w) => clampZoom(w - ZOOM_STEP_PX));
-  }
-  function zoomIn() {
-    setIsFitMode(false);
-    setWhiteKeyWidthPx((w) => clampZoom(w + ZOOM_STEP_PX));
-  }
-  function zoomToFit() {
-    setIsFitMode(true);
-    if (containerWidth) {
-      setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidth)));
-    }
-  }
-
-  function showRange(next: KeyRange, view: RangeView) {
-    setRangeView(view);
-    setRange(next);
-    setIsFitMode(true);
-    if (containerWidth) {
-      setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(next.lowestNote, next.highestNote, containerWidth)));
-    }
-  }
-
-  function toggleRecommendedRange() {
-    if (!recommendedRange) {
-      zoomToFit();
-      return;
-    }
-    if (rangeView === "recommended") showRange(baseRange, "device");
-    else showRange(recommendedRange, "recommended");
-  }
-
-  const computedGeometry = useMemo(
-    () => keyboardGeometry(range.lowestNote, range.highestNote, whiteKeyWidthPx),
-    [range.lowestNote, range.highestNote, whiteKeyWidthPx],
-  );
-  // The single source of truth for rendering. When a parent supplies one, it always wins —
-  // see the geometryOverride prop doc for why (device range / persisted zoom must not
-  // silently diverge from a canvas drawing notes against this same geometry elsewhere).
-  const geometry = geometryOverride ?? computedGeometry;
-
-  const notes = useMemo(() => {
-    const list: number[] = [];
-    for (let n = geometry.lowestNote; n <= geometry.highestNote; n++) list.push(n);
-    return list;
-  }, [geometry.lowestNote, geometry.highestNote]);
-
-  const whiteNotes = useMemo(() => notes.filter((n) => !isBlackKey(n)), [notes]);
-  const blackNotes = useMemo(() => notes.filter((n) => isBlackKey(n)), [notes]);
-  const expectedSet = useMemo(() => new Set(expectedNotes), [expectedNotes]);
+  const notes: number[] = [];
+  for (let n = geometry.lowestNote; n <= geometry.highestNote; n++) notes.push(n);
+  const whiteNotes = notes.filter((n) => !isBlackKey(n));
+  const blackNotes = notes.filter((n) => isBlackKey(n));
+  const expectedSet = new Set(expectedNotes);
 
   const whiteKeyHeightPx = geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO;
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
@@ -411,71 +252,6 @@ export default function VirtualPiano({
     return isBlack ? "bg-slate-900" : "bg-white";
   }
 
-  // Drag-to-resize: pointer moves accumulate, stepping the range by one octave (to the
-  // next/previous C) every DRAG_STEP_PX. Each step immediately refits whiteKeyWidthPx to
-  // the container so the keyboard never spills off-screen mid-drag — only the 12px zoom
-  // floor can still force a scrollbar, which is expected on very narrow screens.
-  const dragRef = useRef<{ pointerId: number; side: "left" | "right"; lastX: number; accumulatedPx: number } | null>(
-    null,
-  );
-
-  function handleHandlePointerDown(side: "left" | "right", e: ReactPointerEvent<HTMLDivElement>) {
-    e.preventDefault();
-    dragRef.current = { pointerId: e.pointerId, side, lastX: e.clientX, accumulatedPx: 0 };
-    try {
-      // Pointer capture can throw (e.g. the pointer was never "live" from the browser's
-      // perspective) — that's not a reason to abandon the drag, just to skip the capture.
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // Ignored — see above.
-    }
-  }
-
-  function handleHandlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    const deltaX = e.clientX - drag.lastX;
-    drag.lastX = e.clientX;
-    // Positive accumulation = dragging outward (grows the range).
-    drag.accumulatedPx += drag.side === "left" ? -deltaX : deltaX;
-
-    setRange((current) => {
-      let next = current;
-      while (drag.accumulatedPx >= DRAG_STEP_PX) {
-        const stepped = drag.side === "left" ? expandLow(next) : expandHigh(next);
-        if (stepped === next) break; // hit PIANO_LOWEST/PIANO_HIGHEST
-        next = stepped;
-        drag.accumulatedPx -= DRAG_STEP_PX;
-      }
-      while (drag.accumulatedPx <= -DRAG_STEP_PX) {
-        const stepped = drag.side === "left" ? shrinkLow(next) : shrinkHigh(next);
-        if (stepped === next) break; // hit the minimum span
-        next = stepped;
-        drag.accumulatedPx += DRAG_STEP_PX;
-      }
-      if (next !== current && containerWidth) {
-        if (rangeView !== "device") setRangeView("custom");
-        setIsFitMode(true);
-        setWhiteKeyWidthPx(clampZoom(fitWhiteKeyWidth(next.lowestNote, next.highestNote, containerWidth)));
-      }
-      return next;
-    });
-  }
-
-  function handleHandlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    dragRef.current = null;
-    if (devices.length > 0 && rangeView === "device") {
-      setRange((current) => {
-        setDeviceRange(current);
-        return current;
-      });
-    }
-  }
-
-  const fitToggleLabel = recommendedRange && rangeView === "recommended" ? "Fit to my keyboard" : recommendedRange ? "Fit to song" : "Fit";
-
   return (
     <div ref={containerRef} className="w-full">
       <div className={scrollable ? "w-full overflow-x-auto pb-1" : "w-full"}>
@@ -536,71 +312,55 @@ export default function VirtualPiano({
               />
             );
           })}
-          {!geometryOverride && (
-            <>
-              <div
-                role="slider"
-                aria-label="Lower end of keyboard range"
-                aria-valuenow={range.lowestNote}
-                aria-valuemin={PIANO_LOWEST}
-                aria-valuemax={PIANO_HIGHEST}
-                className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
-                style={{ left: 0, height: whiteKeyHeightPx }}
-                onPointerDown={(e) => handleHandlePointerDown("left", e)}
-                onPointerMove={handleHandlePointerMove}
-                onPointerUp={handleHandlePointerUp}
-                onPointerCancel={handleHandlePointerUp}
-              />
-              <div
-                role="slider"
-                aria-label="Upper end of keyboard range"
-                aria-valuenow={range.highestNote}
-                aria-valuemin={PIANO_LOWEST}
-                aria-valuemax={PIANO_HIGHEST}
-                className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
-                style={{ left: geometry.widthPx, height: whiteKeyHeightPx }}
-                onPointerDown={(e) => handleHandlePointerDown("right", e)}
-                onPointerMove={handleHandlePointerMove}
-                onPointerUp={handleHandlePointerUp}
-                onPointerCancel={handleHandlePointerUp}
-              />
-            </>
-          )}
+          <div
+            role="slider"
+            aria-label="Lower end of keyboard range"
+            aria-valuenow={geometry.lowestNote}
+            aria-valuemin={PIANO_LOWEST}
+            aria-valuemax={PIANO_HIGHEST}
+            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+            style={{ left: 0, height: whiteKeyHeightPx }}
+            onPointerDown={sizing.dragHandlers.onLeftPointerDown}
+            onPointerMove={sizing.dragHandlers.onPointerMove}
+            onPointerUp={sizing.dragHandlers.onPointerUp}
+            onPointerCancel={sizing.dragHandlers.onPointerCancel}
+          />
+          <div
+            role="slider"
+            aria-label="Upper end of keyboard range"
+            aria-valuenow={geometry.highestNote}
+            aria-valuemin={PIANO_LOWEST}
+            aria-valuemax={PIANO_HIGHEST}
+            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+            style={{ left: geometry.widthPx, height: whiteKeyHeightPx }}
+            onPointerDown={sizing.dragHandlers.onRightPointerDown}
+            onPointerMove={sizing.dragHandlers.onPointerMove}
+            onPointerUp={sizing.dragHandlers.onPointerUp}
+            onPointerCancel={sizing.dragHandlers.onPointerCancel}
+          />
         </div>
       </div>
-      <div className="mt-1 flex items-center justify-end gap-1">
-        <div className="mr-auto flex items-center gap-1" />
+      <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+        <span className="mr-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+          {sizing.keyCount} keys · {sizing.rangeLabel}
+        </span>
         <InstrumentPicker compact />
-        {!geometryOverride && (
-          <>
-            <button
-              type="button"
-              aria-label="Zoom out"
-              onClick={zoomOut}
-              disabled={whiteKeyWidthPx <= ZOOM_MIN_PX}
-              className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              aria-label="Zoom in"
-              onClick={zoomIn}
-              disabled={whiteKeyWidthPx >= ZOOM_MAX_PX}
-              className="h-6 w-6 rounded border border-slate-300 text-xs leading-none text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              aria-label={fitToggleLabel}
-              onClick={toggleRecommendedRange}
-              className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
-            >
-              {fitToggleLabel}
-            </button>
-          </>
-        )}
+        <input
+          type="range"
+          aria-label="Key size"
+          min={ZOOM_MIN_PX}
+          max={ZOOM_MAX_PX}
+          value={sizing.widthPx}
+          onChange={(e) => sizing.setWidthPx(Number(e.target.value))}
+          className="h-6 w-20 accent-felt-600"
+        />
+        <button
+          type="button"
+          onClick={sizing.advanceFit}
+          className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
+        >
+          {sizing.fitLabel}
+        </button>
       </div>
       {!disabled && (
         <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">

@@ -15,10 +15,9 @@ import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { useTheme } from "../../contexts/ThemeContext";
 import VirtualPiano from "../piano/VirtualPiano";
+import { useKeyboardSizing, snapRangeToWhiteKeys } from "../piano/useKeyboardSizing";
 import {
   drawWaterfall,
-  keyboardGeometry,
-  fitWhiteKeyWidth,
   pianoRangeFor,
   WATERFALL_COLORS_DARK,
   WATERFALL_COLORS_LIGHT,
@@ -114,7 +113,7 @@ type Phase = "loading" | "error" | "ready" | "playing" | "done";
 
 export default function PlayAlongPage() {
   const { songId } = useParams<{ songId: string }>();
-  const { subscribe } = useMidiContext();
+  const { subscribe, devices, deviceRange } = useMidiContext();
   const { theme } = useTheme();
 
   const [song, setSong] = useState<Song | null>(null);
@@ -217,19 +216,35 @@ export default function PlayAlongPage() {
     return () => observer.disconnect();
   }, [phase]);
 
-  const range = useMemo(() => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : null), [parsed]);
   const notationVerticalRange = useMemo(
     () => (parsed ? { lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax } : undefined),
     [parsed],
   );
-  const whiteKeyWidthPx = useMemo(
-    () => (range && stageWidth > 0 ? fitWhiteKeyWidth(range.lowestNote, range.highestNote, stageWidth) : undefined),
-    [range, stageWidth],
+  // The song's octave-padded range (unchanged from before) is the "default" step; its
+  // exact pitchMin–pitchMax, snapped to white-key edges, is the "tight fit" step. Falls
+  // back to a placeholder before the song has loaded — the hook must run unconditionally
+  // (hooks can't be conditional), and the page returns early below while !parsed anyway.
+  const defaultRange = useMemo(
+    () => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : { lowestNote: 48, highestNote: 72 }),
+    [parsed],
   );
-  const geometry = useMemo(
-    () => (range ? keyboardGeometry(range.lowestNote, range.highestNote, whiteKeyWidthPx) : null),
-    [range, whiteKeyWidthPx],
+  const tightRange = useMemo(
+    () => (parsed ? snapRangeToWhiteKeys({ lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax }) : undefined),
+    [parsed],
   );
+  // Single source of truth for both the piano and the falling-note canvas below — they
+  // read the exact same geometry, so resizing one resizes the other in lock-step and
+  // they can never drift apart (see docs/superpowers/specs/2026-08-19-keyboard-sizing-
+  // controls-design.md). No persistenceKey/onDeviceRangeChange: nothing here should
+  // carry over between songs or leak into another page's saved zoom for this device.
+  const sizing = useKeyboardSizing({
+    defaultRange,
+    tightRange,
+    deviceRange,
+    hasDevice: devices.length > 0,
+    containerWidthPx: stageWidth,
+  });
+  const geometry = sizing.geometry;
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
   // Recomputed every render from settings (cheap arithmetic) so it's always in sync with
   // whichever visibilityMode/lookaheadS produced it — both the rAF loop (via start()'s
@@ -276,7 +291,7 @@ export default function PlayAlongPage() {
   // engine/scoring state, so it can't introduce any offset into the real run.
   useEffect(() => {
     if (phase === "playing") return;
-    if (!parsed || !geometry) return;
+    if (!parsed) return;
     if (settings.viewMode === "notation") return; // canvas isn't rendered in this view mode
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -317,7 +332,7 @@ export default function PlayAlongPage() {
   }, [phase, settings.viewMode, parsed]);
 
   const start = useCallback(() => {
-    if (!parsed || !geometry) return;
+    if (!parsed) return;
     stop();
     setResult(null);
     setSubmitState("idle");
@@ -379,7 +394,7 @@ export default function PlayAlongPage() {
       }
 
       const canvas = canvasRef.current;
-      if (canvas && geometry) {
+      if (canvas) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           const dpr = window.devicePixelRatio || 1;
@@ -429,7 +444,7 @@ export default function PlayAlongPage() {
   }, [stop]);
 
   if (phase === "loading") return <p className="text-sm text-slate-500">Loading song…</p>;
-  if (phase === "error" || !parsed || !geometry || !range) {
+  if (phase === "error" || !parsed) {
     return (
       <div className="card space-y-3 p-6">
         <h1 className="font-display text-xl font-semibold">Couldn't load this song</h1>
@@ -718,7 +733,7 @@ export default function PlayAlongPage() {
             />
           )}
           <VirtualPiano
-            geometryOverride={geometry}
+            sizing={sizing}
             showLabels={false}
             expectedNotes={waitingNotes}
             scrollable={false}
