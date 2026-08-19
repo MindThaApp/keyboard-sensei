@@ -4,7 +4,7 @@ Full-stack piano learning web app. pnpm monorepo: `apps/web` (React/Vite/TS/Tail
 
 **Collaboration pattern:** detailed written spec → Codex background job (`node <codex-companion.mjs path> task --background --write --fresh "<prompt>"`, found via `codex:setup`) for backend/content work → Claude verifies live (real Postgres + browser), never trusts Codex's own "typecheck/tests passed" as sufficient — its sandbox has no Docker/Postgres/network, so it cannot do real E2E verification itself.
 
-There is also a stale early-prototype copy at the parent directory root (`../apps/web` only, no api, no git repo, frozen ~2026-07-01) — not this project, safe to ignore or delete after confirming with Ramin.
+(The stale early-prototype copy that used to sit at the parent directory root — `../apps/web` only, no api, no git repo, frozen ~2026-07-01 — was deleted 2026-08-19 after confirming with Ramin. This is the only copy now.)
 
 ## Commands
 
