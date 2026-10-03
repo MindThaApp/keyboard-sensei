@@ -60,10 +60,7 @@ export default function PracticeGymPage() {
   };
 
   return (
-    // Full-bleed: the app shell caps content at max-w-5xl (1024px), which left the
-    // keyboard cramped even though the screen had room. Same escape hatch
-    // Play-Along uses.
-    <div className="mx-[calc(50%-50vw)] w-screen space-y-4 px-4">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">MIDI Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>

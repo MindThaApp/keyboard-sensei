@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useAuth } from "../../contexts/AuthContext";
-import { useTheme, type AccentTheme } from "../../contexts/ThemeContext";
+import { useTheme, type AccentTheme, type Theme } from "../../contexts/ThemeContext";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
@@ -29,11 +29,38 @@ const ACCENT_OPTIONS: { id: AccentTheme; label: string; swatch: string }[] = [
   { id: "violet", label: "Violet", swatch: "#7c3aed" },
 ];
 
+const MODE_OPTIONS: { id: Theme; label: string }[] = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "midnight", label: "Midnight" },
+];
+
 function AppearanceSection() {
-  const { accentTheme, setAccentTheme } = useTheme();
+  const { theme, setTheme, accentTheme, setAccentTheme } = useTheme();
 
   return (
     <section className="card space-y-4 p-5">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Mode</h2>
+        <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Colour mode">
+          {MODE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={theme === option.id}
+              onClick={() => setTheme(option.id)}
+              className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                theme === option.id
+                  ? "border-felt-500 bg-felt-50 text-felt-700 ring-1 ring-felt-500/40 dark:bg-felt-900/30 dark:text-felt-300"
+                  : "border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div>
         <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Colours</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -457,7 +484,7 @@ type SettingsTab = "account" | "appearance" | "instruments" | "midi" | "narratio
 
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "account", label: "Account" },
-  { id: "appearance", label: "Colours" },
+  { id: "appearance", label: "Appearance" },
   { id: "instruments", label: "Instruments" },
   { id: "midi", label: "MIDI" },
   { id: "narration", label: "Narration" },
@@ -477,9 +504,7 @@ export default function SettingsPage() {
   }
 
   return (
-    // Full-bleed: Settings shows a keyboard, and the app shell caps content at
-    // max-w-5xl (1024px), which left it cramped.
-    <div className="mx-[calc(50%-50vw)] w-screen space-y-6 px-4">
+    <div className="space-y-6">
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Settings sections">
         {SETTINGS_TABS.map((tab) => (
