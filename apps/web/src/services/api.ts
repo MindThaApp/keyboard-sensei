@@ -1,5 +1,7 @@
 import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
+import { publishRewards } from "../state/rewards";
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const TOKEN_KEY = "keyboard-sensei-access-token";
 
@@ -30,8 +32,18 @@ export const getLessons = () => request<LessonListItem[]>("/lessons");
 export const getLesson = (id: string) => request<LessonDetail>(`/lessons/${encodeURIComponent(id)}`);
 export const getProgress = () => request<UserProgress>("/users/me/progress");
 export const getAttempts = () => request<AttemptsResponse>("/users/me/attempts");
-export const submitExerciseAttempt = (exerciseId: string, payload: ExerciseAttemptPayload) => request<ScoringResult>(`/exercises/${encodeURIComponent(exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
-export const submitQuizAnswer = (questionId: string, payload: QuizAnswerPayload) => request<QuizAnswerResponse>(`/quiz-questions/${encodeURIComponent(questionId)}/answer`, { method: "POST", body: JSON.stringify(payload) });
+// Saved attempts come back with progress rewards; publishing them here gives every
+// screen that saves one the toasts and a refreshed header, for free.
+export const submitExerciseAttempt = async (exerciseId: string, payload: ExerciseAttemptPayload) => {
+  const result = await request<ScoringResult & { rewards?: Rewards | null }>(`/exercises/${encodeURIComponent(exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
+  publishRewards(result.rewards);
+  return result;
+};
+export const submitQuizAnswer = async (questionId: string, payload: QuizAnswerPayload) => {
+  const result = await request<QuizAnswerResponse & { rewards?: Rewards | null }>(`/quiz-questions/${encodeURIComponent(questionId)}/answer`, { method: "POST", body: JSON.stringify(payload) });
+  publishRewards(result.rewards);
+  return result;
+};
 export const submitPracticeGymAttempt = (exercise: MidiExercise, payload: ExerciseAttemptPayload) => request<ScoringResult>("/practice/score", { method: "POST", body: JSON.stringify({ exercise, ...payload }) });
 export const applyAssessmentPlacement = (scores: number[]) => request<AssessmentPlacement>("/users/me/assessment-placement", { method: "POST", body: JSON.stringify({ scores }) });
 export const getCurrentUser = () => request<AuthUser>("/users/me");
@@ -187,40 +199,125 @@ export const adminUpdateSong = (id: string, fields: Partial<{ title: string; art
 export const adminDeleteSong = (id: string) => request<{ ok: true }>(`/admin/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getMyPlayAlongAttempts = () =>
   request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
-export const submitPlayAlongAttempt = (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) =>
-  request<{ id: string; score: number; accuracy: number }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
+export const submitPlayAlongAttempt = async (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) => {
+  const result = await request<{ id: string; score: number; accuracy: number; rewards?: Rewards | null }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
+  publishRewards(result.rewards);
+  return result;
+};
 
-// --- Dashboard ---
-export interface DashboardStreak {
+// --- Progression: XP, stars, daily goal, achievements, Today ---
+export type PracticeLevel = "full" | "simplified" | "easy" | "melody";
+export type Hands = "both" | "right" | "left";
+export interface LevelInfo {
+  totalXp: number;
+  level: number;
+  tier: string;
+  levelInTier: number;
+  title: string;
+  xpIntoLevel: number;
+  xpForNextLevel: number;
+}
+export interface GoalStreak {
   current: number;
   longest: number;
-  lastActiveDate: string | null;
+  freezesAvailable: number;
+  frozenDays: string[];
+  todayMet: boolean;
+  daysToNextFreeze: number;
 }
-export interface DashboardLevelProgress {
-  level: string;
-  completed: number;
-  total: number;
+export interface DailySummary {
+  today: string;
+  dailyGoal: { goalMinutes: number; minutesToday: number; met: boolean };
+  streak: GoalStreak;
+  level: LevelInfo;
 }
-export interface DashboardAchievement {
+export type AchievementCategory = "lessons" | "paths" | "songs" | "streaks" | "practice" | "accuracy" | "exploration" | "mastery";
+export interface Achievement {
   key: string;
+  category: AchievementCategory;
   title: string;
   description: string;
   unlocked: boolean;
   unlockedAt: string | null;
+  progress: { current: number; target: number };
 }
-export type DashboardActivityType = "lesson" | "gym" | "playalong";
-export interface DashboardActivity {
-  type: DashboardActivityType;
-  label: string;
-  at: string;
+export interface Rewards {
+  xpGained: number;
+  items: { amount: number; reason: string }[];
+  level: LevelInfo;
+  leveledUp: boolean;
+  newAchievements: { key: string; title: string; description: string; category: AchievementCategory; categoryLabel: string }[];
+  newStars: { kind: "lesson" | "song"; id: string; title: string; stars: number; level?: PracticeLevel }[];
+  unlockedSongs: { id: string; title: string; lessonTitle: string }[];
+  dailyGoal: { goalMinutes: number; minutesToday: number; met: boolean; justMet: boolean };
+  streak: { current: number; freezesAvailable: number };
 }
-export interface DashboardResponse {
-  streak: DashboardStreak;
-  levelProgress: DashboardLevelProgress[];
-  achievements: DashboardAchievement[];
-  recentActivity: DashboardActivity[];
+export interface SongStars {
+  best: number;
+  byLevel: Partial<Record<PracticeLevel, number>>;
 }
-export const getDashboard = () => request<DashboardResponse>("/users/me/dashboard");
+export interface ReadySong {
+  songId: string;
+  title: string;
+  lessonId: string;
+  lessonTitle: string;
+  stars: number;
+}
+export interface TodayResponse extends DailySummary {
+  completedLessons: number;
+  continue: {
+    lessonId: string;
+    lessonTitle: string;
+    path: string;
+    exerciseId: string | null;
+    exerciseTitle: string | null;
+    exercisesPassed: number;
+    exercisesTotal: number;
+    started: boolean;
+  } | null;
+  review: {
+    exerciseId: string;
+    exerciseTitle: string;
+    lessonId: string;
+    lessonTitle: string;
+    lastScore: number;
+    bestScore: number;
+    daysSince: number;
+    intervalDays: number;
+    mistakeCount: number;
+    hint: string | null;
+  } | null;
+  song: { songId: string; title: string; reason: string; hands: Hands; level: PracticeLevel; stars: number } | null;
+  readyForYou: ReadySong[];
+  recentAchievements: Achievement[];
+}
+export type SkillId = "reading" | "rhythm" | "technique" | "chords" | "ear" | "repertoire";
+export interface ProgressionResponse extends DailySummary {
+  achievements: Achievement[];
+  categories: Record<AchievementCategory, string>;
+  skills: { id: SkillId; label: string; points: number }[];
+  lessonStars: Record<string, number>;
+  songStars: Record<string, SongStars>;
+  songTitles: Record<string, string>;
+  readyForYou: ReadySong[];
+  practiceMinutes: number;
+  calendar: { day: string; minutes: number; goalMet: boolean }[];
+  frozenDays: string[];
+  recentXp: { amount: number; reason: string; source: string; created_at: string }[];
+}
+export const DAILY_GOAL_OPTIONS = [5, 10, 15, 20] as const;
+export type DailyGoalMinutes = (typeof DAILY_GOAL_OPTIONS)[number];
+
+export const getDailySummary = () => request<DailySummary>("/users/me/summary");
+export const getToday = () => request<TodayResponse>("/users/me/today");
+export const getProgression = () => request<ProgressionResponse>("/users/me/progression");
+export const getMySongStars = () => request<{ stars: Record<string, SongStars> }>("/songs/stars/me");
+export const getSongStars = (songId: string) =>
+  request<{ songId: string } & SongStars>(`/songs/${encodeURIComponent(songId)}/stars`);
+export const updateDailyGoal = (daily_goal_minutes: DailyGoalMinutes) =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ daily_goal_minutes }) });
+export const updateTimezone = (timezone: string) =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ timezone }) });
 
 export const getSongFile = async (id: string): Promise<ArrayBuffer> => {
   const token = getToken();
