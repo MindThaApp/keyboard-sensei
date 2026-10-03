@@ -11,15 +11,29 @@ const TYPES: { value: FeedbackType; label: string }[] = [
 
 const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
 
+interface FeedbackWidgetProps {
+  /** Controlled open state. Omit both open/onOpenChange to let the widget manage it. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** False hides the floating launcher button — used on the Play-Along stage, where it
+   *  sat on top of the keyboard; the header offers a Feedback button there instead. */
+  showLauncher?: boolean;
+}
+
 /**
  * Floating feedback button rendered in the app shell so it appears on every
  * page. Submitting requires a logged-in session (the API route is authed);
  * on auth pages the dialog explains that instead of failing.
  */
-export default function FeedbackWidget() {
+export default function FeedbackWidget({ open: controlledOpen, onOpenChange, showLauncher = true }: FeedbackWidgetProps = {}) {
   const { authenticated } = useAuth();
   const location = useLocation();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [type, setType] = useState<FeedbackType>("bug");
   const [message, setMessage] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
@@ -153,13 +167,15 @@ export default function FeedbackWidget() {
           )}
         </section>
       )}
-      <button
-        onClick={() => (open ? close() : setOpen(true))}
-        className="rounded-full bg-felt-600 px-4 py-2 text-sm font-medium text-white shadow-md transition-colors hover:bg-felt-700"
-        aria-expanded={open}
-      >
-        💬 Feedback
-      </button>
+      {showLauncher && (
+        <button
+          onClick={() => (open ? close() : setOpen(true))}
+          className="rounded-full bg-felt-600 px-4 py-2 text-sm font-medium text-white shadow-md transition-colors hover:bg-felt-700"
+          aria-expanded={open}
+        >
+          💬 Feedback
+        </button>
+      )}
     </div>
   );
 }

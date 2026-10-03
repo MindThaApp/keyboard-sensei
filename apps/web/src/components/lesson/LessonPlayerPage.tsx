@@ -9,15 +9,7 @@ import MidiStatusBar from "../midi/MidiStatusBar";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
 import { getLesson } from "../../services/api";
-
-const LEVEL_LABEL: Record<string, string> = {
-  foundation: "Foundation",
-  elementary: "Elementary",
-  intermediate: "Intermediate",
-  "late-intermediate": "Late Intermediate",
-  advanced: "Advanced",
-  virtuoso: "Virtuoso",
-};
+import { levelLabel } from "../../utils/levels";
 
 export default function LessonPlayerPage() {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -71,8 +63,7 @@ export default function LessonPlayerPage() {
   const nextUnlocked = nextLesson !== null && nextLesson.progress.status !== "locked";
 
   return (
-    // Full-bleed, same reason as Practice Gym: the keyboard needs the width.
-    <div className="mx-[calc(50%-50vw)] w-screen space-y-6 px-4">
+    <div className="space-y-6">
       <div>
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link to="/" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
@@ -83,7 +74,7 @@ export default function LessonPlayerPage() {
         </nav>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{lesson.title}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-          {LEVEL_LABEL[lesson.level]} · {lesson.estimatedMinutes} min
+          {levelLabel(lesson.level)} · {lesson.estimatedMinutes} min
           {lesson.progress.bestScore > 0 && <> · Best {lesson.progress.bestScore}</>}
         </p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">

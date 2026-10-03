@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  capManualWidth,
   clampZoomPx,
   keyCountFor,
   nextFitIndex,
@@ -123,5 +124,33 @@ describe("clampZoomPx", () => {
 
   it("clamps above the maximum", () => {
     expect(clampZoomPx(999)).toBe(ZOOM_MAX_PX);
+  });
+});
+
+describe("capManualWidth", () => {
+  // Lesson 1: C3 (48) to C5 (72) is 15 white keys.
+  const c3ToC5 = { lowestNote: 48, highestNote: 72 };
+
+  it("keeps a saved width that still fits the target notes", () => {
+    expect(capManualWidth(40, c3ToC5, 958)).toBe(40);
+  });
+
+  it("shrinks a saved width that would push the target notes off-screen", () => {
+    // 958 / 15 white keys = 63.9px; a saved 72px would need a 1080px container.
+    expect(capManualWidth(72, c3ToC5, 958)).toBeCloseTo(958 / 15);
+  });
+
+  it("snaps a black-key target range out to white keys before measuring", () => {
+    // C#4 (61) to D#4 (63) snaps to C4–E4: 3 white keys.
+    expect(capManualWidth(72, { lowestNote: 61, highestNote: 63 }, 150)).toBe(50);
+  });
+
+  it("never caps below the minimum key size, even for a very wide range", () => {
+    expect(capManualWidth(40, { lowestNote: 21, highestNote: 108 }, 300)).toBe(ZOOM_MIN_PX);
+  });
+
+  it("leaves the width alone with nothing to keep visible or no measured container", () => {
+    expect(capManualWidth(72, undefined, 958)).toBe(72);
+    expect(capManualWidth(72, c3ToC5, 0)).toBe(72);
   });
 });

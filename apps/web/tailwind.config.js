@@ -4,6 +4,10 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      screens: {
+        // Where the header's inline links stop fitting and collapse behind a Menu button.
+        nav: "900px",
+      },
       colors: {
         ink: "#1f2933",
         // The crimson felt strip that runs behind a piano's keys — primary accent.
@@ -25,13 +29,28 @@ export default {
           400: "#d1ad3d",
           500: "#c9a227",
           600: "#a98720",
-          700: "#87691b",
+          // Darkened from #87691b (4.4:1 on brass-100) so brass-700 text passes AA on it.
+          700: "#7a5f18",
         },
         // Score paper.
         ivory: {
           50: "#fbf9f3",
           100: "#f6f2e8",
           200: "#ece5d3",
+        },
+      },
+      // Text-only overrides for the two "muted" greys. Stock slate-400 measured 2.2–2.6:1
+      // on white and stock slate-500 3.1–3.8:1 on the dark surfaces, so every helper
+      // line, locked-lesson meta and hint failed WCAG AA. Re-pointing the tokens (only for
+      // text-* utilities — borders and backgrounds keep the stock greys) fixes all ~160
+      // call sites at once; the per-theme values live in index.css.
+      textColor: {
+        slate: {
+          400: "rgb(var(--text-slate-400) / <alpha-value>)",
+          500: "rgb(var(--text-slate-500) / <alpha-value>)",
+        },
+        felt: {
+          400: "rgb(var(--text-felt-400) / <alpha-value>)",
         },
       },
       fontFamily: {

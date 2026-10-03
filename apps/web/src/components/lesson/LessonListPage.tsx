@@ -2,15 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
-
-const LEVEL_LABEL: Record<string, string> = {
-  foundation: "Foundation",
-  elementary: "Elementary",
-  intermediate: "Intermediate",
-  "late-intermediate": "Late Intermediate",
-  advanced: "Advanced",
-  virtuoso: "Virtuoso",
-};
+import { LEVEL_LABEL, nextLessonFor } from "../../utils/levels";
 
 const BRANCH_LABEL: Record<string, string> = {
   technique: "Technique",
@@ -52,7 +44,9 @@ function LessonRow({ lesson, index, status, bestScore, isNext }: { lesson: Lesso
     <div
       className={`flex items-center gap-4 rounded-lg border p-3.5 transition-colors ${
         locked
-          ? "border-slate-200/70 bg-slate-100/60 opacity-60 dark:border-slate-800 dark:bg-slate-900/40"
+          ? // No opacity fade: it dragged the meta text down to ~2.2:1. Locked reads as
+            // locked through the lock icon, the flat background and the muted title.
+            "border-slate-200/70 bg-slate-100/60 dark:border-slate-800 dark:bg-slate-900/40"
           : isNext
             ? "border-felt-400 bg-white ring-1 ring-felt-400/50 hover:border-felt-500 dark:border-felt-600 dark:bg-slate-900 dark:ring-felt-600/50"
             : "border-slate-200 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
@@ -70,7 +64,10 @@ function LessonRow({ lesson, index, status, bestScore, isNext }: { lesson: Lesso
         {completed ? <CheckIcon /> : locked ? <LockIcon /> : index + 1}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-slate-900 dark:text-slate-100">{lesson.title}</p>
+        <p className={`truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
+          {lesson.title}
+          {locked && <span className="sr-only"> (locked)</span>}
+        </p>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
           {BRANCH_LABEL[lesson.branch]} · {lesson.estimatedMinutes} min
         </p>
@@ -105,7 +102,7 @@ export default function LessonListPage() {
 
   const statuses = lessons.map((lesson) => getLessonStatus(progress, lesson));
   const completedCount = statuses.filter((s) => s === "completed").length;
-  const nextLesson = lessons.find((_, i) => statuses[i] === "unlocked") ?? lessons.find((_, i) => statuses[i] !== "completed") ?? null;
+  const nextLesson = nextLessonFor(lessons);
   const nextIndex = nextLesson ? lessons.indexOf(nextLesson) : -1;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
