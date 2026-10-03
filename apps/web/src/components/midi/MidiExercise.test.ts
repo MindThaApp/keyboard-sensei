@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MidiExercise, RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { scoreRawMidiEvents } from "@keyboard-sensei/midi-engine";
-import { elapsedPerformanceMs } from "./MidiExercise";
+import { elapsedPerformanceMs, notationFor } from "./MidiExercise";
 
 /**
  * A pause must be invisible to scoring: it freezes the recording clock by
@@ -124,5 +124,32 @@ describe("pause does not change scoring", () => {
 
     expect(unadjustedScore.score).toBeLessThan(baselineScore.score);
     expect(unadjustedScore.timingAccuracy).toBeLessThan(baselineScore.timingAccuracy);
+  });
+});
+
+describe("notationFor", () => {
+  const event = (id: string, note: number, startBeat: number, durationBeats: number) => ({
+    id, note, startBeat, durationBeats, hand: "right" as const, finger: null, chordGroupId: null, voice: null,
+  });
+
+  it("reads exercise beats in the exercise's own beat unit (eighths in 6/8), giving 6/8 bars", () => {
+    const sixEight: MidiExercise = {
+      ...exercise,
+      beatsPerBar: 6,
+      beatUnit: 8,
+      expected: [event("a", 72, 0, 3), event("b", 74, 3, 3), event("c", 76, 6, 6)],
+    };
+    const data = notationFor(sixEight) as { timeSignature: string; measures: { notes: { duration: string }[] }[] };
+    expect(data.timeSignature).toBe("6/8");
+    expect(data.measures.map((m) => m.notes.map((n) => n.duration))).toEqual([["qd", "qd"], ["hd"]]);
+  });
+
+  it("draws a key signature only for a song excerpt's key, but always spells for the key", () => {
+    const fMajor: MidiExercise = { ...exercise, expected: [event("a", 65, 0, 1), event("b", 70, 1, 1), event("c", 69, 2, 1), event("d", 65, 3, 1)] };
+    const lesson = notationFor(fMajor) as { keySignature?: string; measures: { notes: { keys: string[] }[] }[] };
+    expect(lesson.keySignature).toBeUndefined();
+    expect(lesson.measures[0].notes[1].keys).toEqual(["bb/4"]);
+    const excerpt = notationFor(fMajor, { fifths: -1, mode: "major" }) as { keySignature?: string };
+    expect(excerpt.keySignature).toBe("F");
   });
 });

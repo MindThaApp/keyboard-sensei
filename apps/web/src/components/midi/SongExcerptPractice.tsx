@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getSongFile, type Song } from "../../services/api";
-import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
+import { parsePlayAlongSong, songKeyAt, type ParsedPlayAlongSong } from "../../utils/playalongSong";
 import { buildSongExcerpt, type PracticeHand } from "../../utils/songExcerpt";
 import { AccompanimentPlayer } from "../../utils/accompanimentPlayer";
 import MidiExercise from "./MidiExercise";
@@ -156,6 +156,7 @@ export default function SongExcerptPractice({ song }: Props) {
           lessonId={null}
           exercise={excerpt.exercise}
           onRecordingClock={handleRecordingClock}
+          notationKey={parsed ? songKeyAt(parsed.keys, excerpt.startS) : undefined}
         />
       )}
     </div>
