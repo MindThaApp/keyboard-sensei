@@ -225,3 +225,69 @@ describe("PlayAlongEngine latency offset", () => {
     expect(events).toContainEqual({ type: "judged", noteIndex: 0, judgment: "perfect" });
   });
 });
+
+describe("PlayAlongEngine accompaniment", () => {
+  const accompaniment = [
+    { midi: 48, startS: 1, durationS: 1, kind: "otherHand" as const },
+    { midi: 67, startS: 1.5, durationS: 0.25, kind: "removed" as const },
+  ];
+  const make = (guideAudio: boolean, mute = { otherHand: false, removed: false }) => {
+    const engine = new PlayAlongEngine({ notes, durationS: 10, tempoPct: 100, waitMode: false, guideAudio, accompaniment, accompanimentMute: mute, onFinish: () => undefined });
+    const events: PlayAlongEngineEvent[] = [];
+    engine.on((event) => events.push(event));
+    return { engine, events };
+  };
+
+  it("sounds quietly with the song, even when the guide is off, and is never judged", () => {
+    const { engine, events } = make(false);
+    engine.start(0);
+    for (let t = 3900; t <= 5000; t += 25) engine.tick(t, 100);
+    const announced = ons(events);
+    expect(announced.map((e) => [e.midi, e.atMs])).toEqual([[48, 4000], [67, 4500]]);
+    expect(announced.every((e) => e.velocity < 85)).toBe(true);
+    // Their indexes never collide with a judged note.
+    expect(announced.every((e) => e.noteIndex >= notes.length)).toBe(true);
+    expect(events.filter((e) => e.type === "judged" && e.noteIndex >= notes.length)).toHaveLength(0);
+  });
+
+  it("skips a muted kind", () => {
+    const { engine, events } = make(true, { otherHand: true, removed: false });
+    engine.start(0);
+    for (let t = 3900; t <= 4800; t += 25) engine.tick(t, 100);
+    expect(ons(events).map((e) => e.midi)).toEqual([60, 67]);
+  });
+
+  it("muting mid-run silences what was already scheduled, and unmuting brings back only what is still ahead", () => {
+    const { engine, events } = make(false);
+    engine.start(0);
+    engine.tick(3950, 100); // the bass note is announced
+    engine.setAccompanimentMute({ otherHand: true, removed: true }, 3960);
+    expect(events.at(-1)).toEqual({ type: "guideSilence" });
+    engine.tick(4450, 100);
+    expect(ons(events)).toHaveLength(1);
+    engine.setAccompanimentMute({ otherHand: false, removed: false }, 4460);
+    engine.tick(4460, 100);
+    // The bass note (song 1s) is long gone; only the note at 1.5s is still to come.
+    expect(ons(events).slice(1).map((e) => e.midi)).toEqual([67]);
+  });
+
+  it("does not replay a burst of past guide notes when the guide is switched back on", () => {
+    const { engine, events } = guideEngine();
+    engine.start(0);
+    engine.setGuideAudio(false, 0);
+    engine.tick(6300, 100); // song 3.3s: all three notes have passed
+    engine.setGuideAudio(true, 6300);
+    engine.tick(6325, 100);
+    expect(ons(events)).toHaveLength(0);
+  });
+
+  it("finishes after a custom grace period", () => {
+    let finished = false;
+    const engine = new PlayAlongEngine({ notes, durationS: 4, tempoPct: 100, waitMode: false, guideAudio: false, leadInS: 1, finishGraceS: 0.2, onFinish: () => { finished = true; } });
+    engine.start(0);
+    engine.tick(5100);
+    expect(finished).toBe(false);
+    engine.tick(5200);
+    expect(finished).toBe(true);
+  });
+});

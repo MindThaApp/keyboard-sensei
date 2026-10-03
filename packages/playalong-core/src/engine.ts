@@ -31,8 +31,30 @@ export interface PlayAlongEngineOptions {
    * playing in time with what you HEAR scores as in time.
    */
   latencyOffsetMs?: number;
+  /** Song seconds after `durationS` before the run finishes (default 1). */
+  finishGraceS?: number;
+  /**
+   * Notes the player is NOT asked to play, sounded quietly with the song: the
+   * other hand, and the notes an easier arrangement left out. Never judged.
+   */
+  accompaniment?: AccompanimentNote[];
+  /** Which kinds of accompaniment are silenced. */
+  accompanimentMute?: AccompanimentMute;
   onFinish: (result: PlayAlongResult, presses: PlayAlongPress[]) => void;
 }
+
+export type AccompanimentKind = "otherHand" | "removed";
+
+export interface AccompanimentNote {
+  midi: number;
+  startS: number;
+  durationS: number;
+  kind: AccompanimentKind;
+}
+
+export type AccompanimentMute = Record<AccompanimentKind, boolean>;
+
+const ACCOMPANIMENT_VELOCITY: Record<AccompanimentKind, number> = { otherHand: 62, removed: 42 };
 
 /**
  * What the engine tells the outside world. The engine never makes a sound: a
@@ -56,6 +78,8 @@ export type PlayAlongEngineEvent =
 const LEAD_IN_S = 3;
 const FINISH_GRACE_S = 1;
 const GUIDE_VELOCITY = 85;
+/** Song seconds after which an unannounced guide note is skipped rather than played late. */
+const STALE_GUIDE_S = 0.15;
 
 /**
  * Clock, guide-note announcer, wait-mode gate, and live judging for the
@@ -84,6 +108,9 @@ export class PlayAlongEngine {
   private readonly order: number[];
   private missCursor = 0;
   private guideCursor = 0;
+  /** Accompaniment sorted by start time, and the cursor announcing it. */
+  private readonly accompaniment: AccompanimentNote[];
+  private accompanimentCursor = 0;
   private waitCursor = 0;
   /** Notes currently required before the song resumes (wait mode). */
   private waitingPitches = new Map<number, number[]>(); // midi → note indexes
@@ -95,7 +122,15 @@ export class PlayAlongEngine {
   private finished = false;
 
   constructor(options: PlayAlongEngineOptions) {
-    this.options = { leadInS: LEAD_IN_S, latencyOffsetMs: 0, ...options };
+    this.options = {
+      ...options,
+      leadInS: options.leadInS ?? LEAD_IN_S,
+      latencyOffsetMs: options.latencyOffsetMs ?? 0,
+      finishGraceS: options.finishGraceS ?? FINISH_GRACE_S,
+      accompaniment: options.accompaniment ?? [],
+      accompanimentMute: options.accompanimentMute ?? { otherHand: false, removed: false },
+    };
+    this.accompaniment = [...this.options.accompaniment].sort((a, b) => a.startS - b.startS || a.midi - b.midi);
     this.rate = options.tempoPct / 100;
     this.judgments = new Array<PlayAlongJudgment | undefined>(options.notes.length).fill(undefined);
     this.order = options.notes
@@ -163,9 +198,16 @@ export class PlayAlongEngine {
     }
   }
 
-  setGuideAudio(guideAudio: boolean): void {
+  setGuideAudio(guideAudio: boolean, nowMs?: number): void {
     this.options.guideAudio = guideAudio;
-    if (!guideAudio) this.silenceGuide();
+    // Accompaniment shares the silence, so rewind it to be announced again.
+    if (!guideAudio) this.silenceGuide(nowMs === undefined ? undefined : this.songTime(nowMs));
+  }
+
+  /** Mute or unmute the other hand / the notes an easier arrangement left out. */
+  setAccompanimentMute(mute: AccompanimentMute, nowMs: number): void {
+    this.options.accompanimentMute = mute;
+    this.silenceGuide(this.songTime(nowMs));
   }
 
   setLatencyOffsetMs(latencyOffsetMs: number): void {
@@ -282,7 +324,7 @@ export class PlayAlongEngine {
       }
     }
 
-    if (guideAudio && !this.isWaiting) this.announceGuide(nowMs, lookaheadMs);
+    if (!this.isWaiting) this.announceGuide(nowMs, lookaheadMs, guideAudio);
 
     if (!waitMode) {
       while (this.missCursor < this.order.length) {
@@ -293,7 +335,7 @@ export class PlayAlongEngine {
       }
     }
 
-    if (songTime >= durationS + FINISH_GRACE_S) {
+    if (songTime >= durationS + this.options.finishGraceS) {
       this.finish();
       return true;
     }
@@ -306,24 +348,44 @@ export class PlayAlongEngine {
    * freeze on: that note is announced when the player releases the freeze, exactly
    * as it sounded before guide notes were scheduled ahead.
    */
-  private announceGuide(nowMs: number, lookaheadMs: number): void {
-    const { notes, waitMode } = this.options;
+  private announceGuide(nowMs: number, lookaheadMs: number, guideAudio: boolean): void {
+    const { notes, waitMode, accompanimentMute } = this.options;
     let horizonS = this.songTime(nowMs + lookaheadMs);
     if (waitMode && this.waitCursor < this.order.length) {
       const nextFreezeS = notes[this.order[this.waitCursor]].startS;
       if (nextFreezeS < horizonS) horizonS = nextFreezeS - 1e-6;
     }
-    while (this.guideCursor < this.order.length) {
-      const index = this.order[this.guideCursor];
-      const note = notes[index];
-      if (note.startS > horizonS) break;
-      const onMs = Math.max(nowMs, this.clockTimeAt(note.startS));
-      const offMs = Math.max(onMs, this.clockTimeAt(note.startS + note.durationS));
-      this.emitter.emit({ type: "guideNoteOn", noteIndex: index, midi: note.midi, velocity: GUIDE_VELOCITY, atMs: onMs });
-      this.emitter.emit({ type: "guideNoteOff", noteIndex: index, midi: note.midi, atMs: offMs });
-      this.guideAnnounced = true;
-      this.guideCursor += 1;
+    // A note that started well before now is not played late in a burst: that
+    // happens when guide audio was off for a while and is switched back on.
+    const staleBeforeS = this.songTime(nowMs) - STALE_GUIDE_S;
+
+    if (guideAudio) {
+      while (this.guideCursor < this.order.length) {
+        const index = this.order[this.guideCursor];
+        const note = notes[index];
+        if (note.startS > horizonS) break;
+        this.guideCursor += 1;
+        if (note.startS < staleBeforeS) continue;
+        this.announce(index, note, GUIDE_VELOCITY, nowMs);
+      }
     }
+
+    while (this.accompanimentCursor < this.accompaniment.length) {
+      const note = this.accompaniment[this.accompanimentCursor];
+      if (note.startS > horizonS) break;
+      this.accompanimentCursor += 1;
+      if (note.startS < staleBeforeS || accompanimentMute[note.kind]) continue;
+      // Indexes after the judged notes, so they never collide with a judged note's.
+      this.announce(notes.length + this.accompanimentCursor - 1, note, ACCOMPANIMENT_VELOCITY[note.kind], nowMs);
+    }
+  }
+
+  private announce(noteIndex: number, note: { midi: number; startS: number; durationS: number }, velocity: number, nowMs: number): void {
+    const onMs = Math.max(nowMs, this.clockTimeAt(note.startS));
+    const offMs = Math.max(onMs, this.clockTimeAt(note.startS + note.durationS));
+    this.emitter.emit({ type: "guideNoteOn", noteIndex, midi: note.midi, velocity, atMs: onMs });
+    this.emitter.emit({ type: "guideNoteOff", noteIndex, midi: note.midi, atMs: offMs });
+    this.guideAnnounced = true;
   }
 
   /**
@@ -336,6 +398,9 @@ export class PlayAlongEngine {
       const { notes } = this.options;
       while (this.guideCursor > 0 && notes[this.order[this.guideCursor - 1]].startS >= fromSongTimeS) {
         this.guideCursor -= 1;
+      }
+      while (this.accompanimentCursor > 0 && this.accompaniment[this.accompanimentCursor - 1].startS >= fromSongTimeS) {
+        this.accompanimentCursor -= 1;
       }
     }
     if (!this.guideAnnounced) return;
@@ -355,7 +420,15 @@ export class PlayAlongEngine {
         const index = waiting.shift()!;
         this.judgments[index] = "perfect"; // visual confirmation only; unscored
         if (waiting.length === 0) this.waitingPitches.delete(midi);
-        if (!this.isWaiting) this.emitter.emit({ type: "waitEnd" });
+        if (!this.isWaiting) {
+          // The song was frozen right up to this press, not just to the last tick:
+          // fold that gap in so it resumes from the note it waited on.
+          if (timestampMs > this.lastTickMs) {
+            this.pausedS += (timestampMs - this.lastTickMs) / 1000;
+            this.lastTickMs = timestampMs;
+          }
+          this.emitter.emit({ type: "waitEnd" });
+        }
       }
       return;
     }
