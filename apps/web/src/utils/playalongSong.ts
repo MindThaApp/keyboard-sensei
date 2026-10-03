@@ -1,18 +1,19 @@
 import { Midi } from "@tonejs/midi";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
+import { keyFromToneJs, resolveKey, type KeyInfo } from "./keySignature";
 
 /**
  * One time-signature's effective span, in both raw MIDI ticks and the
  * "quarter-note beat" unit the rest of this app already uses everywhere
  * (secondsPerBeat = 60 / bpm assumes a beat is a quarter note; see
- * NotationPreviewStrip / MidiExercise). `beatsPerBar` here is the BAR
+ * ScrollingScore / MidiExercise). `beatsPerBar` here is the BAR
  * LENGTH IN QUARTER NOTES (numerator * 4/denominator) — NOT the raw
  * numerator — so a 6/8 bar is 3, not 6, and a 2/2 bar is 4, not 2.
  *
  * `startBeat` is `startTick / ppq`. Since MIDI ppq is always ticks-per-
  * QUARTER-NOTE regardless of the time signature's denominator, this
  * conversion is denominator-independent and lines up directly with note
- * startBeat values produced elsewhere (e.g. quantizeToBeats).
+ * startBeat values produced elsewhere (e.g. utils/engraving.ts).
  */
 export interface TimeSignatureSegment {
   startTick: number;
@@ -40,13 +41,22 @@ export interface ParsedPlayAlongSong {
    * Display-only, same as bpm. 15/311 library files change meter mid-piece,
    * so this scalar is only correct for the start of the piece — callers
    * that render/window across the whole song must use
-   * `timeSignatureSegments` instead (see NotationPreviewStrip).
+   * `timeSignatureSegments` instead (see ScrollingScore).
    */
   beatsPerBar: number;
   /** Every time-signature segment in the piece, in chronological order, denominator-aware. Always has at least one entry (defaults to 4/4 at tick 0 when the MIDI has no time-signature event). */
   timeSignatureSegments: TimeSignatureSegment[];
   /** Bar/beat grid built from the FULL tempo map (see buildBeatGrid). Precomputed once at parse time. */
   grid: SongBeatGrid;
+  /** The key(s) to notate the piece in, in time order; always at least one entry (see resolveSongKeys). */
+  keys: SongKeyChange[];
+}
+
+export interface SongKeyChange {
+  /** Quarter-note beat (ticks / ppq), the same unit as TimeSignatureSegment.startBeat. */
+  startBeat: number;
+  startS: number;
+  key: KeyInfo;
 }
 
 /** One bar boundary, in song seconds, from the full tempo map (see buildBeatGrid). */
@@ -229,6 +239,45 @@ function computeClickSafe(beats: BeatGridEntry[]): boolean {
 }
 
 /**
+ * The keys a piece is in, one entry per key-signature event (merged where
+ * consecutive events resolve to the same key). Each declared key is checked
+ * against the notes it covers — see resolveKey for why a bare "C major" event
+ * is not trusted and why the mode always comes from the notes. A file with
+ * no usable event gets a single key estimated from all of its notes.
+ */
+function resolveSongKeys(midi: Midi): SongKeyChange[] {
+  const ppq = midi.header.ppq;
+  const notes = midi.tracks.filter((track) => !track.instrument.percussion).flatMap((track) => track.notes);
+  const events = [...midi.header.keySignatures].sort((a, b) => a.ticks - b.ticks);
+  const segments = events.length > 0 && events[0].ticks > 0 ? [{ ticks: 0, key: undefined, scale: undefined }, ...events] : events;
+  if (segments.length === 0) segments.push({ ticks: 0, key: undefined, scale: undefined });
+
+  const keys: SongKeyChange[] = [];
+  segments.forEach((segment, i) => {
+    const startTick = i === 0 ? 0 : segment.ticks;
+    const endTick = segments[i + 1]?.ticks ?? Number.POSITIVE_INFINITY;
+    const covered = notes
+      .filter((n) => n.ticks >= startTick && n.ticks < endTick)
+      .map((n) => ({ midi: n.midi, weight: n.durationTicks }));
+    const key = resolveKey(keyFromToneJs(segment.key, segment.scale), covered);
+    const previous = keys[keys.length - 1];
+    if (previous && previous.key.fifths === key.fifths && previous.key.mode === key.mode) return;
+    keys.push({ startBeat: startTick / ppq, startS: midi.header.ticksToSeconds(startTick), key });
+  });
+  return keys;
+}
+
+/** The key in force at a point in the song. */
+export function songKeyAt(keys: SongKeyChange[], timeS: number): KeyInfo {
+  let current = keys[0]?.key ?? { fifths: 0, mode: "major" as const };
+  for (const change of keys) {
+    if (change.startS <= timeS + 1e-6) current = change.key;
+    else break;
+  }
+  return current;
+}
+
+/**
  * Parse raw MIDI bytes into play-along notes (song seconds, tempo map already
  * applied by @tonejs/midi). Hand assignment: with 2+ note-bearing tracks the
  * lowest-mean-pitch track is the left hand; single-track songs split at
@@ -279,5 +328,7 @@ export function parsePlayAlongSong(bytes: ArrayBuffer): ParsedPlayAlongSong {
   const beatsPerBar = timeSignatureSegments[0].beatsPerBar;
   const grid = buildBeatGrid(midi, timeSignatureSegments);
 
-  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments, grid };
+  const keys = resolveSongKeys(midi);
+
+  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments, grid, keys };
 }
