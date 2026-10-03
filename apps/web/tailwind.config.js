@@ -38,6 +38,20 @@ export default {
           200: "#ece5d3",
         },
       },
+      // Text-only overrides for the two "muted" greys. Stock slate-400 measured 2.2–2.6:1
+      // on white and stock slate-500 3.1–3.8:1 on the dark surfaces, so every helper
+      // line, locked-lesson meta and hint failed WCAG AA. Re-pointing the tokens (only for
+      // text-* utilities — borders and backgrounds keep the stock greys) fixes all ~160
+      // call sites at once; the per-theme values live in index.css.
+      textColor: {
+        slate: {
+          400: "rgb(var(--text-slate-400) / <alpha-value>)",
+          500: "rgb(var(--text-slate-500) / <alpha-value>)",
+        },
+        felt: {
+          400: "rgb(var(--text-felt-400) / <alpha-value>)",
+        },
+      },
       fontFamily: {
         display: ['"Iowan Old Style"', '"Palatino Linotype"', "Palatino", "Georgia", "serif"],
       },

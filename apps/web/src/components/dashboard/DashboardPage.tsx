@@ -163,11 +163,11 @@ function AchievementCard({ achievement }: { achievement: DashboardAchievement })
   return (
     <li
       className={`card flex flex-col gap-1 p-4 ${
-        achievement.unlocked ? "" : "opacity-60 grayscale"
+        achievement.unlocked ? "" : "bg-slate-50 dark:bg-slate-900/60"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xl" aria-hidden>
+        <span className={`text-2xl ${achievement.unlocked ? "" : "grayscale"}`} aria-hidden>
           {achievement.unlocked ? "🏅" : "🔒"}
         </span>
         {achievement.unlocked && achievement.unlockedAt && (
