@@ -10,3 +10,4 @@ export function scoreRawMidiEvents(params: { exercise: MidiExercise; rawEvents: 
   return scoreMidiExercise({ exercise: params.exercise, performedNotes: pairRawMidiEvents(params.rawEvents), ...(params.durationTolerancePercent === undefined ? {} : { durationTolerancePercent: params.durationTolerancePercent }) });
 }
 export * from "./playalong.js";
+export * from "./arrangement.js";
