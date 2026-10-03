@@ -7,8 +7,8 @@ import { barRangesFrom, type SongBeatGrid, type SongKeyChange, type TimeSignatur
 export interface ScrollingScoreHandle {
   /** Called from the EXISTING play-along rAF loop, every frame — mutates the
    *  ribbon's transform directly on the DOM (a ref), never via setState, so
-   *  this never triggers a React re-render at 60fps (see
-   *  docs/agent-briefing.md's "do not setState every frame" lesson). The
+   *  this never triggers a React re-render at 60fps (see the "do not
+   *  setState every frame" entry in docs/operations.md). The
    *  currently-sounding note IDs are also tracked here, but only mutate SVG
    *  classes when that SET actually changes (see activeIdsRef below). */
   setSongTime: (songTimeS: number) => void;
