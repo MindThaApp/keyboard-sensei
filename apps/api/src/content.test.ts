@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import type { Lesson } from "@keyboard-sensei/shared-types";
-import { exercises, lessons } from "./content.js";
+import { DYNAMICS_OPT_IN, exercises, lessons } from "./content.js";
 import { estimateLessonMinutes, midi, vexKey } from "./content/build.js";
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
@@ -113,6 +113,20 @@ describe("seed content", () => {
         if (knownDynamicsObjectives.has(objective)) continue;
         expect(objective, lesson.id).not.toMatch(/\b(volume|loud|soft|quiet|light|dynamic|velocity|forte|accent)/i);
       }
+    }
+  });
+});
+
+describe("dynamics opt-in", () => {
+  it("scores dynamics on exercises of exactly the lessons that promise them", () => {
+    const owner = (exerciseId: string) =>
+      lessons.find((lesson) => lesson.sections.some((section) => section.type === "midi-exercise" && section.exerciseId === exerciseId))?.id;
+    const optedIn = exercises.filter((exercise) => exercise.dynamics);
+    expect(optedIn.map((exercise) => exercise.exerciseId).sort()).toEqual(Object.keys(DYNAMICS_OPT_IN).sort());
+    expect(new Set(optedIn.map((exercise) => owner(exercise.exerciseId)))).toEqual(new Set(["lesson-08", "lesson-10", "lesson-20", "lesson-34"]));
+    // Balance is only meaningful where there are chords to balance.
+    for (const exercise of optedIn.filter((item) => item.dynamics?.balancedChords)) {
+      expect(exercise.expected.some((note) => note.chordGroupId), exercise.exerciseId).toBe(true);
     }
   });
 });

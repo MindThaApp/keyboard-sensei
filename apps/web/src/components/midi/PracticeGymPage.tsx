@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
-import SongExcerptPractice from "./SongExcerptPractice";
+import SongExcerptPicker from "./SongExcerptPicker";
 import { practiceGymDrills } from "../../data/practiceGymDrills";
 import { getSongs, type Song, type SongGenre } from "../../services/api";
 
@@ -119,7 +119,7 @@ export default function PracticeGymPage() {
       <div>
         <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Practise a song</h2>
         <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-          Pick a few bars of any library song, play one hand while the other plays along, and get a real score.
+          Pick a few bars of any library song and a hand. They open on the song practice screen, looped, with the other hand playing along.
         </p>
 
         <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -188,7 +188,7 @@ export default function PracticeGymPage() {
 
       {selectedSong && (
         <div ref={excerptRef} className="scroll-mt-3">
-          <SongExcerptPractice key={selectedSong.id} song={selectedSong} />
+          <SongExcerptPicker key={selectedSong.id} song={selectedSong} />
         </div>
       )}
     </div>

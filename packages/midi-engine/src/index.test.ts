@@ -213,3 +213,46 @@ describe("play-along continuous multipliers", () => {
     expect(finalScore(result, 2, 1)).toBe(150);
   });
 });
+
+describe("opt-in dynamics scoring", () => {
+  const scale = [60, 62, 64, 65, 67].map((note, i) => event(`n${i}`, note, i));
+  const at = (velocities: number[]) => velocities.map((velocity, i) => ({ ...played(scale[i]!.note, i * 500), velocity }));
+  const withDynamics = (dynamics: MidiExercise["dynamics"], expected: ExpectedNoteEvent[], notes: PerformedNote[]) =>
+    scoreMidiExercise({ exercise: { ...exercise(expected), dynamics }, performedNotes: notes });
+
+  it("ignores velocity unless the exercise opts in", () => {
+    const result = score(scale, at([30, 120, 30, 120, 30]));
+    expect(result.score).toBe(100);
+    expect(result.dynamics).toBeUndefined();
+  });
+
+  it("rewards an even volume and reports the spread", () => {
+    const even = withDynamics({ evenVolume: true }, scale, at([80, 82, 79, 81, 80]));
+    expect(even.dynamics).toMatchObject({ evenness: 100, chordBalance: null, score: 100, meanVelocity: 80 });
+    expect(even.dynamics!.velocitySpread).toBeLessThan(4);
+    expect(even.score).toBe(100);
+  });
+
+  it("marks down an uneven volume, by a limited share of the score", () => {
+    const uneven = withDynamics({ evenVolume: true }, scale, at([40, 110, 40, 110, 40]));
+    expect(uneven.dynamics!.velocitySpread).toBeGreaterThan(30);
+    expect(uneven.dynamics!.evenness).toBe(0);
+    expect(uneven.score).toBe(85);
+    expect(uneven.feedback.some((line) => line.includes("volume varied"))).toBe(true);
+  });
+
+  it("checks the balance of each chord's tones", () => {
+    const chord = [event("c", 60, 0, "g"), event("e", 64, 0, "g"), event("g", 67, 0, "g")];
+    const tones = (velocities: number[]) => chord.map((exp, i) => ({ ...played(exp.note, i * 5, 500), velocity: velocities[i]! }));
+    const balanced = withDynamics({ balancedChords: true }, chord, tones([70, 72, 71]));
+    expect(balanced.dynamics).toMatchObject({ chordVelocityRange: 2, chordBalance: 100, evenness: null });
+    const topHeavy = withDynamics({ balancedChords: true }, chord, tones([50, 60, 98]));
+    expect(topHeavy.dynamics!.chordVelocityRange).toBe(48);
+    expect(topHeavy.dynamics!.chordBalance).toBe(0);
+    expect(topHeavy.feedback.some((line) => line.includes("chord tones"))).toBe(true);
+  });
+
+  it("a fixed-velocity virtual keyboard is perfectly even", () => {
+    expect(withDynamics({ evenVolume: true, balancedChords: true }, scale, at([100, 100, 100, 100, 100])).score).toBe(100);
+  });
+});

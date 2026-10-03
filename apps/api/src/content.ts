@@ -1,4 +1,4 @@
-import type { Lesson, MidiExercise } from "@keyboard-sensei/shared-types";
+import type { ExerciseDynamics, Lesson, MidiExercise } from "@keyboard-sensei/shared-types";
 import { chainLessons } from "./content/helpers.js";
 import { estimateLessonMinutes } from "./content/build.js";
 import { coreLessons, coreExercises } from "./content/core.js";
@@ -10,6 +10,21 @@ import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
 
+/**
+ * Exercises scored on dynamics as well (see ExerciseDynamics), because their
+ * lesson's objectives promise it: lesson 8 "even in volume", lesson 10 "balance
+ * all three chord tones", lesson 20 "even in tone", lesson 34 "light and even".
+ */
+export const DYNAMICS_OPT_IN: Record<string, ExerciseDynamics> = {
+  "exercise-08": { evenVolume: true },
+  "five-finger-lh": { evenVolume: true },
+  "exercise-10": { balancedChords: true },
+  "major-minor-pairs": { balancedChords: true },
+  "exercise-20": { evenVolume: true },
+  "exercise-34": { evenVolume: true },
+  "broken-c-f-g-c": { evenVolume: true },
+};
+
 export const exercises: MidiExercise[] = [
   ...coreExercises,
   ...repertoireExercises,
@@ -19,7 +34,7 @@ export const exercises: MidiExercise[] = [
   ...keyExercises,
   ...readingExercises,
   ...modernExercises,
-];
+].map((exercise) => (DYNAMICS_OPT_IN[exercise.exerciseId] ? { ...exercise, dynamics: DYNAMICS_OPT_IN[exercise.exerciseId] } : exercise));
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
 
