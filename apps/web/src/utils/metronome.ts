@@ -1,5 +1,5 @@
 import { playClick, type MetronomeSound } from "./clickTimbres";
-import { registerAudioContext } from "./audioUnlock";
+import { addScheduleSource, contextTimeAt, getAudioContext, traceScheduled } from "../audio/audioEngine";
 
 // Timbres live in clickTimbres.ts so the Play-Along grid-driven scheduler can
 // emit identical sounds without inheriting this class's fixed-BPM clock.
@@ -16,85 +16,66 @@ export interface MetronomeStartOptions {
   volume?: number;
   /** Fired near each beat: index within the bar (0-based) and whether it's still count-in. */
   onBeat?: (beatInBar: number, isCountIn: boolean) => void;
-  /** Fired when the count-in finishes and recording should begin. */
-  onGo?: () => void;
+  /**
+   * Fired when the count-in finishes and recording should begin. `downbeatMs` is
+   * the performance.now() time the first recorded downbeat is SCHEDULED to sound —
+   * exact, unlike the moment this callback happens to run — so a recording
+   * clock can start from it.
+   */
+  onGo?: (downbeatMs: number) => void;
 }
 
+const FIRST_BEAT_DELAY_MS = 100;
+
 /**
- * Web Audio metronome with a lookahead scheduler (clicks are sample-accurate
- * even though JS timers aren't). Beat 1 of each bar is accented. Used for the
- * count-in before an exercise and the optional pulse while recording.
+ * Fixed-tempo metronome for the count-in before an exercise and the optional
+ * pulse while recording. Clicks are scheduled through the shared lookahead
+ * scheduler at exact times; beat callbacks are UI-only and fire when each beat
+ * is reached.
  */
 export class Metronome {
-  private ctx: AudioContext | null = null;
-  private timer: number | null = null;
-  private nextBeatTime = 0;
-  private beatCount = 0;
-  private options: Required<Pick<MetronomeStartOptions, "bpm" | "beatsPerBar" | "countInBeats" | "sound" | "volume">> &
-    MetronomeStartOptions = {
-    bpm: 80,
-    beatsPerBar: 4,
-    countInBeats: 0,
-    sound: "click",
-    volume: 0.7,
-  };
+  private removeSource: (() => void) | null = null;
+  private callbackTimers = new Set<ReturnType<typeof setTimeout>>();
 
   get running(): boolean {
-    return this.timer !== null;
-  }
-
-  private ensureContext(): AudioContext {
-    if (!this.ctx) {
-      this.ctx = new AudioContext();
-      registerAudioContext(this.ctx);
-    }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
-    return this.ctx;
-  }
-
-  private click(time: number, accented: boolean): void {
-    playClick(this.ctx!, time, accented, this.options.volume, this.options.sound);
+    return this.removeSource !== null;
   }
 
   start(options: MetronomeStartOptions): void {
     this.stop();
-    const ctx = this.ensureContext();
-    this.options = { beatsPerBar: 4, countInBeats: 0, sound: "click", volume: 0.7, ...options };
-    this.beatCount = 0;
-    this.nextBeatTime = ctx.currentTime + 0.1;
+    getAudioContext();
+    const { beatsPerBar = 4, countInBeats = 0, sound = "click", volume = 0.7, onBeat, onGo } = options;
+    const msPerBeat = 60_000 / options.bpm;
+    const firstBeatMs = performance.now() + FIRST_BEAT_DELAY_MS;
+    let beat = 0;
 
-    const secondsPerBeat = 60 / this.options.bpm;
-    const lookaheadSeconds = 0.12;
+    this.removeSource = addScheduleSource((nowMs, horizonMs) => {
+      while (firstBeatMs + beat * msPerBeat <= nowMs + horizonMs) {
+        const beatIndex = beat;
+        const atMs = firstBeatMs + beatIndex * msPerBeat;
+        const isCountIn = beatIndex < countInBeats;
+        const beatInBar = isCountIn ? beatIndex % beatsPerBar : (beatIndex - countInBeats) % beatsPerBar;
+        const when = contextTimeAt(atMs);
+        traceScheduled("metronome", atMs, when);
+        playClick(getAudioContext(), when, beatInBar === 0, volume, sound);
 
-    const schedule = () => {
-      while (this.nextBeatTime < ctx.currentTime + lookaheadSeconds) {
-        const beat = this.beatCount;
-        const { beatsPerBar, countInBeats, onBeat, onGo } = this.options;
-        const isCountIn = beat < countInBeats;
-        const beatInBar = isCountIn ? beat % beatsPerBar : (beat - countInBeats) % beatsPerBar;
-        this.click(this.nextBeatTime, beatInBar === 0);
-
-        const delayMs = Math.max(0, (this.nextBeatTime - ctx.currentTime) * 1000);
-        window.setTimeout(() => {
+        const timer = setTimeout(() => {
+          this.callbackTimers.delete(timer);
           if (!this.running) return;
-          if (beat === countInBeats) onGo?.(); // first beat after the count-in — recording starts on this downbeat
+          if (beatIndex === countInBeats) onGo?.(atMs); // recording starts on this downbeat
           onBeat?.(beatInBar, isCountIn);
-        }, delayMs);
-
-        this.nextBeatTime += secondsPerBeat;
-        this.beatCount += 1;
+        }, Math.max(0, atMs - performance.now()));
+        this.callbackTimers.add(timer);
+        beat += 1;
       }
-    };
-
-    schedule();
-    this.timer = window.setInterval(schedule, 25);
+    });
   }
 
   stop(): void {
-    if (this.timer !== null) {
-      window.clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.removeSource?.();
+    this.removeSource = null;
+    for (const timer of this.callbackTimers) clearTimeout(timer);
+    this.callbackTimers.clear();
   }
 }
 

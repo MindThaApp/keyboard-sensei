@@ -1,4 +1,5 @@
 import { API_URL, getToken } from "../services/api";
+import { reportAudioProblem } from "../audio/audioNotices";
 import { SustainPedalState } from "./sustainPedal";
 
 /**
@@ -32,21 +33,20 @@ interface ActiveVoice {
   gain: GainNode;
 }
 
-async function fetchSample(instrumentId: string, note: string, ctx: AudioContext): Promise<AudioBuffer | null> {
+type FetchResult = { buffer: AudioBuffer } | { error: string };
+
+async function fetchSample(instrumentId: string, note: string, ctx: BaseAudioContext): Promise<FetchResult> {
   const token = getToken();
   try {
     const response = await fetch(
       `${API_URL}/instruments/${encodeURIComponent(instrumentId)}/samples/${encodeURIComponent(note)}`,
       { headers: token ? { authorization: `Bearer ${token}` } : {} },
     );
-    if (!response.ok) return null;
+    if (!response.ok) return { error: `HTTP ${response.status}` };
     const bytes = await response.arrayBuffer();
-    // decodeAudioData detaches/consumes the buffer and (in Safari) uses a
-    // callback-style overload too, but the promise form is supported in
-    // every browser this app targets.
-    return await ctx.decodeAudioData(bytes);
-  } catch {
-    return null;
+    return { buffer: await ctx.decodeAudioData(bytes) };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -58,7 +58,8 @@ async function fetchSample(instrumentId: string, note: string, ctx: AudioContext
  * kicks off the fetch/decode work and callers poll `isLoaded` /
  * `loadProgress`. Until a note's buffer has actually landed, `hasSample()`
  * returns false so the caller (PianoSynth's facade) can fall back to the
- * oscillator synth instead of playing silence.
+ * oscillator synth instead of playing silence. Notes that FAIL to load are
+ * reported to the user (see reportAudioProblem), not silently substituted.
  */
 export class SampledInstrument {
   readonly instrumentId: string;
@@ -69,6 +70,8 @@ export class SampledInstrument {
   private readonly sustain = new SustainPedalState();
   private loadPromise: Promise<void> | null = null;
   private loadedCount = 0;
+  private failedCount = 0;
+  private disposed = false;
   private readonly totalCount = MAX_MIDI_NOTE - MIN_MIDI_NOTE + 1;
 
   constructor(instrumentId: string, ctx: AudioContext, destination: AudioNode) {
@@ -88,6 +91,13 @@ export class SampledInstrument {
     return this.loadedCount >= this.totalCount;
   }
 
+  /** Bytes of decoded audio held in memory (32-bit float per sample per channel). */
+  get decodedBytes(): number {
+    let bytes = 0;
+    for (const buffer of this.buffers.values()) bytes += buffer.length * buffer.numberOfChannels * 4;
+    return bytes;
+  }
+
   hasSample(midi: number): boolean {
     return this.buffers.has(midiToSampleNoteName(midi));
   }
@@ -102,15 +112,34 @@ export class SampledInstrument {
     const notes: string[] = [];
     for (let midi = MIN_MIDI_NOTE; midi <= MAX_MIDI_NOTE; midi++) notes.push(midiToSampleNoteName(midi));
     let cursor = 0;
+    let firstError: string | null = null;
     const worker = async () => {
-      while (cursor < notes.length) {
+      while (cursor < notes.length && !this.disposed) {
         const note = notes[cursor++];
-        const buffer = await fetchSample(this.instrumentId, note, this.ctx);
-        if (buffer) this.buffers.set(note, buffer);
+        const result = await fetchSample(this.instrumentId, note, this.ctx);
+        if (this.disposed) return;
+        if ("buffer" in result) {
+          this.buffers.set(note, result.buffer);
+        } else {
+          this.failedCount += 1;
+          firstError ??= `${note}: ${result.error}`;
+        }
         this.loadedCount += 1;
       }
     };
     await Promise.all(Array.from({ length: Math.min(LOAD_CONCURRENCY, notes.length) }, worker));
+    if (this.disposed || this.failedCount === 0) return;
+    if (this.failedCount >= this.totalCount) {
+      reportAudioProblem(
+        `The "${this.instrumentId}" instrument couldn't be loaded, so you're hearing the built-in synth instead.`,
+        firstError,
+      );
+    } else {
+      reportAudioProblem(
+        `${this.failedCount} of ${this.totalCount} "${this.instrumentId}" notes couldn't be loaded; those keys use the built-in synth.`,
+        firstError,
+      );
+    }
   }
 
   playNote(midi: number, velocity = 100): void {
@@ -120,19 +149,10 @@ export class SampledInstrument {
     // Retriggering the same note before its release finished: cut the old
     // voice with a fast fade (not a hard stop, which clicks) before starting
     // the new one.
-    this.stopNote(midi, true);
+    this.stopNoteNow(midi, true);
 
     const now = this.ctx.currentTime;
-    const source = this.ctx.createBufferSource();
-    source.buffer = buffer;
-    const gain = this.ctx.createGain();
-    const level = Math.max(0, Math.min(1, velocity / 127));
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(level, now + 0.005);
-    source.connect(gain);
-    gain.connect(this.output);
-    source.start(now);
-
+    const { source, gain } = this.createVoice(buffer, velocity, now);
     const voice: ActiveVoice = { source, gain };
     this.voices.set(midi, voice);
     source.onended = () => {
@@ -142,6 +162,52 @@ export class SampledInstrument {
       // this note — a fast retrigger may already have replaced it.
       if (this.voices.get(midi) === voice) this.voices.delete(midi);
     };
+  }
+
+  /**
+   * A note with a known start and end, for the lookahead scheduler (guide notes,
+   * accompaniment, previews). Independent of the live voices and the sustain
+   * pedal. Returns a cancel function, or null when the sample isn't loaded.
+   */
+  scheduleNote(midi: number, velocity: number, startTime: number, endTime: number): (() => void) | null {
+    const buffer = this.buffers.get(midiToSampleNoteName(midi));
+    if (!buffer) return null;
+    const { source, gain } = this.createVoice(buffer, velocity, startTime);
+    const releaseAt = Math.max(startTime + 0.01, endTime);
+    gain.gain.setValueAtTime(velocityLevel(velocity), releaseAt);
+    gain.gain.linearRampToValueAtTime(0, releaseAt + RELEASE_S);
+    source.stop(releaseAt + RELEASE_S + 0.02);
+    source.onended = () => {
+      source.disconnect();
+      gain.disconnect();
+    };
+    return () => {
+      const now = this.ctx.currentTime;
+      if (now < startTime) {
+        source.onended = null;
+        source.stop();
+        source.disconnect();
+        gain.disconnect();
+        return;
+      }
+      if (now >= releaseAt) return; // already releasing
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, now + IMMEDIATE_RELEASE_S);
+      source.stop(now + IMMEDIATE_RELEASE_S + 0.02);
+    };
+  }
+
+  private createVoice(buffer: AudioBuffer, velocity: number, startTime: number): ActiveVoice {
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(velocityLevel(velocity), startTime + 0.005);
+    source.connect(gain);
+    gain.connect(this.output);
+    source.start(startTime);
+    return { source, gain };
   }
 
   stopNote(midi: number, immediate = false): void {
@@ -171,15 +237,24 @@ export class SampledInstrument {
     this.sustain.clear();
     for (const midi of [...this.voices.keys()]) this.stopNoteNow(midi, true);
   }
+
+  /** Frees the decoded samples. The instrument is unusable afterwards. */
+  dispose(): void {
+    this.disposed = true;
+    this.stopAll();
+    this.buffers.clear();
+    this.output.disconnect();
+  }
+}
+
+function velocityLevel(velocity: number): number {
+  return Math.max(0, Math.min(1, velocity / 127));
 }
 
 /**
  * Lightweight one-off preview: fetches + decodes only the notes requested
  * (a short chord) rather than the full 88-note pack, so "preview before
  * committing" in the instrument picker doesn't force a full download.
- * Notes are cached in-process for the lifetime of the returned object only —
- * callers should discard it after use (the full SampledInstrument cache in
- * the PianoSynth facade is the one that persists across selections).
  */
 export async function previewChord(
   instrumentId: string,
@@ -187,16 +262,20 @@ export async function previewChord(
   ctx: AudioContext,
   destination: AudioNode,
 ): Promise<void> {
-  const buffers = await Promise.all(
+  const results = await Promise.all(
     midiNotes.map((midi) => fetchSample(instrumentId, midiToSampleNoteName(midi), ctx)),
   );
+  const failed = results.filter((result) => "error" in result);
+  if (failed.length > 0) {
+    reportAudioProblem(`The "${instrumentId}" preview couldn't be loaded.`, failed[0]);
+  }
   const now = ctx.currentTime;
   const holdS = 1.1;
   const releaseS = 0.35;
-  for (const buffer of buffers) {
-    if (!buffer) continue;
+  for (const result of results) {
+    if (!("buffer" in result)) continue;
     const source = ctx.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = result.buffer;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(0.5, now + 0.01);

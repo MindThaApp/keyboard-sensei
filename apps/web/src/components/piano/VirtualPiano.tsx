@@ -28,6 +28,8 @@ export interface VirtualPianoProps {
   recommendedRange?: KeyRange;
   /** Notes to highlight as "play these next" — never shown as raw MIDI numbers, just visual key highlighting. */
   expectedNotes?: number[];
+  /** Notes the app is playing (e.g. a Listen preview), drawn as held down. */
+  soundingNotes?: number[];
   /** Post-attempt feedback coloring, keyed by MIDI note number. */
   feedbackByNote?: Record<number, "correct" | "incorrect">;
   showLabels?: boolean;
@@ -105,6 +107,7 @@ export default function VirtualPiano({
   range: rangeProp,
   recommendedRange,
   expectedNotes = [],
+  soundingNotes = [],
   feedbackByNote = {},
   showLabels = true,
   disabled = false,
@@ -195,6 +198,7 @@ export default function VirtualPiano({
   const whiteNotes = notes.filter((n) => !isBlackKey(n));
   const blackNotes = notes.filter((n) => isBlackKey(n));
   const expectedSet = new Set(expectedNotes);
+  const soundingSet = new Set(soundingNotes);
 
   const whiteKeyHeightPx = Math.min(geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO, maxWhiteKeyHeightPx);
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
@@ -311,7 +315,7 @@ export default function VirtualPiano({
 
   function keyColorClasses(note: number, isBlack: boolean): string {
     const feedback = feedbackByNote[note];
-    const isPressed = pressedNotes.has(note);
+    const isPressed = pressedNotes.has(note) || soundingSet.has(note);
     const isExpected = expectedSet.has(note);
 
     if (feedback === "correct") return isBlack ? "bg-emerald-600" : "bg-emerald-200";

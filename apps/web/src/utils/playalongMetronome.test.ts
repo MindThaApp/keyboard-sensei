@@ -1,28 +1,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clicks: { when: number; accented: boolean }[] = [];
+let source: ((nowMs: number, horizonMs: number) => void) | null = null;
 
 vi.mock("./clickTimbres", () => ({
   playClick: (_ctx: unknown, when: number, accented: boolean) => clicks.push({ when, accented }),
 }));
-
-// Minimal AudioContext stand-in: only currentTime is read by the scheduler.
-class FakeAudioContext {
-  state = "running";
-  currentTime = 100; // deliberately not 0, to catch song-time/wall-time confusion
-  resume() {}
-  close() {}
-}
-vi.stubGlobal("AudioContext", FakeAudioContext);
+// The scheduler under test is the metronome's beat selection; the shared audio
+// engine is replaced by an identity clock (context seconds = perf ms / 1000).
+vi.mock("../audio/audioEngine", () => ({
+  addScheduleSource: (fn: (nowMs: number, horizonMs: number) => void) => {
+    source = fn;
+    return () => {
+      source = null;
+    };
+  },
+  contextTimeAt: (perfMs: number) => perfMs / 1000,
+  getAudioContext: () => ({}),
+  traceScheduled: () => undefined,
+}));
 
 const { PlayAlongMetronome } = await import("./playalongMetronome");
+
+/** A song clock: song time = (now - 0) / 1000 * rate, with optional freeze. */
+const songClock = (rate = 1, state: { waiting?: boolean; paused?: boolean } = {}) => ({
+  songTime: (nowMs: number) => (nowMs / 1000) * rate,
+  clockTimeAt: (songTimeS: number) => (songTimeS / rate) * 1000,
+  get isWaiting() {
+    return state.waiting ?? false;
+  },
+  get isPaused() {
+    return state.paused ?? false;
+  },
+  isFinished: false,
+});
+
+const settings = (level: "bar" | "beat" | "subdivision" = "beat") => () => ({
+  enabled: true,
+  sound: "click" as const,
+  volume: 0.7,
+  level,
+});
 
 /** A steady 1-beat-per-second grid, 4/4. */
 const grid = Array.from({ length: 12 }, (_, i) => ({
   timeS: i,
   beatInBar: i % 4,
   isDownbeat: i % 4 === 0,
-  isMainBeat: true, // simple meter: every notated beat is a counted beat
+  isMainBeat: true,
 }));
 
 /** 6/8: six notated eighths per bar, but only beats 0 and 3 are counted. */
@@ -33,84 +58,76 @@ const compound = Array.from({ length: 12 }, (_, i) => ({
   isMainBeat: i % 3 === 0,
 }));
 
+const run = (fromMs: number, toMs: number, horizonMs = 100) => {
+  for (let t = fromMs; t <= toMs; t += 25) source?.(t, horizonMs);
+};
+
 describe("PlayAlongMetronome", () => {
   beforeEach(() => {
     clicks.length = 0;
+    source = null;
   });
 
   it("schedules only within its short look-ahead, not the whole song", () => {
-    const m = new PlayAlongMetronome(grid);
-    m.tick(0, 1, false, "click", 0.7);
-    // 120ms horizon at rate 1 → only the beat at t=0 is due.
+    new PlayAlongMetronome(grid).follow(songClock(), settings());
+    source!(0, 100);
     expect(clicks).toHaveLength(1);
-    expect(clicks[0]!.accented).toBe(true); // downbeat
+    expect(clicks[0]!.accented).toBe(true);
   });
 
-  it("emits NOTHING while the engine is waiting, so wait mode doesn't click into silence", () => {
-    const m = new PlayAlongMetronome(grid);
-    m.tick(3, 1, true, "click", 0.7);
-    m.tick(3, 1, true, "click", 0.7);
+  it("schedules each beat once, at the exact time the song reaches it", () => {
+    new PlayAlongMetronome(grid).follow(songClock(), settings());
+    run(0, 3000);
+    expect(clicks.map((c) => c.when)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("emits NOTHING while the song is frozen (wait mode) or paused", () => {
+    new PlayAlongMetronome(grid).follow(songClock(1, { waiting: true }), settings());
+    run(2900, 3200);
+    new PlayAlongMetronome(grid).follow(songClock(1, { paused: true }), settings());
+    run(2900, 3200);
     expect(clicks).toHaveLength(0);
   });
 
-  it("re-anchors off the caller's song time each frame rather than accumulating its own clock", () => {
-    const m = new PlayAlongMetronome(grid);
-    // Jump straight to t=5 (as would happen after frames elapse). Beats 0-4 are
-    // behind us and must be skipped, not fired in a burst.
-    m.tick(5, 1, false, "click", 0.7);
-    expect(clicks).toHaveLength(1);
-    // Scheduled at wall = currentTime + (5 - 5)/1 = 100.
-    expect(clicks[0]!.when).toBeCloseTo(100, 5);
+  it("skips beats already behind the song (e.g. after a seek) rather than bursting them", () => {
+    new PlayAlongMetronome(grid).follow(songClock(), settings());
+    source!(5000, 100);
+    expect(clicks.map((c) => c.when)).toEqual([5]);
   });
 
-  it("never schedules a click in the past", () => {
-    const m = new PlayAlongMetronome(grid);
-    m.tick(2.5, 1, false, "click", 0.7);
-    for (const c of clicks) expect(c.when).toBeGreaterThanOrEqual(100);
-  });
-
-  it("converts song-time to wall-time by the rate: at 2x the beats arrive twice as fast", () => {
-    const m = new PlayAlongMetronome(grid);
-    // At rate 2 the horizon covers 0.24s of SONG time, so the beat at t=0 fires.
-    m.tick(0, 2, false, "click", 0.7);
-    expect(clicks).toHaveLength(1);
-    expect(clicks[0]!.when).toBeCloseTo(100, 5);
-
-    clicks.length = 0;
-    const m2 = new PlayAlongMetronome(grid);
-    // A beat 0.2s of song-time ahead is 0.1s of WALL time away at rate 2 — inside
-    // the 0.12s horizon. At rate 1 it would be 0.2s away and NOT yet due.
-    m2.tick(0.8, 2, false, "click", 0.7);
-    expect(clicks).toHaveLength(1);
-    expect(clicks[0]!.when).toBeCloseTo(100 + (1 - 0.8) / 2, 5);
-  });
-
-  it("marks downbeats as accented and off-beats as not", () => {
-    const m = new PlayAlongMetronome(grid);
-    m.tick(0, 1, false, "click", 0.7);
-    m.tick(1, 1, false, "click", 0.7);
-    expect(clicks.map((c) => c.accented)).toEqual([true, false]);
+  it("converts song time to clock time by the rate: at 2x the beats arrive twice as fast", () => {
+    new PlayAlongMetronome(grid).follow(songClock(2), settings());
+    run(0, 1500);
+    expect(clicks.map((c) => c.when)).toEqual([0, 0.5, 1, 1.5]);
   });
 
   it("clicks the counted pulse in compound meter, not every eighth (6/8 = 2 clicks a bar)", () => {
-    const m = new PlayAlongMetronome(compound);
-    for (let t = 0; t < 6; t++) m.tick(t, 1, false, "click", 0.7, "beat");
-    // Beats 0..5 of one 6/8 bar -> only 0 and 3 are counted.
+    new PlayAlongMetronome(compound).follow(songClock(), settings("beat"));
+    run(0, 5500);
     expect(clicks).toHaveLength(2);
-    expect(clicks[0]!.accented).toBe(true); // downbeat
+    expect(clicks[0]!.accented).toBe(true);
     expect(clicks[1]!.accented).toBe(false);
   });
 
   it("subdivision level clicks every notated beat", () => {
-    const m = new PlayAlongMetronome(compound);
-    for (let t = 0; t < 6; t++) m.tick(t, 1, false, "click", 0.7, "subdivision");
+    new PlayAlongMetronome(compound).follow(songClock(), settings("subdivision"));
+    run(0, 5500);
     expect(clicks).toHaveLength(6);
   });
 
   it("bar level clicks only the downbeat", () => {
-    const m = new PlayAlongMetronome(compound);
-    for (let t = 0; t < 12; t++) m.tick(t, 1, false, "click", 0.7, "bar");
-    expect(clicks).toHaveLength(2); // two bars in 12 beats of 6/8
+    new PlayAlongMetronome(compound).follow(songClock(), settings("bar"));
+    run(0, 11_500);
+    expect(clicks).toHaveLength(2);
     expect(clicks.every((c) => c.accented)).toBe(true);
+  });
+
+  it("stays silent while switched off, without bursting the missed beats when switched on", () => {
+    const live = { enabled: false };
+    new PlayAlongMetronome(grid).follow(songClock(), () => ({ ...settings()(), enabled: live.enabled }));
+    run(0, 2500);
+    live.enabled = true;
+    run(2525, 3000);
+    expect(clicks.map((c) => c.when)).toEqual([3]);
   });
 });

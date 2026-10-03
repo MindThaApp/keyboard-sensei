@@ -16,7 +16,7 @@ import {
 } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { parsePlayAlongSong } from "@keyboard-sensei/playalong-core";
-import { pianoSynth } from "../../utils/synth";
+import { playSequence } from "../../audio/noteSequence";
 import {
   DEFAULT_FILTERS,
   GENRE_OPTIONS as GENRES,
@@ -207,14 +207,13 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
   const [genre, setGenre] = useState<SongGenre>("other");
   const [state, setState] = useState<"idle" | "fetching" | "playing" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
-  // Scheduled preview-playback timers -- cleared on unmount and before every
-  // new preview/fetch, so navigating away or re-fetching mid-playback can't
-  // leave stray notes sounding via the module-level pianoSynth singleton.
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Stops the preview -- called on unmount and before every new preview/fetch,
+  // so navigating away or re-fetching mid-playback can't leave notes sounding.
+  const stopPreviewRef = useRef<(() => void) | null>(null);
 
   const clearScheduledPreview = () => {
-    for (const timer of timersRef.current) clearTimeout(timer);
-    timersRef.current = [];
+    stopPreviewRef.current?.();
+    stopPreviewRef.current = null;
   };
 
   useEffect(() => clearScheduledPreview, []);
@@ -244,15 +243,12 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
     clearScheduledPreview();
     setState("playing");
     const parsed = parsePlayAlongSong(preview.bytes);
-    let lastEnd = 0;
-    for (const note of parsed.notes) {
-      const onMs = note.startS * 1000;
-      const offMs = onMs + note.durationS * 1000;
-      lastEnd = Math.max(lastEnd, offMs);
-      timersRef.current.push(setTimeout(() => pianoSynth.playNote(note.midi, 90), onMs));
-      timersRef.current.push(setTimeout(() => pianoSynth.stopNote(note.midi), offMs));
-    }
-    timersRef.current.push(setTimeout(() => setState("idle"), lastEnd + 150));
+    stopPreviewRef.current = playSequence(parsed.notes, {
+      onEnd: () => {
+        stopPreviewRef.current = null;
+        setState("idle");
+      },
+    });
   };
 
   const confirmImport = async () => {
