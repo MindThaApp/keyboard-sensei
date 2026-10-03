@@ -7,6 +7,7 @@ import { prisma } from "./db.js";
 import { requireAdmin } from "./auth.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
+import { attemptSchema, levelOf, personalBests } from "./practice-attempts.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -147,20 +148,32 @@ songsRouter.get("/songs", async (req, res, next) => {
 songsRouter.get("/songs/attempts/me", async (req, res, next) => {
   try {
     const userId = uid(req);
-    const rows = await prisma.playAlongAttempt.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: "desc" },
-      take: 200,
-      include: { song: { select: { title: true, artist: true } } },
-    });
-    const bests: Record<string, { score: number; accuracy: number }> = {};
-    for (const row of rows) {
-      const best = bests[row.song_id];
-      if (!best || row.score > best.score) bests[row.song_id] = { score: row.score, accuracy: row.accuracy };
-    }
+    const [rows, bestRows] = await Promise.all([
+      prisma.playAlongAttempt.findMany({
+        where: { user_id: userId },
+        orderBy: { created_at: "desc" },
+        take: 50,
+        include: { song: { select: { title: true, artist: true, arrangement_level: true } } },
+      }),
+      // Bests over every scored whole-song run, not just the recent ones.
+      prisma.playAlongAttempt.findMany({
+        where: { user_id: userId, is_loop: false, wait_mode: false },
+        select: {
+          song_id: true,
+          score: true,
+          accuracy: true,
+          arrangement_level: true,
+          is_loop: true,
+          wait_mode: true,
+          song: { select: { arrangement_level: true } },
+        },
+      }),
+    ]);
+    const { bests, bestsByLevel } = personalBests(bestRows);
     res.json({
       bests,
-      recent: rows.slice(0, 50).map((row) => ({
+      bests_by_level: bestsByLevel,
+      recent: rows.map((row) => ({
         id: row.id,
         song_id: row.song_id,
         title: row.song.title,
@@ -171,6 +184,12 @@ songsRouter.get("/songs/attempts/me", async (req, res, next) => {
         tempo_bpm: row.tempo_bpm,
         lookahead_s: row.lookahead_s,
         wait_mode: row.wait_mode,
+        arrangement_level: levelOf(row),
+        hands: row.hands ?? "both",
+        loop_start_bar: row.loop_start_bar,
+        loop_end_bar: row.loop_end_bar,
+        multiplier: row.multiplier,
+        is_loop: row.is_loop,
         created_at: row.created_at.toISOString(),
       })),
     });
@@ -227,19 +246,6 @@ songsRouter.get("/songs/:id/notation", async (req, res, next) => {
   } catch (e) {
     next(e);
   }
-});
-
-const attemptSchema = z.object({
-  // 160, not 150: with continuous tempo and look-ahead the multipliers can reach
-  // 1.5 (they are capped there), so a strong fast run scores above the old 150
-  // ceiling. Leaving it at 150 meant Zod rejected the attempt with a 400 — i.e.
-  // the user's best runs were exactly the ones that failed to save.
-  score: z.number().min(0).max(160),
-  accuracy: z.number().min(0).max(100),
-  tempo_pct: z.number().min(10).max(250),
-  tempo_bpm: z.number().min(20).max(400).nullish(),
-  lookahead_s: z.number().min(0.5).max(10),
-  wait_mode: z.boolean(),
 });
 
 songsRouter.post("/songs/:id/attempts", async (req, res, next) => {

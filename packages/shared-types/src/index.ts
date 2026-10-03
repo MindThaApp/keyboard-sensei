@@ -23,7 +23,13 @@ export interface ExpectedNoteEvent { id: string; note: number; startBeat: number
 /** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
 export interface ExerciseKey { fifths: number; mode: "major" | "minor" }
 /** scoring "untimed" = only pitches (and chord togetherness) are scored — for find-the-notes drills with no pulse. Default "timed". */
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; expected: ExpectedNoteEvent[] }
+/**
+ * Opt-in dynamics scoring, for exercises whose lesson promises it. `evenVolume`:
+ * every note at the same loudness. `balancedChords`: the tones of each chord at
+ * the same loudness. Velocity is never scored unless an exercise asks for it.
+ */
+export interface ExerciseDynamics { evenVolume?: boolean; balancedChords?: boolean }
+export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
 /** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
  * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
  * 25-200 BPM slider. The API accepts [10, 250]. */
@@ -32,7 +38,23 @@ export interface RawMidiEvent { note: number; velocity: number; type: "noteon" |
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
 export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown";
 export interface ScoringMistake { noteId: string | null; expectedNote: number | null; performedNote: number | null; chordGroupId: string | null; issue: ScoringIssue }
-export interface ScoringResult { score: number; noteAccuracy: number; timingAccuracy: number; rhythmAccuracy: number; chordAccuracy: number; feedback: string[]; mistakes: ScoringMistake[] }
+/**
+ * How evenly the notes were played, for exercises that opt in (see ExerciseDynamics).
+ * Velocities are MIDI 1-127. Each score is 0-100; null when there was nothing to measure.
+ */
+export interface DynamicsResult {
+  /** Standard deviation of the matched notes' velocities. */
+  velocitySpread: number;
+  /** Mean velocity of the matched notes. */
+  meanVelocity: number;
+  evenness: number | null;
+  /** Mean loudest-minus-softest velocity within a chord. */
+  chordVelocityRange: number | null;
+  chordBalance: number | null;
+  /** The dynamics part of the score: the mean of whichever of the two was asked for. */
+  score: number;
+}
+export interface ScoringResult { score: number; noteAccuracy: number; timingAccuracy: number; rhythmAccuracy: number; chordAccuracy: number; feedback: string[]; mistakes: ScoringMistake[]; dynamics?: DynamicsResult }
 export interface MidiDeviceInfo { id: string; name: string; manufacturer?: string }
 /**
  * A source of MIDI input. Every `on*` registration returns its own unsubscribe

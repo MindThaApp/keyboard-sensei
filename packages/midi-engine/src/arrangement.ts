@@ -30,6 +30,12 @@
  *     dotted quarter in compound), restated only when the bass changes or a bar
  *     starts, plus at most two chord tones voiced within an octave above it.
  *     Never more than `INTERMEDIATE_MAX_NOTES_PER_HAND` (3) at once per hand.
+ * - `"easy"`: between intermediate and beginner.
+ *   - Right hand: the intermediate melody, thinned further to at most one note
+ *     per eighth (so no sixteenth-note runs). Original key, rhythm and range.
+ *   - Left hand: the intermediate bass line WITHOUT its chord tones — a single
+ *     bass note per felt beat, restated only when the bass changes or a bar
+ *     starts. Never more than one note at a time per hand.
  * - `"beginner"`:
  *   - Right-hand melody only. Single notes (strictly monophonic: every note
  *     ends at or before the next one starts). Left hand dropped.
@@ -59,7 +65,7 @@
  * positions; only the tail of the last note may be shortened).
  */
 
-export type ArrangementLevel = "beginner" | "intermediate" | "full";
+export type ArrangementLevel = "beginner" | "easy" | "intermediate" | "full";
 export type ArrangementHand = "left" | "right";
 
 export interface ArrangementNote {
@@ -135,6 +141,8 @@ export const BEGINNER_DURATIONS: readonly number[] = [0.5, 1, 1.5, 2, 3, 4];
 /** Beginner onsets sit on this grid (an eighth note). */
 export const BEGINNER_GRID = 0.5;
 export const INTERMEDIATE_MAX_NOTES_PER_HAND = 3;
+/** Shortest gap between two easy-level melody notes, in quarter beats (an eighth). */
+export const EASY_MIN_IOI = 0.5;
 /** Inter-onset intervals shorter than this (a 32nd note) are treated as ornaments. */
 export const ORNAMENT_BEATS = 0.125;
 
@@ -178,6 +186,16 @@ export function simplifyArrangement(
     const lh = simplifyLeftHand(
       handed.filter((note) => note.hand === "left"),
       meta.meters ?? [],
+    );
+    return { level, notes: [...rh, ...lh].sort(byTime), transpose: 0, key, timeScale: 1 };
+  }
+
+  if (level === "easy") {
+    const rh = foldIntoRange(thin(melody, EASY_MIN_IOI), RIGHT_HAND_MIN, RIGHT_HAND_MAX).map((note) => ({ ...note, hand: "right" as const }));
+    const lh = simplifyLeftHand(
+      handed.filter((note) => note.hand === "left"),
+      meta.meters ?? [],
+      0,
     );
     return { level, notes: [...rh, ...lh].sort(byTime), transpose: 0, key, timeScale: 1 };
   }
@@ -472,7 +490,11 @@ function beatWindows(meters: ArrangementMeterSegment[], endBeat: number): Window
 /** Interval preference for the (at most two) chord tones kept above the bass. */
 const CHORD_TONE_ORDER = [4, 3, 7, 10, 11, 9, 8, 2, 5, 6, 1];
 
-function simplifyLeftHand(left: ArrangementNote[], meters: ArrangementMeterSegment[]): ArrangementNote[] {
+function simplifyLeftHand(
+  left: ArrangementNote[],
+  meters: ArrangementMeterSegment[],
+  maxChordTones = INTERMEDIATE_MAX_NOTES_PER_HAND - 1,
+): ArrangementNote[] {
   if (left.length === 0) return [];
   const sorted = [...left].sort(byTime);
   const endBeat = Math.max(...sorted.map((note) => note.startBeat + note.durationBeats));
@@ -513,7 +535,7 @@ function simplifyLeftHand(left: ArrangementNote[], meters: ArrangementMeterSegme
     if (durationBeats <= EPS) return;
     let root = chord.bass.midi;
     while (root < LEFT_HAND_MIN) root += 12;
-    const tones = CHORD_TONE_ORDER.filter((interval) => chord.pcs.has(interval)).slice(0, INTERMEDIATE_MAX_NOTES_PER_HAND - 1);
+    const tones = CHORD_TONE_ORDER.filter((interval) => chord.pcs.has(interval)).slice(0, maxChordTones);
     for (const midi of [root, ...tones.map((interval) => root + interval)]) {
       out.push({
         midi,

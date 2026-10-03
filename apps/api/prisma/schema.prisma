@@ -135,6 +135,19 @@ model PlayAlongAttempt {
   tempo_bpm   Float?
   lookahead_s Float
   wait_mode   Boolean
+  // Song practice (all NULL on rows from before it existed, read as a full,
+  // two-handed, whole-song run):
+  // "full" | "simplified" | "easy" | "melody" — the "Make it easier" step.
+  arrangement_level String?
+  // "both" | "right" | "left" — the hand(s) the player was judged on.
+  hands             String?
+  // 1-based, inclusive bar numbers of a looped section.
+  loop_start_bar    Int?
+  loop_end_bar      Int?
+  // The score multiplier the run earned (speed × look-ahead × level × hands, capped at 1.5).
+  multiplier        Float?
+  // A run of a looped section: practice, never a full-song best.
+  is_loop           Boolean  @default(false)
   created_at  DateTime @default(now())
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   song        Song     @relation(fields: [song_id], references: [id], onDelete: Cascade)

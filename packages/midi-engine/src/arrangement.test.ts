@@ -215,6 +215,46 @@ describe("simplifyArrangement: intermediate", () => {
   });
 });
 
+describe("simplifyArrangement: easy", () => {
+  it("keeps the tune and reduces an Alberti bass to a single bass note per bar", () => {
+    const { notes: out, transpose, timeScale } = simplifyArrangement(
+      albertiPiece(),
+      { meters: [{ startBeat: 0, numerator: 4, denominator: 4 }] },
+      "easy",
+    );
+    expect(pitches(out.filter((note) => note.hand === "right"))).toEqual([72, 74, 76, 77, 79, 77, 76, 74]);
+    expect(out.filter((note) => note.hand === "left").map((note) => [note.midi, note.startBeat, note.durationBeats])).toEqual([
+      [48, 0, 4],
+      [48, 4, 4],
+    ]);
+    expect(maxSimultaneous(out, "left")).toBe(1);
+    expect(maxSimultaneous(out, "right")).toBe(1);
+    expect(transpose).toBe(0);
+    expect(timeScale).toBe(1);
+  });
+
+  it("restates the bass on every felt beat when the harmony moves", () => {
+    // Bass walks C, F, G, C a quarter at a time.
+    const left = [48, 53, 55, 48].map((midi, i) => n(midi, i, 1, "left"));
+    const { notes: out } = simplifyArrangement([...left, n(72, 0, 4)], { meters: [{ startBeat: 0, numerator: 4, denominator: 4 }] }, "easy");
+    expect(out.filter((note) => note.hand === "left").map((note) => [note.midi, note.startBeat])).toEqual([
+      [48, 0],
+      [53, 1],
+      [55, 2],
+      [48, 3],
+    ]);
+  });
+
+  it("thins the tune to at most one note per eighth", () => {
+    const run = Array.from({ length: 16 }, (_, i) => n(72 + (i % 5), i * 0.25, 0.25));
+    const { notes: out } = simplifyArrangement(run, {}, "easy");
+    const gaps = out.slice(1).map((note, i) => note.startBeat - out[i].startBeat);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(0.5);
+    // Easier than intermediate, which keeps the sixteenths.
+    expect(out.length).toBeLessThan(simplifyArrangement(run, {}, "intermediate").notes.length);
+  });
+});
+
 describe("simplifyArrangement: determinism and speed", () => {
   const big = (): ArrangementNote[] => {
     // 3,000 notes: a 16th-note right hand over an eighth-note left hand.
@@ -225,7 +265,7 @@ describe("simplifyArrangement: determinism and speed", () => {
   };
 
   it("gives identical output for identical input", () => {
-    for (const level of ["beginner", "intermediate"] as const) {
+    for (const level of ["beginner", "easy", "intermediate"] as const) {
       expect(simplifyArrangement(big(), {}, level)).toEqual(simplifyArrangement(big(), {}, level));
     }
   });
@@ -233,7 +273,7 @@ describe("simplifyArrangement: determinism and speed", () => {
   it("handles a 3,000-note song in well under a frame budget per level", () => {
     const notes = big();
     simplifyArrangement(notes, {}, "intermediate"); // warm up
-    for (const level of ["beginner", "intermediate"] as const) {
+    for (const level of ["beginner", "easy", "intermediate"] as const) {
       const start = performance.now();
       simplifyArrangement(notes, {}, level);
       const ms = performance.now() - start;
