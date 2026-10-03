@@ -67,7 +67,6 @@ describe("XP formulas", () => {
     songId: "s1",
     songTitle: "Song",
     score: 100,
-    multiplier: null,
     isLoop: false,
     minutesPlayed: 1,
     earlierToday: 0,
@@ -75,9 +74,9 @@ describe("XP formulas", () => {
     previousBestAccuracy: null,
   };
 
-  it("scales play-along runs by score, multiplier and length, capped at 60", () => {
+  it("scales play-along runs by score (which already carries the multiplier) and length, capped at 60", () => {
     expect(playAlongXp(run)[0]!.amount).toBe(20);
-    expect(playAlongXp({ ...run, multiplier: 0.5 })[0]!.amount).toBe(10);
+    expect(playAlongXp({ ...run, score: 50 })[0]!.amount).toBe(10);
     expect(playAlongXp({ ...run, minutesPlayed: 0.1 })[0]!.amount).toBe(10);
     expect(playAlongXp({ ...run, score: 160, minutesPlayed: 5 })[0]!.amount).toBe(60);
   });

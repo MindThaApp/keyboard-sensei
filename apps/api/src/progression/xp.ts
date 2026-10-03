@@ -10,8 +10,8 @@
  * | Lesson completed               | +50, once per lesson                                      |
  * | Quiz completed (all correct)   | +15, once per lesson                                      |
  * | New mastery star               | +15 per star, once per lesson / song version              |
- * | Play-along run                 | score / 5 × multiplier × length factor × repeat, max 60   |
- * | Play-along loop                | score / 20 × multiplier, max 5; max 25 per song per day   |
+ * | Play-along run                 | score / 5 × length factor × repeat factor, max 60         |
+ * | Play-along loop                | score / 20, max 5; max 25 per song per day                |
  * | Daily goal met                 | +30, once per day                                         |
  * | Streak milestone               | 3/7/14/30/60/100 days: +30/70/140/300/600/1000, once each |
  *
@@ -101,10 +101,11 @@ export interface PlayAlongXpInput {
   attemptId: string;
   songId: string;
   songTitle: string;
-  /** 0–160 (the stored score already includes tempo and look-ahead multipliers). */
+  /**
+   * 0–160. The stored score already includes the practice screen's multiplier (speed ×
+   * look-ahead × level × hands), so easier settings already earn proportionally less.
+   */
   score: number;
-  /** "Make it easier" multiplier the practice screen stored; null = 1. */
-  multiplier: number | null;
   isLoop: boolean;
   /** Minutes the run lasted (song length at the played tempo). */
   minutesPlayed: number;
@@ -116,17 +117,16 @@ export interface PlayAlongXpInput {
 }
 
 export function playAlongXp(input: PlayAlongXpInput): XpItem[] {
-  const multiplier = input.multiplier ?? 1;
   const score = Math.max(0, input.score);
   let amount: number;
   if (input.isLoop) {
-    const perAttempt = Math.min(LOOP_ATTEMPT_CAP, Math.round((score / 20) * multiplier));
+    const perAttempt = Math.min(LOOP_ATTEMPT_CAP, Math.round(score / 20));
     amount = Math.max(0, Math.min(perAttempt, LOOP_DAILY_CAP_PER_SONG - input.loopXpToday));
   } else {
     const lengthFactor = Math.min(2, Math.max(0.5, input.minutesPlayed));
     amount = Math.min(
       PLAYALONG_RUN_CAP,
-      Math.round((score / 5) * multiplier * lengthFactor * repeatFactor(input.earlierToday, input.previousBestAccuracy)),
+      Math.round((score / 5) * lengthFactor * repeatFactor(input.earlierToday, input.previousBestAccuracy)),
     );
   }
   if (amount <= 0) return [];
