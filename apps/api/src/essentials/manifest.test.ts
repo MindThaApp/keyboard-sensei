@@ -3,9 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { incipitMatches, unzipMember } from "./build.js";
-import { ESSENTIALS, attribution, contentRights, incipitPitches, parsePitch } from "./manifest.js";
+import ToneMidi from "@tonejs/midi";
+import { incipitMatches, loadSource, sameNotes, sourceNotes, unzipMember } from "./build.js";
+import { AUTHORED_SCORES } from "./authored/index.js";
+import { ESSENTIALS, attribution, contentRights, incipitPitches, isAuthored, parsePitch } from "./manifest.js";
 import { ESSENTIALS_REPLACES } from "./replacements.js";
+
+const { Midi } = ToneMidi;
 
 describe("Essentials manifest", () => {
   it("has unique slugs and ranks 1..N", () => {
@@ -13,22 +17,41 @@ describe("Essentials manifest", () => {
     expect(ESSENTIALS.map((piece) => piece.rank).sort((a, b) => a - b)).toEqual(ESSENTIALS.map((_, i) => i + 1));
   });
 
-  it("pins every source to a Mutopia URL and sha256, with a licence and attribution", () => {
+  it("pins every Mutopia source to a URL and sha256, with a licence and attribution", () => {
     for (const piece of ESSENTIALS) {
-      expect(piece.source.url).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.(mid|zip)$/);
-      expect(piece.source.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(piece.source.url.endsWith(".zip")).toBe(Boolean(piece.source.member));
-      expect(piece.source.mutopiaId).toMatch(/^Mutopia-\d{4}\/\d{2}\/\d{2}-\d+$/);
-      expect(attribution(piece)).toContain(piece.source.mutopiaId);
+      const { source } = piece;
+      if (isAuthored(source)) continue;
+      expect(source.url).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.(mid|zip)$/);
+      expect(source.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(source.url.endsWith(".zip")).toBe(Boolean(source.member));
+      expect(source.mutopiaId).toMatch(/^Mutopia-\d{4}\/\d{2}\/\d{2}-\d+$/);
+      expect(attribution(piece)).toContain(source.mutopiaId);
       expect(contentRights(piece)).toMatch(/^(public-domain|cc-by(-sa)?-\d\.\d)$/);
     }
   });
 
-  it("has an 7–16 note incipit for every piece, in spellable pitches", () => {
+  it("gives every authored piece a score, a basis and two independent sources for its tune", () => {
+    for (const piece of ESSENTIALS) {
+      const { source } = piece;
+      if (!isAuthored(source)) continue;
+      expect(AUTHORED_SCORES[piece.slug], piece.slug).toBeDefined();
+      expect(source.basis.length, piece.slug).toBeGreaterThan(20);
+      expect(source.verification.length, piece.slug).toBeGreaterThan(20);
+      // Two different editions or collections (two IMSLP scans of different editions count).
+      expect(new Set(source.verifiedAgainst.map((ref) => ref.url)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
+      expect(new Set(source.verifiedAgainst.map((ref) => ref.title)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
+      expect(contentRights(piece)).toBe("public-domain");
+      expect(attribution(piece)).toContain("arranged for Keyboard Sensei");
+    }
+    const authored = new Set(ESSENTIALS.filter((piece) => isAuthored(piece.source)).map((piece) => piece.slug));
+    expect(Object.keys(AUTHORED_SCORES).filter((slug) => !authored.has(slug))).toEqual([]);
+  });
+
+  it("has an incipit for every piece in spellable pitches: 7–24 notes, or 16–32 for an authored tune", () => {
     for (const piece of ESSENTIALS) {
       const pitches = incipitPitches(piece);
-      expect(pitches.length, piece.slug).toBeGreaterThanOrEqual(7);
-      expect(pitches.length, piece.slug).toBeLessThanOrEqual(16);
+      expect(pitches.length, piece.slug).toBeGreaterThanOrEqual(isAuthored(piece.source) ? 16 : 7);
+      expect(pitches.length, piece.slug).toBeLessThanOrEqual(isAuthored(piece.source) ? 32 : 24);
       for (const pitch of pitches) expect(pitch).toBeGreaterThanOrEqual(21);
     }
     expect(parsePitch("C4")).toBe(60);
@@ -49,6 +72,63 @@ describe("Essentials manifest", () => {
         seen.add(id);
       }
     }
+  });
+});
+
+describe("source loading", () => {
+  const base = ESSENTIALS.find((piece) => piece.slug === "moonlight-sonata-1")!;
+  /** A one-track file: a triplet-eighth figure under a held tune note. */
+  function file(bpm: number | null): Buffer {
+    const midi = new Midi();
+    if (bpm !== null) midi.header.setTempo(bpm);
+    midi.header.update();
+    const track = midi.addTrack();
+    const ppq = midi.header.ppq;
+    for (let i = 0; i < 6; i++) track.addNote({ midi: 64 + (i % 3), ticks: (i * ppq) / 3, durationTicks: Math.round(ppq / 3) - 1 });
+    track.addNote({ midi: 72, ticks: 0, durationTicks: ppq * 2 });
+    return Buffer.from(midi.toArray());
+  }
+
+  it("applies tempoBpm only over LilyPond's default tempo", () => {
+    const piece = { ...base, tempoBpm: 160 };
+    expect(loadSource(file(60), piece).header.tempos[0].bpm).toBe(160);
+    expect(loadSource(file(null), piece).header.tempos[0].bpm).toBe(160);
+    expect(() => loadSource(file(72), piece)).toThrow(/own tempo/);
+    expect(loadSource(file(72), { ...base, tempoBpm: undefined }).header.tempos[0].bpm).toBeCloseTo(72);
+  });
+
+  it("scales and sets tempos, cuts a span, and drops hidden unisons", () => {
+    const piece = { ...base, tempoBpm: undefined, accompanimentDurationBeats: undefined };
+    const fixed = loadSource(file(120), { ...piece, tempoFix: { scale: 0.5, at: [{ beat: 1, bpm: 30 }] } });
+    expect(fixed.header.tempos.map((t) => [t.ticks / fixed.header.ppq, Math.round(t.bpm)])).toEqual([[0, 60], [1, 30]]);
+
+    const cut = loadSource(file(60), { ...piece, cutBeats: [1, 1.5] });
+    const ppq = cut.header.ppq;
+    const starts = cut.tracks[0].notes.map((note) => +(note.ticks / ppq).toFixed(3));
+    expect(starts.filter((beat) => beat >= 1 && beat < 1.5 - 1e-6).length).toBeLessThan(2); // [1, 1.5) removed, later notes moved up
+    expect(Math.max(...starts)).toBeCloseTo(5 / 3 - 0.5, 2);
+    expect(cut.tracks[0].notes.find((note) => note.midi === 72)!.durationTicks).toBe(ppq); // held note clipped at the cut
+
+    const twoTracks = new Midi(file(60));
+    const second = twoTracks.addTrack();
+    second.addNote({ midi: 72, ticks: 0, durationTicks: 10 });
+    const deduped = loadSource(Buffer.from(twoTracks.toArray()), { ...piece, dropUnisonsIn: [0] });
+    expect(deduped.tracks[0].notes.some((note) => note.midi === 72)).toBe(false);
+    expect(deduped.tracks[1].notes).toHaveLength(1);
+  });
+
+  it("never marks the accompaniment figure as melody", () => {
+    const piece = { ...base, tempoBpm: undefined, tracks: undefined };
+    const notes = sourceNotes(loadSource(file(60), piece), piece);
+    expect(notes.filter((note) => note.melody).map((note) => note.midi)).toEqual([72]);
+    const unmarked = sourceNotes(loadSource(file(60), piece), { ...piece, accompanimentDurationBeats: undefined });
+    expect(unmarked.some((note) => note.melody)).toBe(false);
+  });
+
+  it("recognises a level that is note-for-note the level above it", () => {
+    const a = [{ midi: 60, startBeat: 0, durationBeats: 1, hand: "right" as const }];
+    expect(sameNotes(a, [{ ...a[0], hand: "left" }])).toBe(true);
+    expect(sameNotes(a, [{ ...a[0], durationBeats: 0.5 }])).toBe(false);
   });
 });
 
