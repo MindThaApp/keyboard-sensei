@@ -462,7 +462,34 @@ export const ESSENTIALS: EssentialsPiece[] = [
   // ---- Added in the top-up, ranked among themselves. Mutopia incipits were read off an
   // independent public-domain scan; authored tunes were checked against two sources.
   {
-    slug: "twinkle-twinkle-little-star", rank: 59, title: "Twinkle, Twinkle, Little Star", composer: "Traditional", genre: "other",
+    slug: "happy-birthday", rank: 59, title: "Happy Birthday to You", composer: "Mildred J. Hill & Patty Hill", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The Hills' “Good Morning to All” tune with the birthday words, in G, harmonised after the four-part setting in The Golden Book of Favorite Songs (1915). Played twice, the second time with a broken-chord left hand and a fuller inner voice, ending with a two-bar IV–I tag.",
+      verifiedAgainst: [
+        { title: "“Happy Birthday to You”, Wikipedia score excerpt", url: "https://en.wikipedia.org/wiki/Happy_Birthday_to_You" },
+        { title: "“Good Morning and Birthday Song”, The Everyday Song Book (1927), ABC transcription by John Chambers", url: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/016_Good_Morning_and_Birthday_Song.abc" },
+      ],
+      verification: "All 25 tune notes agree in both sources (the Everyday Song Book is in A-flat, transposed to compare). It has even eighths for the “Hap-py” upbeats; the dotted rhythm commonly sung (as in Wikipedia) is used. The 1915 Golden Book scan was read for the harmony and also confirms the octave leap and the second half.",
+    },
+    incipit: "D4 D4 E4 D4 G4 F#4 D4 D4 E4 D4 A4 G4 D4 D4 D5 B4 G4 F#4 E4 C5 C5 B4 G4 A4 G4", incipitBasis: "pd-score",
+    note: "Published 1893 as “Good Morning to All”; a US court found in 2016 that no valid copyright covers the song.",
+  },
+  {
+    slug: "jingle-bells", rank: 60, title: "Jingle Bells", composer: "James Lord Pierpont", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "Verse and the popular (post-1857) chorus as sung today, in G, with an inner voice and a stride left hand on the standard harmony.",
+      verifiedAgainst: [
+        { title: "“Jingle Bells” chorus, Wikimedia Commons score (File:Jingle Bells refrain vector.mid), from the Wikipedia article", url: "https://commons.wikimedia.org/wiki/File:Jingle_Bells_refrain_vector.mid" },
+        { title: "“Jingle Bells”, Colin Hume's ABC collection (verse and chorus, G)", url: "https://colinhume.com/ABC.txt" },
+      ],
+      verification: "The chorus (16 bars) matches note for note between the Commons file and Hume, and also Paul Hardy's Xmas Tunebook and the Digital Tradition ABC. The verse (16 bars) agrees in pitch across Hume, Hardy and Digital Tradition, and with Pierpont's 1857 Ditson first edition (IMSLP #166827) except where 1857 sets “Laughing all the way” and the closing line differently. The sources differ only on optional pickup eighths at the ends of held notes; Hume's held notes are used. The 1857 chorus is a different melody; this is the later form everyone sings.",
+    },
+    incipit: "D4 B4 A4 G4 D4 D4 D4 D4 B4 A4 G4 E4 E4 C5 B4 A4 F#4 D5 D5 C5 A4 B4 D4 B4 A4 G4 D4 D4 B4 A4 G4 E4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "twinkle-twinkle-little-star", rank: 61, title: "Twinkle, Twinkle, Little Star", composer: "Traditional", genre: "other",
     source: {
       kind: "authored",
       basis: "The French air “Ah! vous dirai-je, maman” in Mozart's register, over the bass of Mozart's theme to his Variations K. 265.",
@@ -475,7 +502,7 @@ export const ESSENTIALS: EssentialsPiece[] = [
     incipit: "C5 C5 G5 G5 A5 A5 G5 F5 F5 E5 E5 D5 D5 C5 G5 G5 F5 F5 E5 E5 D5", incipitBasis: "pd-score",
   },
   {
-    slug: "wedding-march", rank: 60, title: "Wedding March", composer: "Felix Mendelssohn", genre: "classical",
+    slug: "wedding-march", rank: 62, title: "Wedding March", composer: "Felix Mendelssohn", genre: "classical",
     source: { url: `${MUTOPIA}Mendelssohn-BartholdyF/O61/Sommernachtstraum-wedding-march/Sommernachtstraum-wedding-march.mid`, sha256: "db95bd1d11c81fccb6323b389fa7d69de9323f00a9272acf89a2f6c016502f50", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2017/10/24-2198", maintainer: "Alexander Brock", infoUrl: info(2198) },
     tracks: { right: [0], left: [1, 2] },
     melodyStartBeat: 20,
@@ -483,7 +510,20 @@ export const ESSENTIALS: EssentialsPiece[] = [
     note: "Dubois's organ transcription (Durand); the pedal goes to the left hand. Five bars of trumpet fanfare come before the tune. Checked against the Durand edition scan, IMSLP #7402.",
   },
   {
-    slug: "hallelujah-chorus", rank: 61, title: "Hallelujah Chorus", composer: "George Frideric Handel", genre: "classical",
+    slug: "bridal-chorus", rank: 63, title: "Bridal Chorus (Here Comes the Bride)", composer: "Richard Wagner", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The sopranos' line of the Act III Bridal Chorus of Lohengrin (bars 5–20, after the fanfare) with the harmony and bass of the Breitkopf & Härtel vocal score's piano reduction.",
+      verifiedAgainst: [
+        { title: "Lohengrin, Act III Scene 1 (Brautlied), vocal score, Breitkopf & Härtel, Leipzig (IMSLP #42509)", url: "https://imslp.org/wiki/Special:ImagefromIndex/42509" },
+        { title: "Lohengrin, vocal score, G. Schirmer, New York, 1897 (p. 260)", url: "https://archive.org/details/lohengrinromanti1897wagn" },
+      ],
+      verification: "All 36 notes of the 16 bars compared in both editions, pitches and rhythms (including the dotted figures); no disagreement. The harmony of bars 14–16 was read from the Breitkopf reduction.",
+    },
+    incipit: "F4 Bb4 Bb4 Bb4 F4 C5 A4 Bb4 F4 Bb4 Eb5 Eb5 D5 C5 Bb4 A4 Bb4 C5 F4 Bb4 Bb4 Bb4 F4 C5 A4 Bb4 F4 Bb4 D5 F5 D5 Bb4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "hallelujah-chorus", rank: 64, title: "Hallelujah Chorus", composer: "George Frideric Handel", genre: "classical",
     source: { url: `${MUTOPIA}HandelGF/hallelujah/hallelujah-mids.zip`, member: "chorale-score.mid", sha256: "74bf4f72e3c534d3cea991885106a829c0bb38e362f13432e24b85a7981277d3", licence: "Public Domain", mutopiaId: "Mutopia-2015/01/17-459", maintainer: "Joshua Koo", infoUrl: info(459) },
     tracks: { right: [0, 1], left: [2, 3], melody: [0] },
     cutBeats: [0, 12], tempoFix: { scale: 100 / 120 },
@@ -491,7 +531,46 @@ export const ESSENTIALS: EssentialsPiece[] = [
     note: "The four choir parts (sopranos and altos in the right hand, tenors and basses in the left), from the choir's entry; the orchestra's three-bar introduction is not in this source. Slowed from ♩=120 to ♩=100. Checked against the Novello vocal score (ed. Prout), IMSLP #162689.",
   },
   {
-    slug: "air-on-the-g-string", rank: 62, title: "Air on the G String", composer: "Johann Sebastian Bach", genre: "classical",
+    slug: "swan-lake-theme", rank: 65, title: "Swan Lake: Scene (Main Theme)", composer: "Pyotr Ilyich Tchaikovsky", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The oboe theme of Act II No. 10 (bars 2–9) with the B-pedal and chromatic harmony of E. Langer's piano score of Swan Lake (Jurgenson, 1895).",
+      verifiedAgainst: [
+        { title: "Swan Lake Op. 20, piano score arr. Eduard Langer (Moscow: Jurgenson, 1895)", url: "https://imslp.org/wiki/Special:ImagefromIndex/04089" },
+        { title: "Swan Lake Op. 20, piano score arr. Nikolay Kashkin (1877)", url: "https://imslp.org/wiki/Special:ImagefromIndex/17426" },
+      ],
+      verification: "All 36 tune notes of bars 2–9 read in both piano scores and identical in both. The harmony (B minor and E minor over a B pedal, the diminished chords, F♯7 at the half-bar closes) is as written in both; one passing chord in bar 7 is simplified to F♯ major.",
+    },
+    incipit: "F#5 B4 C#5 D5 E5 F#5 D5 F#5 D5 F#5 B4 D5 B4 G4 D5 B4 B4 E5 D5 C#5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "can-can", rank: 66, title: "Can-Can (Galop infernal)", composer: "Jacques Offenbach", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The can-can theme and the strain after it, with their harmony, from the Galop of Heugel's piano solo score of Orphée aux enfers (Paris, c.1862), the tune an octave below its 8va, with thirds and sixths under it.",
+      verifiedAgainst: [
+        { title: "Orphée aux enfers, piano solo score (Paris: Heugel, c.1862, plate H. 3781), Galop", url: "https://imslp.org/wiki/Special:ImagefromIndex/749038" },
+        { title: "Orpheus in der Unterwelt overture (arr. Binder), piano-direction by L. Weninger (Leipzig: A. J. Benjamin)", url: "https://imslp.org/wiki/Special:ImagefromIndex/869305" },
+      ],
+      verification: "All 71 tune notes compared bar by bar. The 16-bar theme matches Heugel and Weninger's first-violin cue line exactly (bars 1–10 also match J.-B. André's piano-duet overture, IMSLP #75058). The 8-bar strain that follows matches Weninger's continuation and André note for note; Heugel has the same strain with two notes an octave lower, and the octave follows Weninger and André. The bass is the same in all three.",
+    },
+    incipit: "D5 E5 G5 F#5 E5 A5 A5 A5 B5 F#5 G5 E5 E5 E5 G5 F#5 E5 D5 D6 C#6 B5 A5 G5 F#5 E5 D5 E5 G5 F#5 E5 A5 A5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "habanera", rank: 67, title: "Carmen: Habanera", composer: "Georges Bizet", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "Carmen's line in the first verse of the Habanera, with the habanera bass (checked against the Choudens cello and bass part) and off-beat chords after the Schirmer piano reduction.",
+      verifiedAgainst: [
+        { title: "Carmen, No. 5 Habanera, voice and piano, Choudens, Paris (IMSLP #851704)", url: "https://imslp.org/wiki/Special:ImagefromIndex/851704" },
+        { title: "Carmen, vocal score, G. Schirmer, New York, 1895 (p. 44)", url: "https://archive.org/details/carmenoperainfou00bize" },
+      ],
+      verification: "All 80 notes of the verse (four 4-bar phrases and the upbeat) compared in both editions; they agree, and the first phrase also matches the excerpt in the English Wikipedia article “Habanera (aria)”. The bass of each bar was checked against the Choudens cello and bass part (IMSLP #134103).",
+    },
+    incipit: "D5 C#5 C5 C5 C5 B4 Bb4 A4 A4 A4 G#4 G4 F4 G4 F4 E4 F4 G4 F4 E4 D5 C#5 C5 C5 C5 B4 Bb4 A4 A4 A4 G4 F4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "air-on-the-g-string", rank: 68, title: "Air on the G String", composer: "Johann Sebastian Bach", genre: "classical",
     source: { url: `${MUTOPIA}BachJS/BWV1068/bach-air/bach-air-mids.zip`, member: "bach-air-score.mid", sha256: "af2a0b1c1649cf212f7d358d48f0a591a48c4ac907aaa26773c422d039860bf2", licence: "Creative Commons Attribution-ShareAlike 3.0", mutopiaId: "Mutopia-2008/10/28-242", maintainer: "jeff covey", infoUrl: info(242) },
     tracks: { right: [0, 1, 2], left: [3], melody: [0] },
     cutBeats: [20, 24],
@@ -499,7 +578,7 @@ export const ESSENTIALS: EssentialsPiece[] = [
     note: "The Air from Orchestral Suite No. 3 BWV 1068 in D, from the string parts; the Full version plays all four on the piano. The source MIDI plays the first-half ending and then the second straight after it; the first ending is cut so the cadence sounds once. Repeats are not taken. Checked against the Bach-Gesellschaft score, IMSLP #1468.",
   },
   {
-    slug: "gounod-ave-maria", rank: 63, title: "Ave Maria (Bach–Gounod)", composer: "Charles Gounod, after J. S. Bach", genre: "classical",
+    slug: "gounod-ave-maria", rank: 69, title: "Ave Maria (Bach–Gounod)", composer: "Charles Gounod, after J. S. Bach", genre: "classical",
     source: { url: `${MUTOPIA}GounodC/AveMaria-PianoViolin/AveMaria-PianoViolin.mid`, sha256: "374fa21eccbaad7b994da5b8db779c65cc527a382bf819b82126dfcd678a4297", licence: "Public Domain", mutopiaId: "Mutopia-2017/01/25-2167", maintainer: "Yann Leprince", infoUrl: info(2167) },
     tracks: { right: [0, 1], left: [2], melody: [0] },
     melodyStartBeat: 16,
@@ -507,21 +586,166 @@ export const ESSENTIALS: EssentialsPiece[] = [
     note: "Violin and piano: the violin's tune over Bach's Prelude in C, both in the right hand. Checked against the Heugel edition scan, IMSLP #258490.",
   },
   {
-    slug: "brindisi", rank: 64, title: "Brindisi (Libiamo ne' lieti calici)", composer: "Giuseppe Verdi", genre: "classical",
+    slug: "pomp-and-circumstance-1", rank: 70, title: "Pomp and Circumstance March No. 1 (Trio)", composer: "Edward Elgar", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The first statement of the Trio (“Land of Hope and Glory”), with the bass line and harmony of E. H. Lemare's organ transcription (Boosey, H. 3590), the tune an octave above the score.",
+      verifiedAgainst: [
+        { title: "Pomp and Circumstance March No. 1, full score (London: Boosey & Co., 1902)", url: "https://imslp.org/wiki/Special:ImagefromIndex/24159" },
+        { title: "Pomp and Circumstance No. 1, organ transcription by E. H. Lemare (Boosey, H. 3590; Sibley Library scan)", url: "https://imslp.org/wiki/Special:ImagefromIndex/167221" },
+      ],
+      verification: "All 55 tune notes (40 bars) compared bar by bar between the full score's first violins and Lemare's top line: identical. The bass of bars 32–40 was checked in the full score's cellos and basses.",
+    },
+    incipit: "G5 F#5 G5 A5 E5 D5 C5 B4 C5 D5 A4 B4 C#5 D5 E5 A5 D5 G5 G5 F#5 E5 D5 G5 F#5 G5 A5 E5 D5 C5 B4 C5 D5", incipitBasis: "pd-score",
+    note: "Published 1901–02. Elgar died in 1934, so it is public domain in the US (pre-1929 publication) and in life+70 countries.",
+  },
+  {
+    slug: "jesu-joy-of-mans-desiring", rank: 71, title: "Jesu, Joy of Man's Desiring", composer: "Johann Sebastian Bach", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The opening ritornello of “Jesus bleibet meine Freude” (BWV 147) after the Bach-Gesellschaft edition: the first violin's triplet line, the second violin's figure as an inner voice, and the continuo bass with its harmony.",
+      verifiedAgainst: [
+        { title: "Herz und Mund und Tat und Leben, BWV 147, Bach-Gesellschaft Ausgabe vol. 30 (IMSLP #01405)", url: "https://imslp.org/wiki/Special:ImagefromIndex/01405" },
+        { title: "Jesu, Joy of Man's Desiring, arranged for piano by Myra Hess (Oxford University Press, 1926)", url: "https://archive.org/details/jesujoyofmansdes00bach" },
+      ],
+      verification: "All 72 notes of the triplet line (bars 1–9) compared in both; they agree, and Hess's left hand matches the continuo. The inner voice is the second violin's, moved in bars 4, 7 and 8 so it never crosses above the tune.",
+    },
+    incipit: "G4 A4 B4 D5 C5 C5 E5 D5 D5 G5 F#5 G5 D5 B4 G4 A4 B4 C5 D5 E5 D5 C5 B4 A4 B4 G4", incipitBasis: "pd-score",
+    note: "The ritornello only: the chorale itself enters later and is not included.",
+  },
+  {
+    slug: "la-donna-e-mobile", rank: 72, title: "La donna è mobile", composer: "Giuseppe Verdi", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The Duke's first stanza from Rigoletto (the tenor line at written pitch) with the oom-pah-pah harmony and bass of the Schirmer piano reduction, including its rising chromatic bass in the refrain.",
+      verifiedAgainst: [
+        { title: "La donna è mobile (Rigoletto, Act III), voice and piano, G. Schirmer, New York, 1913 (IMSLP #88973)", url: "https://imslp.org/wiki/Special:ImagefromIndex/88973" },
+        { title: "La Donna e Mobile (Rigoletto), James Kerr, Merry Melodies vol. 4 no. 357 (ABC transcription by John Chambers)", url: "https://abcnotation.com/tunePage?a=trillian.mit.edu/~jc/music/book/Kerr/MM4/4357_la_Donna_e_Mobile_Rigoletto/0000" },
+      ],
+      verification: "All 72 notes compared; Kerr (in G, transposed up a major third) matches every pitch of the verse and refrain. Rhythms follow Schirmer where Kerr simplifies for instruments; grace notes are left out.",
+    },
+    incipit: "D#5 D#5 D#5 F#5 E5 C#5 C#5 C#5 C#5 E5 D#5 B4 D#5 C#5 B4 B4 A#4 A#4 C#5 B4 G#4 G#4 F#4 F#4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "brindisi", rank: 73, title: "Brindisi (Libiamo ne' lieti calici)", composer: "Giuseppe Verdi", genre: "classical",
     source: { url: `${MUTOPIA}VerdiG/Traviata_02/Traviata_02.mid`, sha256: "b6d7d5243e9543e7d43cfb427ed7f2fb567165b7d4037734295cf44cb12bc4b2", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1215", maintainer: "Alberto Corella", infoUrl: info(1215) },
     melodyStartBeat: 2.5, tempoBpm: 90, keepLeaps: true,
     incipit: "F5 D6 F5 D6 D6 F5 D6 D6 C#6 D6 F6 Eb6 D6", incipitBasis: "pd-score",
     note: "La Traviata No. 2 in Toledo's piano transcription. The source sets no tempo; the score's Allegretto ♩.=60 in 3/8 is ♩=90. Checked against the same transcription's scan, IMSLP #280103.",
   },
   {
-    slug: "carmen-prelude", rank: 65, title: "Carmen: Prelude", composer: "Georges Bizet", genre: "classical",
+    slug: "carmen-prelude", rank: 74, title: "Carmen: Prelude", composer: "Georges Bizet", genre: "classical",
     source: { url: `${MUTOPIA}BizetG/prelude/prelude.mid`, sha256: "56f763077572437e5975a6bcdad3ca67fafd0694479bbcffef0a23f36d37e878", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2005/11/22-635", maintainer: "Alex O'S", infoUrl: info(635) },
     tempoFix: { at: [{ beat: 240, bpm: 58 }] },
     incipit: "A5 A5 A5 A5 E5 D5 E5 A5 A5 A5 A5 B5 C#6 B5 A5 A5 A5 B5 A5 G#5 A5", incipitBasis: "pd-score",
     note: "Includes the Toreador refrain. The closing Andante moderato (the fate motif) is marked ♩=58 in the score but the source plays it at the opening's 116, so it is slowed there. The first-section repeat is not taken. Checked against the Choudens first-edition vocal score, IMSLP #108884.",
   },
   {
-    slug: "rachmaninoff-prelude-c-sharp-minor", rank: 66, title: "Prelude in C-sharp Minor, Op. 3 No. 2", composer: "Sergei Rachmaninoff", genre: "classical",
+    slug: "morning-mood", rank: 75, title: "Morning Mood", composer: "Edvard Grieg", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The flute and oboe theme (bars 1–20, ending on the tonic of bar 21) with the harmony of the Peters piano reduction of Peer Gynt Op. 23 (No. 13, Morgenstimmung).",
+      verifiedAgainst: [
+        { title: "Peer Gynt Op. 23, vocal/piano score ed. G. F. Kogel (Leipzig: C. F. Peters), No. 13 Morgenstimmung", url: "https://imslp.org/wiki/Special:ImagefromIndex/28994" },
+        { title: "Peer Gynt Suite No. 1 Op. 46, arr. for piano four hands by the composer (Leipzig: C. F. Peters)", url: "https://imslp.org/wiki/Special:ImagefromIndex/08778" },
+      ],
+      verification: "All 125 tune notes of bars 1–20 read in both editions and identical, including the B♯/A♯ of the G♯ major phrase and the oboe's C♯ where the flute had B♯ (bars 11 and 15 really differ, in both sources).",
+    },
+    incipit: "B5 G#5 F#5 E5 F#5 G#5 B5 G#5 F#5 E5 F#5 G#5 F#5 G#5 B5 G#5 B5 C#6 G#5 C#6 B5 G#5 F#5 E5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "hungarian-dance-5", rank: 76, title: "Hungarian Dance No. 5", composer: "Johannes Brahms", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The strain and its forte restatement an octave higher (bars 1–24), with the rhythm of Brahms's piano-duet original and the bass-and-chord left hand of his own solo arrangement (Simrock).",
+      verifiedAgainst: [
+        { title: "21 Hungarian Dances WoO 1, Nos. 1–10, piano solo arr. Brahms (Simrock)", url: "https://imslp.org/wiki/Special:ImagefromIndex/321965" },
+        { title: "21 Hungarian Dances WoO 1, piano four hands, vol. 1, ed. W. Scharfenberg (Schirmer)", url: "https://imslp.org/wiki/Special:ImagefromIndex/332967" },
+      ],
+      verification: "All 71 tune notes of bars 1–24 read in both editions, with matching pitches (bars 17–24 restate bars 1–8 an octave higher, ending on F♯4). The solo version plays bars 5–6 staccato with rests; the duet's sustained rhythm is used. Bar 11's inner chord differs between the two (D or D♯), so only the octave G♯ both show is used.",
+    },
+    incipit: "C#4 F#4 A4 F#4 E#4 F#4 G#4 F#4 D4 E4 F#4 C#4 B3 A3 A3 G#3 G#3 C#4 F#3 C#5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "sugar-plum-fairy", rank: 77, title: "Dance of the Sugar Plum Fairy", composer: "Pyotr Ilyich Tchaikovsky", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The pizzicato introduction and the celesta theme (bars 1–16, the top of its sixths as the tune) in the register and texture of Tchaikovsky's own piano arrangement of the Nutcracker Suite (Jurgenson, 1892), with its plucked E pedal and chromatic chords.",
+      verifiedAgainst: [
+        { title: "Nutcracker Suite Op. 71a, arr. for piano by the composer (Moscow: Jurgenson, 1892), Danse de la Fée Dragée", url: "https://imslp.org/wiki/Special:ImagefromIndex/57454" },
+        { title: "Nutcracker Suite Op. 71a, celesta part (orchestral edition)", url: "https://imslp.org/wiki/Special:ImagefromIndex/37564" },
+      ],
+      verification: "All 60 tune notes of bars 5–16 read in both and identical, and the four introduction bars (E pedal, chords topped E F♯ | G D♯) likewise; Taneyev's piano score of the ballet (IMSLP #30803) shows the same top line. Some left-hand chords in bars 6 and 9–12 are read from the chord tones above them, the reduction's own left hand being hard to read there.",
+    },
+    incipit: "G6 E6 G6 F#6 D#6 E6 D6 D6 D6 C#6 C#6 C#6 C6 C6 C6 B5 E6 C6 E6 B5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "we-wish-you-a-merry-christmas", rank: 78, title: "We Wish You a Merry Christmas", composer: "Traditional (English)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "Verse and “Good tidings” refrain of the West Country carol in G, with an inner voice and a waltz-bass left hand on the standard harmony.",
+      verifiedAgainst: [
+        { title: "“We Wish You a Merry Christmas”, Colin Hume's ABC collection (G)", url: "https://colinhume.com/ABC.txt" },
+        { title: "“We Wish You a Merry Christmas”, Lester Bailey ABC collection (G)", url: "https://trillian.mit.edu/~jc/music/abc/mirror/LesterBailey/We_Wish_You_a_Merry_Christmas.abc" },
+      ],
+      verification: "All 54 notes compared against Hume and Bailey, and also Paul Hardy's Xmas Tunebook and the BBC “Singing Together” 1965 transcription. Bar 2 (“Christ-mas, we”): Hume and Bailey have E E E, Hardy and the BBC E C E; the repeated E is used. Bar 13: Hume and the BBC have B A A G G, the others shorten one pair; the version that fits the words is used. Every other bar agrees in all four.",
+    },
+    incipit: "D4 G4 G4 A4 G4 F#4 E4 E4 E4 A4 A4 B4 A4 G4 F#4 D4 D4 B4 B4 C5 B4 A4 G4 E4 D4 D4 E4 A4 F#4 G4 D4 G4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "deck-the-halls", rank: 79, title: "Deck the Halls", composer: "Traditional (Welsh)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "One verse of the Welsh air “Nos Galan” in the form sung today, in F, with an inner voice and a bass-and-chord left hand on the standard harmony.",
+      verifiedAgainst: [
+        { title: "“Deck the Hall”, The Everyday Song Book (1927), ABC transcription by John Chambers", url: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/105_Deck_the_Hall.abc" },
+        { title: "“Deck the Halls”, Colin Hume's ABC collection (F)", url: "https://colinhume.com/ABC.txt" },
+      ],
+      verification: "All 16 bars (68 notes) compared against the Everyday Song Book and Hume, and also Paul Hardy's Xmas Tunebook and the Nottingham Music Database “Nos Galan”. All agree except one note in bar 11, where the Everyday Song Book transcription has B natural and the other three B-flat; B-flat is used.",
+    },
+    incipit: "C5 Bb4 A4 G4 F4 G4 A4 F4 G4 A4 Bb4 G4 A4 G4 F4 E4 F4 C5 Bb4 A4 G4 F4 G4 A4 F4 G4 A4 Bb4 G4 A4 G4 F4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "auld-lang-syne", rank: 80, title: "Auld Lang Syne", composer: "Traditional (Scottish)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The tune as sung today, verse and chorus, in the key of Elson's Folk Songs of Many Nations (1905), with its F / C7 / B-flat harmony, an inner voice and broken chords.",
+      verifiedAgainst: [
+        { title: "L. C. Elson (arr.), Auld Lang Syne, in Folk Songs of Many Nations (1905) (scan)", url: "https://imslp.org/wiki/Auld_lang_syne_(Folk_Songs,_Scottish)" },
+        { title: "Wikipedia, “Auld Lang Syne”: melody score", url: "https://en.wikipedia.org/wiki/Auld_Lang_Syne" },
+      ],
+      verification: "All 56 tune notes compared with both; the pitches agree throughout. Elson (in 2/4) writes “never brought to” as a Scotch snap and splits the upbeats into slurred sixteenths; the rhythm follows the 4/4 sung version.",
+    },
+    incipit: "C4 F4 F4 F4 A4 G4 F4 G4 A4 F4 F4 A4 C5 D5 D5 C5 A4 A4 F4 G4 F4 G4 A4 F4 D4 D4 C4 F4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "radetzky-march", rank: 81, title: "Radetzky March", composer: "Johann Strauss I", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The first strain of the march with its bass and chords, from Haslinger's 1848 piano first edition (plate T.H. 10,996).",
+      verifiedAgainst: [
+        { title: "Radetzky-Marsch Op. 228, piano, first edition (Vienna: Tobias Haslinger, 1848)", url: "https://imslp.org/wiki/Special:ImagefromIndex/322630" },
+        { title: "Radetzky-Marsch, piano edition (Hamburg scan), IMSLP #1008561, with Atzler's piano-conductor score (IMSLP #30496) for its cropped bars", url: "https://imslp.org/wiki/Special:ImagefromIndex/1008561" },
+      ],
+      verification: "All 81 tune notes compared with the second piano edition for every bar it shows; bars 6, 12 and 18, cropped there, were checked in Atzler's piano-conductor score. The Wikipedia excerpt also matches the upbeat and bars 5–6. Grace notes are left out. The chord in bar 18 and the first bass note of bar 19 are the least certain readings of the harmony; the tune is not in doubt.",
+    },
+    incipit: "F#5 E#5 F#5 F#5 E#5 F#5 F#5 E#5 F#5 E5 D5 F#5 E#5 F#5 F#5 E#5 F#5 F#5 E#5 F#5 B5 A5 A5 F#5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "new-world-largo", rank: 82, title: "New World Symphony: Largo", composer: "Antonín Dvořák", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The cor anglais theme of the Largo (bars 7–18) at concert pitch, with the string harmony and bass of the Simrock first edition.",
+      verifiedAgainst: [
+        { title: "Symphony No. 9, Op. 95, oboe 2 / cor anglais part, N. Simrock, Berlin, 1894 (IMSLP #27735)", url: "https://imslp.org/wiki/Special:ImagefromIndex/27735" },
+        { title: "Symphony No. 9, solo piano reduction by Paul Juon, N. Simrock, 1899 (IMSLP #09927)", url: "https://imslp.org/wiki/Special:ImagefromIndex/09927" },
+      ],
+      verification: "All 66 notes of bars 7–18 compared (the cor anglais part transposed down a fifth) with Juon's reduction and with the Mutopia Project's edition of the score (Mutopia-2011/10/03-1793). One rhythmic difference: Juon dots F–E-flat in bar 15; the Simrock part and the Mutopia score have straight eighths, which are used.",
+    },
+    incipit: "F4 Ab4 Ab4 F4 Eb4 Db4 Eb4 F4 Ab4 F4 Eb4 F4 Ab4 Ab4 F4 Eb4 Db4 Eb4 F4 Eb4 Db4 Db4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "rachmaninoff-prelude-c-sharp-minor", rank: 83, title: "Prelude in C-sharp Minor, Op. 3 No. 2", composer: "Sergei Rachmaninoff", genre: "classical",
     source: { url: `${MUTOPIA}RachmaninoffS/O3/rach-prelude-op3-no2/rach-prelude-op3-no2.mid`, sha256: "cd7879a13accb06c539b1a74855121ed25ec4c71f8069473c6fc78ae56d7c43b", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2015/07/09-2033", maintainer: "Petro Kostandy", infoUrl: info(2033) },
     tracks: { right: [0, 1], left: [2, 3] },
     tempoFix: { scale: 0.83 }, keepLeaps: true,
@@ -529,74 +753,154 @@ export const ESSENTIALS: EssentialsPiece[] = [
     note: "Published 1893; Rachmaninoff died in 1943. The source runs at ♩=60/192/62 (Lento, Agitato, Tempo I), 2:44 against the usual 3:30; its tempos are scaled to ♩≈50/160/51. Checked against the Gutheil edition scan, IMSLP #641676.",
   },
   {
-    slug: "stars-and-stripes-forever", rank: 67, title: "The Stars and Stripes Forever", composer: "John Philip Sousa", genre: "other",
+    slug: "carol-of-the-bells", rank: 84, title: "Carol of the Bells (Shchedryk)", composer: "Mykola Leontovych", genre: "classical",
+    source: {
+      kind: "authored",
+      basis: "The soprano line and the choral harmony of Leontovych's Shchedryk (1916 version), set for piano. The tune only: the 1936 English words are not used.",
+      verifiedAgainst: [
+        { title: "Leontovych, Shchedryk, edition by Drew Weymouth (SATB with rehearsal piano), IMSLP #304704", url: "https://imslp.org/wiki/Carol_of_the_Bells_(Leontovych,_Mykola)" },
+        { title: "Wikipedia, “Shchedryk (song)”: SATB score excerpt", url: "https://en.wikipedia.org/wiki/Shchedryk_(song)" },
+      ],
+      verification: "All 140 tune notes (bars 1–32 and the second ending) compared with both editions; they agree on every pitch. They differ only in the accompaniment of bars 29–32, where the arrangement follows Weymouth's G pedal.",
+    },
+    incipit: "Bb4 A4 Bb4 G4 Bb4 A4 Bb4 G4 Bb4 A4 Bb4 G4 Bb4 A4 Bb4 G4", incipitBasis: "pd-score",
+    note: "Leontovych died in 1921.",
+  },
+  {
+    slug: "danny-boy", rank: 85, title: "Danny Boy (Londonderry Air)", composer: "Traditional (Irish)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The Londonderry Air as Weatherly set it for “Danny Boy” (Boosey, 1913), in his E-flat, with the harmony of his piano part.",
+      verifiedAgainst: [
+        { title: "F. E. Weatherly, Danny Boy (London: Boosey & Co., 1913), E-flat (scan)", url: "https://imslp.org/wiki/Danny_Boy_(Weatherly,_Frederic_Edward)" },
+        { title: "The Session, “The Derry Air” (alias Danny Boy), setting 6867 (ABC, in G)", url: "https://thesession.org/tunes/6867" },
+      ],
+      verification: "All 90 tune notes compared with Weatherly's voice part and The Session's setting (transposed); they agree on every pitch (Weatherly ties over where the ABC rests). Wikipedia's Londonderry Air excerpt differs in two places, where the two sources above agree against it.",
+    },
+    incipit: "D4 Eb4 F4 G4 F4 G4 C5 Bb4 G4 F4 Eb4 C4 Eb4 G4 Ab4 Bb4 C5 Bb4 G4 Eb4 G4 F4 D4 Eb4 F4 G4 F4 G4 C5 Bb4 G4 F4", incipitBasis: "pd-score",
+    note: "The air is in Petrie's collection (1855); Weatherly's setting was published in 1913.",
+  },
+  {
+    slug: "god-rest-ye-merry-gentlemen", rank: 86, title: "God Rest Ye Merry, Gentlemen", composer: "Traditional", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The tune and four-part harmony (alto, tenor, bass) of carol no. 1 in Stainer & Bramley, Christmas Carols New and Old (1871), set for piano.",
+      verifiedAgainst: [
+        { title: "Stainer & Bramley, Christmas Carols New and Old (Novello, c.1871), no. 1 (scan)", url: "https://imslp.org/wiki/Christmas_Carols_New_and_Old_(Stainer,_John)" },
+        { title: "Nottingham Music Database, xmas.txt: God rest you, merry gentlemen (ABC)", url: "https://abcnotation.com/tunePage?a=abc.sourceforge.net/NMD/nmd/xmas.txt/0003" },
+      ],
+      verification: "All 67 tune notes compared with the Stainer scan and the NMD transcription, which agree in pitch throughout. NMD writes the “comfort and” figure as a triplet and holds one B where Stainer has B, rest, B; the rhythm follows Stainer.",
+    },
+    incipit: "E4 E4 B4 B4 A4 G4 F#4 E4 D4 E4 F#4 G4 A4 B4 E4 E4 B4 B4 A4 G4 F#4 E4 D4 E4 F#4 G4 A4 B4", incipitBasis: "pd-score",
+  },
+  {
+    slug: "when-the-saints-go-marching-in", rank: 87, title: "When the Saints Go Marching In", composer: "Traditional", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The traditional tune, one chorus, in C major with a march bass and an inner voice.",
+      verifiedAgainst: [
+        { title: "When the Saints Go Marching In, score in the German Wikipedia article", url: "https://de.wikipedia.org/wiki/When_the_Saints_Go_Marching_In" },
+        { title: "When the Saints Go Marching In, Lester Bailey ABC collection (G), via abcnotation.com", url: "https://abcnotation.com/tunePage?a=trillian.mit.edu/~jc/music/abc/mirror/LesterBailey/When_the_Saints_Go_Marching_In/0000" },
+      ],
+      verification: "All 31 tune notes compared. The two sources agree on every pitch (transposed from G) and on the rhythm (the German Wikipedia's 2/4 values doubled). The musicaviva.com setting agrees too.",
+    },
+    incipit: "C5 E5 F5 G5 C5 E5 F5 G5 C5 E5 F5 G5 E5 C5 E5 D5 E5 E5 D5 C5 E5 G5 G5 F5 E5 F5 G5 E5 C5 D5 C5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "stars-and-stripes-forever", rank: 88, title: "The Stars and Stripes Forever", composer: "John Philip Sousa", genre: "other",
     source: { url: `${MUTOPIA}SousaJP/TheStarsAndStripesForever/TheStarsAndStripesForever.mid`, sha256: "73e75e76c0708dbec4697ab61438b5c63ca3b5c1a56de59f1f5ab0478fd3b274", licence: "Public Domain", mutopiaId: "Mutopia-2017/11/06-626", maintainer: "Benjamin Bloomfield", infoUrl: info(626) },
     incipit: "Eb5 D5 Eb5 C5 Eb5 F5 F#5 G5 G#5 A5 Bb5 Bb4 G5 G5 G5 G5", incipitBasis: "pd-score",
     note: "Sousa's own piano version (John Church, 1897). Checked against the first-edition scan, IMSLP #14778.",
   },
   {
-    slug: "revolutionary-etude", rank: 68, title: "Revolutionary Étude, Op. 10 No. 12", composer: "Frédéric Chopin", genre: "classical",
+    slug: "scarborough-fair", rank: 89, title: "Scarborough Fair", composer: "Traditional (English)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The traditional Dorian tune (the Middleton-in-Teesdale version) as given in folk-collection transcriptions, one verse in D Dorian, with broken chords and an inner voice. Nothing from the 1966 Simon & Garfunkel arrangement.",
+      verifiedAgainst: [
+        { title: "Scarborough Fair, setting by MBAC (E Dorian), The Session", url: "https://thesession.org/tunes/7522" },
+        { title: "Scarborough Fair (E Dorian, with words), dmc.lizmilner.com collection via abcnotation.com", url: "https://abcnotation.com/tunePage?a=dmc.lizmilner.com/viewabc.vbhtml%3Ffile=Scarborough+Fair/0002" },
+      ],
+      verification: "All 35 tune notes compared; also checked against Wikipedia's “version commonly used today” score and further settings on The Session. Three small differences between settings (“to the one”, “lives there”, “going to”) were settled by the majority reading.",
+    },
+    incipit: "D5 D5 A5 A5 A5 E5 F5 E5 D5 A5 C6 D6 C6 A5 B5 G5 A5 D6 D6 D6 C6 A5 A5 G5 F5 E5 C5 D5 A5 G5 F5 E5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "revolutionary-etude", rank: 90, title: "Revolutionary Étude, Op. 10 No. 12", composer: "Frédéric Chopin", genre: "classical",
     source: { url: `${MUTOPIA}ChopinFF/O10/op-10-12-wfi/op-10-12-wfi.mid`, sha256: "1902287905aa68175f9d13207e6cfc397894d4210617ec1a5c1ae38334c3c7d6", licence: "Public Domain", mutopiaId: "Mutopia-2018/05/15-743", maintainer: "Roland Goretzki", infoUrl: info(743) },
     melodyStartBeat: 38.75,
     incipit: "C6 D6 Eb6 Eb6 G5 G5 G5 Ab5", incipitBasis: "pd-score",
     note: "The right-hand octave theme enters in bar 10 after the opening chords and left-hand runs. Checked against IMSLP #514955.",
   },
   {
-    slug: "gnossienne-1", rank: 69, title: "Gnossienne No. 1", composer: "Erik Satie", genre: "classical",
+    slug: "gnossienne-1", rank: 91, title: "Gnossienne No. 1", composer: "Erik Satie", genre: "classical",
     source: { url: `${MUTOPIA}SatieE/Gnossienne/no_1/no_1.mid`, sha256: "f49fc6c6653295e09350d64479d09b4c31091aa5dade81f2494383ab7e71708a", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2015/07/23-2035", maintainer: "Knute Snortum", infoUrl: info(2035) },
     melodyStartBeat: 1, tempoFix: { scale: 0.88 },
     incipit: "C5 Eb5 D5 C5 C5 B4 C5 B4 C5 Eb5 D5 C5 E5 F5 E5 F5", incipitBasis: "pd-score",
     note: "Grace notes are part of the tune. ♩=100 slowed to ♩=88, nearer most recordings of “Lent”. Checked against the Rouart-Lerolle 1913 first edition scan, IMSLP #920505.",
   },
   {
-    slug: "debussy-arabesque-1", rank: 70, title: "Arabesque No. 1", composer: "Claude Debussy", genre: "classical",
+    slug: "debussy-arabesque-1", rank: 92, title: "Arabesque No. 1", composer: "Claude Debussy", genre: "classical",
     source: { url: `${MUTOPIA}DebussyC/L66/debussy_Arabesque_1/debussy_Arabesque_1.mid`, sha256: "6732dc10799ec0af47d19d9095562d0671864a750129e0279901def169a34757", licence: "Public Domain", mutopiaId: "Mutopia-2011/10/25-1777", maintainer: "Keith OHara", infoUrl: info(1777) },
     melodyStartBeat: 1, dropUnisonsIn: [0], tempoFix: { scale: 100 / 144 },
     incipit: "C#5 E5 F#5 G#5 D#5 B4 A4 C#5 D#5 E5 B4 G#4", incipitBasis: "pd-score",
     note: "The source's right hand carries four hidden notes doubling the left (slur anchors); they are dropped. Its ♩=144 runs under 3 minutes against the usual 4–4½, so it is slowed to ♩=100. Checked against the Durand 1904 scan, IMSLP #254504.",
   },
   {
-    slug: "pathetique-3", rank: 71, title: "Pathétique Sonata (3rd Movement)", composer: "Ludwig van Beethoven", genre: "classical",
+    slug: "pathetique-3", rank: 93, title: "Pathétique Sonata (3rd Movement)", composer: "Ludwig van Beethoven", genre: "classical",
     source: { url: `${MUTOPIA}BeethovenLv/O13/pathetique-3/pathetique-3.mid`, sha256: "e0e27f158b9eac0747569f0e4096c96c54a5eba425c567b368523afef2190797", licence: "Public Domain", mutopiaId: "Mutopia-2013/01/08-296", maintainer: "Chris Sawer", infoUrl: info(296) },
     incipit: "G4 C5 D5 Eb5 F5 D5 Eb5 C5 C5 B4 C5 D5 Eb5 D5 Eb5 F5 G5 G5", incipitBasis: "pd-score",
     note: "Checked against the Universal Edition (Schenker) scan, IMSLP #00008; grace notes are left out of the incipit.",
   },
   {
-    slug: "prelude-in-a-major", rank: 72, title: "Prelude in A Major, Op. 28 No. 7", composer: "Frédéric Chopin", genre: "classical",
+    slug: "prelude-in-a-major", rank: 94, title: "Prelude in A Major, Op. 28 No. 7", composer: "Frédéric Chopin", genre: "classical",
     source: { url: `${MUTOPIA}ChopinFF/O28/Chop-28-7/Chop-28-7.mid`, sha256: "6eed7f2185afd852f01d695e50db84cdb4c8742de1a26294dc3202569346ef36", licence: "Public Domain", mutopiaId: "Mutopia-2015/01/17-470", maintainer: "Magnus Lewis-Smith", infoUrl: info(470) },
     tempoFix: { scale: 63 / 120 },
     incipit: "E4 C#5 D5 B4 B4 B4 F#5 D#5 E5 A5 A5 A5 C#5 A#4 B4 D5", incipitBasis: "pd-score",
     note: "The source's ♩=120 plays this Andante in 24 seconds, twice the usual pace; slowed to ♩=63. Checked against IMSLP #974284.",
   },
   {
-    slug: "brahms-waltz-op-39-15", rank: 73, title: "Waltz in A-flat, Op. 39 No. 15", composer: "Johannes Brahms", genre: "classical",
+    slug: "brahms-waltz-op-39-15", rank: 95, title: "Waltz in A-flat, Op. 39 No. 15", composer: "Johannes Brahms", genre: "classical",
     source: { url: `${MUTOPIA}BrahmsJ/O39/waltz-op39-15/waltz-op39-15.mid`, sha256: "e081ef3fe7023cdf4656e1528df50534b2e3df863cd0a194a04a82206f783ace", licence: "Public Domain", mutopiaId: "Mutopia-2006/07/30-794", maintainer: "Brian D. Rude", infoUrl: info(794) },
     tempoFix: { scale: 84 / 116 },
     incipit: "C5 Ab4 Ab4 C5 C5 Ab4 Ab4 C5 Db5 Eb5 Db5 C5 Bb4 C5 Ab4 Ab4 Eb5 F5", incipitBasis: "pd-score",
     note: "The original version, in A-flat. The source's ♩=116 runs 1:08 against the usual 1:30–1:50, so it is slowed to ♩=84. Checked against the Breitkopf Werke scan, IMSLP #84174.",
   },
   {
-    slug: "minuet-in-g-minor", rank: 74, title: "Minuet in G Minor", composer: "Christian Petzold (attr. J. S. Bach)", genre: "classical",
+    slug: "minuet-in-g-minor", rank: 96, title: "Minuet in G Minor", composer: "Christian Petzold (attr. J. S. Bach)", genre: "classical",
     source: { url: `${MUTOPIA}BachJS/BWVAnh115/anna-magdalena-05/anna-magdalena-05.mid`, sha256: "6584a133df31cc3635af7c616b14e8c67f8d99df96a91371c54daf3745d4f444", licence: "Public Domain", mutopiaId: "Mutopia-2015/08/21-76", maintainer: "Allen Garvin", infoUrl: info(76) },
     incipit: "Bb5 A5 G5 A5 D5 D5 G5 G4 A4 Bb4 C5 D5 Eb5 F5 Eb5 D5", incipitBasis: "pd-score",
     note: "BWV Anh. 115, the partner of the Minuet in G. Repeats are not taken. Checked against the Bach-Gesellschaft vol. 43 scan, IMSLP #02320.",
   },
   {
-    slug: "in-the-bleak-midwinter", rank: 75, title: "In the Bleak Midwinter", composer: "Gustav Holst", genre: "other",
+    slug: "in-the-bleak-midwinter", rank: 97, title: "In the Bleak Midwinter", composer: "Gustav Holst", genre: "other",
     source: { url: `${MUTOPIA}HolstGT/cranham/cranham.mid`, sha256: "8bdd6cb58b8bef36cfa18ae2046128ae3faddf9ed2be1341d3fa09ee9aa745e1", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1233", maintainer: "Steve Dunlop", infoUrl: info(1233) },
     tempoBpm: 96, cutBeats: [0, 1],
     incipit: "A4 Bb4 C5 A4 G4 F4 G4 A4 G4 D4 G4 A4 Bb4 C5 A4 G4 F4 G4 A4 G4 F4 F4", incipitBasis: "pd-score",
     note: "The hymn tune CRANHAM (1906). The source opens with an upbeat that only later verses need, which also put every barline a beat late; it is cut, as in the first verse. The source's tempo setting is misspelt, so it played at ♩=60; The English Hymnal marks ♩=100. Checked against The English Hymnal (1906) scan, IMSLP #989464.",
   },
   {
-    slug: "abide-with-me", rank: 76, title: "Abide with Me", composer: "William H. Monk", genre: "other",
+    slug: "abide-with-me", rank: 98, title: "Abide with Me", composer: "William H. Monk", genre: "other",
     source: { url: `${MUTOPIA}MonkWH/eventide/eventide.mid`, sha256: "1a1e1a2c28b23f3e769aa49958e32bd4aa1eaf8e4555729a9e1b2997649f71eb", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1241", maintainer: "Steve Dunlop", infoUrl: info(1241) },
     tempoBpm: 72,
     incipit: "F#4 F#4 E4 D4 A4 B4 A4 A4 G4 F#4 F#4 G4 A4 B4 A4 G4 E4 F#4 G#4 A4", incipitBasis: "pd-score",
     note: "The hymn tune EVENTIDE, in D (hymnals usually print E-flat). The source's tempo setting is misspelt, so it played at ♩=60; ♩=72 is a usual hymnal tempo. Checked against a hymnal scan, IMSLP #153572.",
   },
   {
-    slug: "happy-farmer", rank: 77, title: "The Happy Farmer, Op. 68 No. 10", composer: "Robert Schumann", genre: "classical",
+    slug: "shenandoah", rank: 99, title: "Shenandoah", composer: "Traditional (American)", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The tune and harmony of R. R. Terry's “Shenandoah” (The Shanty Book, Curwen 1921), with his alternating 4/4 and 3/4 bars and note values, in D.",
+      verifiedAgainst: [
+        { title: "R. R. Terry, Shenandoah (J. Curwen & Sons, 1921), IMSLP #254921", url: "https://imslp.org/wiki/Shenandoah_(Terry,_Richard_Runciman)" },
+        { title: "Joanna C. Colcord, Roll and Go: Songs of American Sailormen (1924), p. 33", url: "https://archive.org/details/roll-and-go_202403" },
+      ],
+      verification: "All 38 notes compared with both scans. Rhythm and barring are exactly Terry's. Colcord prints the same pitches except at “A-way” (bar 3), where Terry has D–C♯ and Colcord's words have D only; Terry's C♯ is kept (it is also in two independent folk transcriptions on abcnotation.com). Colcord dots some of Terry's even eighths; Terry's values are used.",
+    },
+    incipit: "A4 D5 D5 D5 E5 F#5 G5 B5 A5 D6 C#6 B5 A5 B5 A5 F#5 A5 A5 B5 B5 B5 F#5 A5 F#5 E5 D5 E5 F#5 D5 F#5 B5 A5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "happy-farmer", rank: 100, title: "The Happy Farmer, Op. 68 No. 10", composer: "Robert Schumann", genre: "classical",
     source: { url: `${MUTOPIA}SchumannR/O68/schumann-op68-10-gai-laboureur/schumann-op68-10-gai-laboureur.mid`, sha256: "2cdada01ea988df090bfd0ab4bc377b28d97c7dee390a862822e541a47d921de", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2007/02/11-659", maintainer: "Philippe Hézaine", infoUrl: info(659) },
     tracks: { right: [0], left: [2] },
     melodySpans: [{ fromBeat: 0, tracks: [2] }, { fromBeat: 32, tracks: [0] }],
