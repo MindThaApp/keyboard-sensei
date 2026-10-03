@@ -3,9 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { incipitMatches, unzipMember } from "./build.js";
+import ToneMidi from "@tonejs/midi";
+import { incipitMatches, loadSource, sameNotes, sourceNotes, unzipMember } from "./build.js";
 import { ESSENTIALS, attribution, contentRights, incipitPitches, parsePitch } from "./manifest.js";
 import { ESSENTIALS_REPLACES } from "./replacements.js";
+
+const { Midi } = ToneMidi;
 
 describe("Essentials manifest", () => {
   it("has unique slugs and ranks 1..N", () => {
@@ -49,6 +52,43 @@ describe("Essentials manifest", () => {
         seen.add(id);
       }
     }
+  });
+});
+
+describe("source loading", () => {
+  const base = ESSENTIALS.find((piece) => piece.slug === "moonlight-sonata-1")!;
+  /** A one-track file: a triplet-eighth figure under a held tune note. */
+  function file(bpm: number | null): Buffer {
+    const midi = new Midi();
+    if (bpm !== null) midi.header.setTempo(bpm);
+    midi.header.update();
+    const track = midi.addTrack();
+    const ppq = midi.header.ppq;
+    for (let i = 0; i < 6; i++) track.addNote({ midi: 64 + (i % 3), ticks: (i * ppq) / 3, durationTicks: Math.round(ppq / 3) - 1 });
+    track.addNote({ midi: 72, ticks: 0, durationTicks: ppq * 2 });
+    return Buffer.from(midi.toArray());
+  }
+
+  it("applies tempoBpm only over LilyPond's default tempo", () => {
+    const piece = { ...base, tempoBpm: 160 };
+    expect(loadSource(file(60), piece).header.tempos[0].bpm).toBe(160);
+    expect(loadSource(file(null), piece).header.tempos[0].bpm).toBe(160);
+    expect(() => loadSource(file(72), piece)).toThrow(/own tempo/);
+    expect(loadSource(file(72), { ...base, tempoBpm: undefined }).header.tempos[0].bpm).toBeCloseTo(72);
+  });
+
+  it("never marks the accompaniment figure as melody", () => {
+    const piece = { ...base, tempoBpm: undefined, tracks: undefined };
+    const notes = sourceNotes(loadSource(file(60), piece), piece);
+    expect(notes.filter((note) => note.melody).map((note) => note.midi)).toEqual([72]);
+    const unmarked = sourceNotes(loadSource(file(60), piece), { ...piece, accompanimentDurationBeats: undefined });
+    expect(unmarked.some((note) => note.melody)).toBe(false);
+  });
+
+  it("recognises a level that is note-for-note the level above it", () => {
+    const a = [{ midi: 60, startBeat: 0, durationBeats: 1, hand: "right" as const }];
+    expect(sameNotes(a, [{ ...a[0], hand: "left" }])).toBe(true);
+    expect(sameNotes(a, [{ ...a[0], durationBeats: 0.5 }])).toBe(false);
   });
 });
 

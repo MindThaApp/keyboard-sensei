@@ -71,6 +71,28 @@ export function unzipMember(zip: Buffer, member: string): Buffer {
   throw new Error(`${member} not found in zip`);
 }
 
+/** LilyPond's MIDI tempo when a score sets none. */
+const LILYPOND_DEFAULT_BPM = 60;
+
+/**
+ * Parse a fetched source the way every step of the pack sees it, with the
+ * manifest's tempo applied when the source has none of its own. Throws if a
+ * `tempoBpm` piece's source carries a real tempo (or a tempo map): the
+ * override would then be hiding the edition's own tempo, not filling a gap.
+ */
+export function loadSource(bytes: Uint8Array, piece: EssentialsPiece): MidiFile {
+  const midi = new Midi(bytes);
+  if (piece.tempoBpm === undefined) return midi;
+  const tempos = midi.header.tempos;
+  const isDefault = tempos.length === 0 || (tempos.length === 1 && Math.abs(tempos[0].bpm - LILYPOND_DEFAULT_BPM) < 0.01);
+  if (!isDefault) {
+    throw new Error(`${piece.slug}: tempoBpm is set but the source has its own tempo (${tempos.map((t) => t.bpm.toFixed(1)).join(", ")})`);
+  }
+  midi.header.tempos = [{ ticks: 0, bpm: piece.tempoBpm }];
+  midi.header.update();
+  return midi;
+}
+
 /** Track indexes for each hand: the manifest's, else the play-along parser's rule. */
 export function handTracks(midi: MidiFile, piece: EssentialsPiece): { right: number[]; left: number[]; melody: number[] } {
   if (piece.tracks) return { ...piece.tracks, melody: piece.tracks.melody ?? [] };
@@ -89,22 +111,43 @@ export function sourceNotes(midi: MidiFile, piece: EssentialsPiece): Arrangement
   const ppq = midi.header.ppq;
   const tracks = handTracks(midi, piece);
   const singleTrack = tracks.left.length === 0;
+  const figure = piece.accompanimentDurationBeats;
   const notes: ArrangementNote[] = [];
   for (const [hand, indexes] of [["right", tracks.right], ["left", tracks.left]] as const) {
     for (const index of indexes) {
       for (const note of midi.tracks[index].notes) {
+        const noteHand = singleTrack ? (note.midi < 60 ? "left" : "right") : hand;
+        const durationBeats = note.durationTicks / ppq;
+        // With a figuration length set, the tune is every other note of the
+        // melody tracks (or of the right hand); the figuration never is.
+        const inTune = tracks.melody.length > 0 ? tracks.melody.includes(index) : noteHand === "right";
+        const melody = figure === undefined ? tracks.melody.includes(index) : inTune && !isFigure(durationBeats, figure);
         notes.push({
           midi: note.midi,
           startBeat: note.ticks / ppq,
-          durationBeats: note.durationTicks / ppq,
-          hand: singleTrack ? (note.midi < 60 ? "left" : "right") : hand,
+          durationBeats,
+          hand: noteHand,
           velocity: note.velocity,
-          ...(tracks.melody.includes(index) ? { melody: true } : {}),
+          ...(melody ? { melody: true } : {}),
         });
       }
     }
   }
   return notes.sort((a, b) => a.startBeat - b.startBeat || a.midi - b.midi);
+}
+
+/** Within 2% of the figuration length (sources shorten notes slightly for articulation). */
+function isFigure(durationBeats: number, figure: number): boolean {
+  return Math.abs(durationBeats - figure) <= figure * 0.02;
+}
+
+/** Same notes (pitch, onset, length) in both versions: a level that adds nothing over the next one up. */
+export function sameNotes(a: ArrangementNote[], b: ArrangementNote[]): boolean {
+  if (a.length !== b.length) return false;
+  const key = (n: ArrangementNote) => `${n.midi}@${n.startBeat.toFixed(4)}/${n.durationBeats.toFixed(4)}`;
+  const left = a.map(key).sort();
+  const right = b.map(key).sort();
+  return left.every((k, i) => k === right[i]);
 }
 
 export function arrangementMeta(midi: MidiFile, piece: EssentialsPiece): ArrangementMeta {
@@ -121,6 +164,7 @@ export function arrangementMeta(midi: MidiFile, piece: EssentialsPiece): Arrange
     key: null,
     ...(tempos.length > 0 ? { quarterBpm: tempos[0].bpm } : {}),
     ...(piece.melodyStartBeat === undefined ? {} : { melodyStartBeat: piece.melodyStartBeat }),
+    ...(piece.beginnerTimeScale === undefined ? {} : { beginnerTimeScale: piece.beginnerTimeScale }),
   };
 }
 
@@ -210,13 +254,20 @@ export interface BuiltVersion {
   timeScale: 1 | 2;
 }
 
-/** The Full, Intermediate and Beginner versions of one source file. */
+/**
+ * The Full, Intermediate and Beginner versions of one source file. A
+ * simplified level that comes out note-for-note the same as the level above
+ * it (a source that is already a plain melody) is left out: three identical
+ * "levels" would only pretend to offer a choice.
+ */
 export function buildVersions(source: MidiFile, piece: EssentialsPiece): BuiltVersion[] {
   const notes = sourceNotes(source, piece);
   const meta = arrangementMeta(source, piece);
   const versions: BuiltVersion[] = [];
   for (const level of ["full", "intermediate", "beginner"] as const) {
     const result = simplifyArrangement(notes, meta, level);
+    const harder = versions[versions.length - 1];
+    if (harder && result.timeScale === harder.timeScale && sameNotes(result.notes, harder.notes)) continue;
     // A beginner version has no accompaniment, so a long intro would be silence: start at its first bar.
     const first = Math.min(...result.notes.map((note) => note.startBeat)) / result.timeScale;
     const shiftBeats = level === "beginner" ? barStartAtOrBefore(source, first) : 0;

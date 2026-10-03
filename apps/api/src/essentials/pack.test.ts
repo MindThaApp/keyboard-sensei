@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import ToneMidi from "@tonejs/midi";
 import { describe, expect, it } from "vitest";
-import { ESSENTIALS_DIR, checkVersion, fullMelodies, incipitMatches, levelFileName, sourceFileName } from "./build.js";
+import { ESSENTIALS_DIR, checkVersion, fullMelodies, incipitMatches, levelFileName, loadSource, sourceFileName } from "./build.js";
 import { ESSENTIALS, incipitPitches } from "./manifest.js";
 import { readEssentialsIndex } from "./replacements.js";
 
@@ -29,7 +29,7 @@ describe.skipIf(!present)("generated Essentials pack", () => {
   for (const piece of ESSENTIALS) {
     const sourcePath = path.join(ESSENTIALS_DIR, sourceFileName(piece.slug));
     it.skipIf(!existsSync(sourcePath))(`${piece.slug}: tune and every level check out`, () => {
-      const source = new Midi(readFileSync(sourcePath));
+      const source = loadSource(readFileSync(sourcePath), piece);
       const incipit = incipitPitches(piece);
       expect(fullMelodies(source, piece).some((reading) => incipitMatches(reading, incipit, true).ok)).toBe(true);
 
