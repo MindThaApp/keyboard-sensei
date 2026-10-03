@@ -152,6 +152,15 @@ describe("simplifyArrangement: beginner", () => {
     expect(simplifyArrangement(albertiPiece(), {}, "beginner").timeScale).toBe(1);
   });
 
+  it("keeps a dotted-eighth–sixteenth figure when the time scale is forced to 2", () => {
+    const tune = [n(68, 0, 0.75), n(68, 0.75, 0.25), n(68, 1, 3), n(69, 4, 2)];
+    const meta = { key: { tonic: 9, mode: "minor" as const } };
+    expect(simplifyArrangement(tune, meta, "beginner").timeScale).toBe(1);
+    const forced = simplifyArrangement(tune, { ...meta, beginnerTimeScale: 2 }, "beginner");
+    expect(forced.timeScale).toBe(2);
+    expect(forced.notes.map((note) => [note.startBeat, note.durationBeats])).toEqual([[0, 1.5], [1.5, 0.5], [2, 4], [8, 4]]);
+  });
+
   it("preserves the piece's length to within one beat", () => {
     const notes = albertiPiece();
     const { notes: out } = simplifyArrangement(notes, {}, "beginner");

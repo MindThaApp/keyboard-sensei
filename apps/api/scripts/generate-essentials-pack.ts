@@ -31,6 +31,7 @@ import {
   fullMelodies,
   incipitMatches,
   levelFileName,
+  loadSource,
   sourceFileName,
   type EssentialsIndexEntry,
 } from "../src/essentials/build.js";
@@ -59,7 +60,7 @@ async function main(): Promise<void> {
       missing++;
       continue;
     }
-    const source = new Midi(await readFile(sourcePath));
+    const source = loadSource(await readFile(sourcePath), piece);
     const row: ReportRow = { slug: piece.slug, levels: {}, rejected: {}, fullMelodyStart: "" };
     report.push(row);
 

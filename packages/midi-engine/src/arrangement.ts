@@ -101,6 +101,12 @@ export interface ArrangementMeta {
   melodyStartBeat?: number;
   /** Force the beginner transposition (semitones, before octave placement) instead of choosing one automatically. */
   transpose?: number;
+  /**
+   * Force the beginner time scale instead of choosing it from how fast the
+   * tune moves. 2 keeps a sparse tune's dotted-eighth–sixteenth figures
+   * (Moonlight's) as dotted quarter–eighth rather than rounding them to even eighths.
+   */
+  beginnerTimeScale?: 1 | 2;
 }
 
 export interface ArrangementResult {
@@ -174,7 +180,7 @@ export function simplifyArrangement(
     return { level, notes: [...rh, ...lh].sort(byTime), transpose: 0, key, timeScale: 1 };
   }
 
-  const timeScale = shareFasterThan(melody, BEGINNER_GRID) >= 0.3 ? 2 : 1;
+  const timeScale = meta.beginnerTimeScale ?? (shareFasterThan(melody, BEGINNER_GRID) >= 0.3 ? 2 : 1);
   const scaled = timeScale === 1 ? melody : melody.map((note) => ({ ...note, startBeat: note.startBeat * 2, durationBeats: note.durationBeats * 2 }));
   const quantized = quantizeBeginner(scaled);
   const keyShift = meta.transpose ?? beginnerKeyShift(key);

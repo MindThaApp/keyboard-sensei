@@ -52,9 +52,28 @@ export interface EssentialsPiece {
   tracks?: { right: number[]; left: number[]; melody?: number[] };
   /** Skip an accompaniment-only introduction when finding the tune (quarter-note beats). */
   melodyStartBeat?: number;
+  /**
+   * Right-hand (or melody-track) notes of exactly this length, in quarter
+   * beats, are accompaniment figuration and never the tune: Moonlight's
+   * triplet eighths, which would otherwise fill every rest in the melody.
+   */
+  accompanimentDurationBeats?: number;
+  /**
+   * Quarter-note tempo to play the source at, for a source with no tempo of
+   * its own: LilyPond writes ♩=60 when the score sets none, which put
+   * Moonlight's Presto agitato at 13 minutes. Only valid when the source has
+   * that single default tempo (checked when it is loaded).
+   */
+  tempoBpm?: number;
+  /** Force the beginner time scale (see ArrangementMeta.beginnerTimeScale). */
+  beginnerTimeScale?: 1 | 2;
   /** Opening notes of the tune in the source's key, scientific pitch (C4 = middle C). */
   incipit: string;
-  incipitBasis: "known-melody" | "independent-transcription";
+  /**
+   * "pd-score": read off a scan of a public-domain edition of the score.
+   * (Authored pieces always cross-check two sources, see AuthoredSource.)
+   */
+  incipitBasis: "known-melody" | "independent-transcription" | "pd-score";
   /** Anything a reviewer should know about this piece's arrangement. */
   note?: string;
 }
@@ -71,9 +90,9 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "moonlight-sonata-1", rank: 2, title: "Moonlight Sonata (1st Movement)", composer: "Ludwig van Beethoven", genre: "classical",
     source: { url: `${MUTOPIA}BeethovenLv/O27/moonlight/moonlight-mids.zip`, member: "moonlight1.mid", sha256: "94915b176f0b999919a6cd1025a45ec8dd0a454dab33b2b332c5026291ea91f5", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2007/02/11-276", maintainer: "Stewart Holmes", infoUrl: info(276) },
-    melodyStartBeat: 19,
+    melodyStartBeat: 19, accompanimentDurationBeats: 1 / 3, tempoBpm: 54, beginnerTimeScale: 2,
     incipit: "G#4 G#4 G#4 G#4 G#4 G#4 A4 G#4 F#4 B4 E4", incipitBasis: "known-melody",
-    note: "The tune enters on the last beat of bar 5; the triplet introduction is accompaniment.",
+    note: "The tune enters on the last beat of bar 5; the triplets are accompaniment throughout. Tempo ♩=54 is the edition's own (commented out of its MIDI block).",
   },
   {
     slug: "canon-in-d", rank: 3, title: "Canon in D", composer: "Johann Pachelbel", genre: "classical",
@@ -97,7 +116,9 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "rondo-alla-turca", rank: 6, title: "Rondo alla Turca", composer: "Wolfgang Amadeus Mozart", genre: "classical",
     source: { url: `${MUTOPIA}MozartWA/KV331/KV331_3_RondoAllaTurca/KV331_3_RondoAllaTurca.mid`, sha256: "c14299cbdd34c8b2081da84dc06519ef8a52a0d589ee53c758d28b8e3d727d1c", licence: "Public Domain", mutopiaId: "Mutopia-2015/08/13-108", maintainer: "Rune Zedeler and Chris Sawer", infoUrl: info(108) },
+    tempoBpm: 120,
     incipit: "B4 A4 G#4 A4 C5 D5 C5 B4 C5 E5 F5 E5 D#5 E5", incipitBasis: "known-melody",
+    note: "The source sets no tempo; ♩=120 is a usual Allegretto. Repeats are not taken.",
   },
   {
     slug: "the-entertainer", rank: 7, title: "The Entertainer", composer: "Scott Joplin", genre: "jazz",
@@ -117,8 +138,8 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "clair-de-lune", rank: 10, title: "Clair de Lune", composer: "Claude Debussy", genre: "classical",
     source: { url: `${MUTOPIA}DebussyC/L75/debussy_Ste_Bergamesq_Clair/debussy_Ste_Bergamesq_Clair.mid`, sha256: "4eee9a1546ffde1ff74cb9824ba0e57cbc821185a15185bfea9faed97820bf8c", licence: "Public Domain", mutopiaId: "Mutopia-2010/12/21-1778", maintainer: "Keith OHara", infoUrl: info(1778) },
-    incipit: "Ab5 F5 Eb5 F5 Eb5 Db5 Eb5 Db5", incipitBasis: "known-melody",
-    note: "The tune is the top of a line in thirds; Beginner plays the upper note.",
+    incipit: "Ab5 F5 Eb5 F5 Eb5 Db5 Eb5 Db5", incipitBasis: "pd-score",
+    note: "The tune is the top of a line in thirds; Beginner plays the upper note. Incipit read off the Fromont first edition (1905, IMSLP #83536), bars 1–3; tied notes are not restruck.",
   },
   {
     slug: "beethoven-5th-symphony", rank: 11, title: "Symphony No. 5 (1st Movement)", composer: "Ludwig van Beethoven", genre: "classical",
@@ -162,11 +183,13 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "hark-the-herald-angels-sing", rank: 17, title: "Hark! The Herald Angels Sing", composer: "Felix Mendelssohn", genre: "other",
     source: { url: `${MUTOPIA}Mendelssohn-BartholdyF/mendelssohn/mendelssohn.mid`, sha256: "0e8cbffa0a338e1df93110256d8968b2fd807355151c5130733aa15b1365cc61", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1261", maintainer: "Steve Dunlop", infoUrl: info(1261) },
+    tempoBpm: 100, // the source sets no tempo; a usual hymnal tempo
     incipit: "C4 F4 F4 E4 F4 A4 A4 G4 C5 C5 C5 Bb4 A4 G4 A4", incipitBasis: "known-melody",
   },
   {
     slug: "o-come-all-ye-faithful", rank: 18, title: "O Come, All Ye Faithful", composer: "John Francis Wade", genre: "other",
     source: { url: `${MUTOPIA}WadeJF/adeste_fideles/adeste_fideles.mid`, sha256: "d6fe90acc41b3da16a932e636c75219d4accae3bf89105741581825b7a889976", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1220", maintainer: "Steve Dunlop", infoUrl: info(1220) },
+    tempoBpm: 96, // the source sets no tempo; a usual hymnal tempo
     incipit: "G4 G4 D4 G4 A4 D4 B4 A4 B4 C5 B4 A4", incipitBasis: "known-melody",
   },
   {
@@ -207,6 +230,7 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "first-noel", rank: 25, title: "The First Noel", composer: "Traditional", genre: "other",
     source: { url: `${MUTOPIA}Traditional/first_noel/first_noel.mid`, sha256: "5529d7e725981d92b5649b820c431e77a08fb71f0db94249d994e67a28546dea", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1243", maintainer: "Steve Dunlop", infoUrl: info(1243) },
+    tempoBpm: 104, // the source sets no tempo; a usual hymnal tempo
     incipit: "F#4 E4 D4 E4 F#4 G4 A4 B4 C#5 D5 C#5 B4 A4", incipitBasis: "known-melody",
   },
   {
@@ -237,18 +261,21 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "away-in-a-manger", rank: 31, title: "Away in a Manger", composer: "James R. Murray", genre: "other",
     source: { url: `${MUTOPIA}MurrayJR/mueller/mueller.mid`, sha256: "d3a6632c836fa9190191ae300a249fb61916fb47679af565d72fb551f77ee228", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1264", maintainer: "Steve Dunlop", infoUrl: info(1264) },
+    tempoBpm: 88, // the source sets no tempo; a usual hymnal tempo
     incipit: "C5 C5 Bb4 A4 A4 G4 F4 F4 E4 D4 C4", incipitBasis: "known-melody",
   },
   {
     slug: "o-little-town-of-bethlehem", rank: 32, title: "O Little Town of Bethlehem", composer: "Lewis H. Redner", genre: "other",
     source: { url: `${MUTOPIA}RednerLH/st_louis/st_louis.mid`, sha256: "fdd5a9362ae05bf3b8e667de5ca3c1e73b6832e0da9600b86315ff637589183b", licence: "Public Domain", mutopiaId: "Mutopia-2008/02/19-1292", maintainer: "Steve Dunlop", infoUrl: info(1292) },
+    tempoBpm: 88, // the source sets no tempo; a usual hymnal tempo
     incipit: "A4 A4 A4 G#4 A4 C5 Bb4 D4 G4 F4 E4 F4 G4 C4 A4", incipitBasis: "known-melody",
   },
   {
     slug: "moonlight-sonata-3", rank: 33, title: "Moonlight Sonata (3rd Movement)", composer: "Ludwig van Beethoven", genre: "classical",
     source: { url: `${MUTOPIA}BeethovenLv/O27/moonlight/moonlight-mids.zip`, member: "moonlight3.mid", sha256: "94915b176f0b999919a6cd1025a45ec8dd0a454dab33b2b332c5026291ea91f5", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2007/02/11-276", maintainer: "Stewart Holmes", infoUrl: info(276) },
+    tempoBpm: 160,
     incipit: "G#2 C#3 E3 G#3 C#3 E3 G#3 C#4 E3 G#3 C#4 E4", incipitBasis: "known-melody",
-    note: "Opens with rising arpeggios rather than a tune; simplified versions follow the top of them.",
+    note: "Opens with rising arpeggios rather than a tune; simplified versions follow the top of them. Tempo ♩=160 is the edition's own (commented out of its MIDI block); the exposition repeat is not taken.",
   },
   {
     slug: "traumerei", rank: 34, title: "Träumerei", composer: "Robert Schumann", genre: "classical",
@@ -278,11 +305,13 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "holy-holy-holy", rank: 39, title: "Holy, Holy, Holy", composer: "John B. Dykes", genre: "other",
     source: { url: `${MUTOPIA}DykesJB/nicaea/nicaea.mid`, sha256: "57184adabcdcd0f4f63d1a4913bc061f5c7df1e44649c376f9c73f4f5c7f00c9", licence: "Public Domain", mutopiaId: "Mutopia-2008/02/19-1284", maintainer: "Steve Dunlop", infoUrl: info(1284) },
+    tempoBpm: 96, // the source sets no tempo; a usual hymnal tempo
     incipit: "D4 D4 F#4 F#4 A4 A4 B4 B4 B4 A4 F#4 A4", incipitBasis: "known-melody",
   },
   {
     slug: "a-mighty-fortress", rank: 40, title: "A Mighty Fortress Is Our God", composer: "Martin Luther", genre: "other",
     source: { url: `${MUTOPIA}LutherM/ein_feste_burg/ein_feste_burg.mid`, sha256: "1f8d5232dc78cf7ebc770a024b981623d108228c53598908c0e001b1c920e577", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1237", maintainer: "Steve Dunlop", infoUrl: info(1237) },
+    tempoBpm: 100, // the source sets no tempo; a usual hymnal tempo
     incipit: "C5 C5 C5 G4 A4 B4 C5 B4 A4 G4", incipitBasis: "known-melody",
   },
   {
@@ -337,11 +366,13 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "praise-to-the-lord", rank: 50, title: "Praise to the Lord, the Almighty", composer: "Traditional", genre: "other",
     source: { url: `${MUTOPIA}Anonymous/lobe_den_Herren/lobe_den_Herren.mid`, sha256: "2ceaccb73d5b35b7ea8033426eac6f602113eb3a1bfbd2c722f9e53693e17af6", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1256", maintainer: "Steve Dunlop", infoUrl: info(1256) },
+    tempoBpm: 132, // the source sets no tempo; a usual hymnal tempo
     incipit: "F4 F4 C5 A4 G4 F4 E4 D4 C4", incipitBasis: "known-melody",
   },
   {
     slug: "o-god-our-help", rank: 51, title: "O God, Our Help in Ages Past", composer: "William Croft", genre: "other",
     source: { url: `${MUTOPIA}CroftW/st_anne/st_anne.mid`, sha256: "45908040246ba48da3244679674fcf87fa29cce0fb2cc304dc3fb9bc7444014d", licence: "Public Domain", mutopiaId: "Mutopia-2008/02/19-1290", maintainer: "Steve Dunlop", infoUrl: info(1290) },
+    tempoBpm: 84, // the source sets no tempo; a usual hymnal tempo
     incipit: "G4 E4 A4 G4 C5 C5 B4 C5", incipitBasis: "known-melody",
   },
   {
@@ -352,6 +383,7 @@ export const ESSENTIALS: EssentialsPiece[] = [
   {
     slug: "fairest-lord-jesus", rank: 53, title: "Fairest Lord Jesus", composer: "Traditional", genre: "other",
     source: { url: `${MUTOPIA}Traditional/crusaders_hymn/crusaders_hymn.mid`, sha256: "4f0a4d20d66dbe9c65711decd3a5a372bcff8b465aa87a3f3a3851a3c8541d2b", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1234", maintainer: "Steve Dunlop", infoUrl: info(1234) },
+    tempoBpm: 92, // the source sets no tempo; a usual hymnal tempo
     incipit: "F4 F4 F4 G4 E4 F4 A4 A4 A4 A4 Bb4 G4 A4", incipitBasis: "known-melody",
   },
   {
