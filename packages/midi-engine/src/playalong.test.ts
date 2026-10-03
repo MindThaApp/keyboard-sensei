@@ -4,6 +4,7 @@ import {
   judgeNextPress,
   judgePlayAlong,
   lookaheadMultiplier,
+  practiceMultiplier,
   tempoMultiplier,
   type PlayAlongNote,
   type PlayAlongPress,
@@ -157,5 +158,22 @@ describe("multipliers", () => {
     expect(finalScore(perfect, 1, 1.5)).toBeCloseTo(120.6, 1);
     // 86.6, not the old 85: sqrt(0.75) = 0.866, where the old table rounded to 0.85.
     expect(finalScore(perfect, 0.75, 4)).toBeCloseTo(86.6, 1);
+  });
+
+  it("scales by difficulty and hands, and defaults to a full two-handed run", () => {
+    const perfect = judgePlayAlong([note(60, 1)], [press(60, 1)]);
+    expect(finalScore(perfect, 1, 4, {})).toBe(100);
+    expect(finalScore(perfect, 1, 4, { level: "full", hands: "both" })).toBe(100);
+    expect(finalScore(perfect, 1, 4, { level: "simplified" })).toBe(80);
+    expect(finalScore(perfect, 1, 4, { level: "easy" })).toBe(60);
+    expect(finalScore(perfect, 1, 4, { level: "melody" })).toBe(40);
+    expect(finalScore(perfect, 1, 4, { hands: "right" })).toBe(60);
+    // Easy, left hand only, at 70% speed: 100 × √0.7 × 1 × 0.6 × 0.6.
+    expect(practiceMultiplier({ rate: 0.7, lookaheadS: 4, level: "easy", hands: "left" })).toBeCloseTo(Math.sqrt(0.7) * 0.36, 6);
+  });
+
+  it("keeps the 1.5 cap with the new factors", () => {
+    expect(practiceMultiplier({ rate: 2, lookaheadS: 1, level: "full", hands: "both" })).toBe(1.5);
+    expect(practiceMultiplier({ rate: 2, lookaheadS: 1, level: "simplified", hands: "both" })).toBeLessThanOrEqual(1.5);
   });
 });
