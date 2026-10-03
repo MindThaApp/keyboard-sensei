@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
 import TheoryCardSectionView from "./TheoryCardSectionView";
 import LiveNotationSection from "../notation/LiveNotationSection";
@@ -9,7 +9,10 @@ import { groupExerciseRuns } from "./exerciseRuns";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
-import { getLesson } from "../../services/api";
+import { getLesson, getMySongStars, type ReadySong } from "../../services/api";
+import { lessonStars } from "../../utils/stars";
+import { songPracticeLink } from "../../utils/practiceLinks";
+import { StarRating } from "../progress/ProgressBits";
 import { levelLabel } from "../../utils/levels";
 import { missingPrerequisites, pathLabel, placeInPath } from "../../utils/paths";
 
@@ -21,6 +24,18 @@ export default function LessonPlayerPage() {
   const loadAll = useProgressStore((s) => s.loadAll);
   const [detail, setDetail] = useState<LessonDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  // ?exercise=<id> (from Today's Continue and Review) opens that exercise.
+  const [params] = useSearchParams();
+  const focusExerciseId = params.get("exercise");
+  const [readySongs, setReadySongs] = useState<ReadySong[]>([]);
+  const completedNow = lessons.find((l) => l.id === lessonId)?.progress.status === "completed";
+  useEffect(() => {
+    if (!completedNow) return;
+    getMySongStars()
+      .then((response) => setReadySongs(response.readyForYou))
+      .catch(() => undefined);
+  }, [completedNow]);
+  const unlockedSongs = readySongs.filter((song) => song.lessonId === lessonId);
 
   useEffect(() => {
     if (!loaded) void loadAll();
@@ -46,7 +61,7 @@ export default function LessonPlayerPage() {
     return (
       <div className="space-y-2">
         <p className="text-slate-700 dark:text-slate-200">Lesson not found.</p>
-        <Link to="/" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
+        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
       </div>
     );
   }
@@ -58,7 +73,7 @@ export default function LessonPlayerPage() {
           To unlock &ldquo;{lesson.title}&rdquo;, first complete:{" "}
           {missingPrerequisites(lessons, lesson).map((title) => `“${title}”`).join(", ") || "the previous lesson"}.
         </p>
-        <Link to="/" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
+        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
       </div>
     );
   }
@@ -72,7 +87,7 @@ export default function LessonPlayerPage() {
     <div className="space-y-6">
       <div>
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Link to="/" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
+          <Link to="/learn" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
           <span aria-hidden>/</span>
           <span>{pathLabel(lesson.path)}</span>
           <span aria-hidden>/</span>
@@ -94,9 +109,15 @@ export default function LessonPlayerPage() {
 
       {completed && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brass-400/60 bg-brass-100/60 px-4 py-3 dark:border-brass-600/50 dark:bg-brass-700/10">
-          <p className="text-sm font-medium text-brass-700 dark:text-brass-300">
+          <p className="flex items-center gap-2 text-sm font-medium text-brass-700 dark:text-brass-300">
+            <StarRating stars={lessonStars(lesson.progress.status, lesson.progress.bestScore)} />
             Lesson passed · Best {lesson.progress.bestScore}
           </p>
+          {unlockedSongs.map((song) => (
+            <Link key={song.songId} to={songPracticeLink(song.songId)} className="text-sm font-medium text-felt-700 underline dark:text-felt-300">
+              🎵 Song unlocked: {song.title}
+            </Link>
+          ))}
           {nextLesson && nextUnlocked && (
             <Link to={`/lessons/${nextLesson.id}`} className="primary-button">
               Next: {nextLesson.title} →
@@ -130,6 +151,7 @@ export default function LessonPlayerPage() {
                 sections={block.sections}
                 exercises={detail.exercises}
                 initialBests={detail.exerciseBests ?? {}}
+                focusExerciseId={focusExerciseId}
               />
             );
           }

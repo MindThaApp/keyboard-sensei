@@ -157,7 +157,7 @@ export function filtersToParams(filters: SongFilters, page: number): URLSearchPa
 }
 
 export interface Shelf {
-  id: "recent" | "beginner" | "essentials" | "uploads";
+  id: "ready" | "recent" | "beginner" | "essentials" | "uploads";
   title: string;
   songs: Song[];
 }
@@ -169,12 +169,18 @@ const SHELF_LIMIT = 20;
  * "Essentials" shelf is invisible until the API tags songs with
  * `collection: "essentials"` — no placeholder.
  */
-export function buildShelves(songs: Song[], recentAttempts: Pick<PlayAlongAttemptSummary, "song_id">[]): Shelf[] {
+export function buildShelves(
+  songs: Song[],
+  recentAttempts: Pick<PlayAlongAttemptSummary, "song_id">[],
+  /** Songs the course has unlocked ("Ready for you"), in the order the course reaches them. */
+  readyIds: readonly string[] = [],
+): Shelf[] {
   const byId = new Map(songs.map((song) => [song.id, song]));
-  const recentIds = [...new Set(recentAttempts.map((attempt) => attempt.song_id))];
-  const recent = recentIds.map((id) => byId.get(id)).filter((song): song is Song => song !== undefined);
+  const pick = (ids: readonly string[]) => ids.map((id) => byId.get(id)).filter((song): song is Song => song !== undefined);
+  const recent = pick([...new Set(recentAttempts.map((attempt) => attempt.song_id))]);
 
   const shelves: Shelf[] = [
+    { id: "ready", title: "Ready for you", songs: pick(readyIds) },
     { id: "recent", title: "Recently played", songs: recent },
     { id: "beginner", title: "Beginner pack", songs: sortSongs(songs.filter((song) => song.collection === "beginner"), "difficulty") },
     { id: "essentials", title: "Essentials", songs: sortSongs(songs.filter((song) => song.collection === "essentials"), "difficulty") },

@@ -1,26 +1,26 @@
-import { useState, type ReactNode } from "react";
-import { Navigate, Route, Routes, useMatch, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Navigate, Route, Routes, useLocation, useMatch, useNavigate, useSearchParams } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
-import PracticeGymPage from "./components/midi/PracticeGymPage";
-import PracticeHistoryPage from "./components/progress/PracticeHistoryPage";
-import DashboardPage from "./components/dashboard/DashboardPage";
+import ProgressPage from "./components/progress/ProgressPage";
+import TodayPage from "./components/today/TodayPage";
+import PracticePage from "./components/practice/PracticePage";
+import DailyGoalPage from "./components/auth/DailyGoalPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage from "./components/auth/AuthPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
 import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
 import AdminUsersPage from "./components/admin/AdminUsersPage";
 import AdminSongsPage from "./components/admin/AdminSongsPage";
-import SongBrowserPage from "./components/play/SongBrowserPage";
 import PlayAlongPage from "./components/play/PlayAlongPage";
 import SongLibraryPage from "./components/library/SongLibraryPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import SaveProgressPage from "./components/auth/SaveProgressPage";
 import { formatScoresParam, parseSourceParam } from "./components/auth/onboardingParams";
-import RecordingPage from "./components/record/RecordingPage";
-import AppHeader from "./components/shell/AppHeader";
+import AppHeader, { BottomTabBar } from "./components/shell/AppHeader";
+import RewardToasts from "./components/shell/RewardToasts";
 import { useAuth } from "./contexts/AuthContext";
-import { applyAssessmentPlacement } from "./services/api";
+import { applyAssessmentPlacement, updateTimezone } from "./services/api";
 import { useProgressStore } from "./state/progressStore";
 import AudioNoticeToasts from "./components/shell/AudioNoticeToasts";
 
@@ -47,7 +47,7 @@ function AssessmentRoute() {
       if (source === "demo") {
         navigate(`/welcome/save-progress?scores=${formatScoresParam(scores)}`, { replace: true });
       } else {
-        navigate("/", { replace: true });
+        navigate("/welcome/goal", { replace: true });
       }
     } catch (e) {
       setPlacementError(e instanceof Error ? e.message : "Unable to apply placement");
@@ -66,12 +66,34 @@ function AssessmentRoute() {
   );
 }
 
+/**
+ * Old addresses (bookmarks, the installed PWA, links in old feedback) keep working:
+ * each one redirects to where its page lives now, keeping its query string.
+ */
+function Redirect({ to, params }: { to: string; params?: Record<string, string> }) {
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  for (const [key, value] of Object.entries(params ?? {})) search.set(key, value);
+  const query = search.toString();
+  return <Navigate to={`${to}${query ? `?${query}` : ""}`} replace />;
+}
+
+/** Days and streaks follow the learner's own midnight: tell the API which zone that is. */
+function useReportTimezone(user: { timezone?: string | null } | null) {
+  useEffect(() => {
+    if (!user) return;
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone && zone !== user.timezone) void updateTimezone(zone).catch(() => undefined);
+  }, [user]);
+}
+
 export default function App() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   // The Play-Along stage fills the viewport; everything else is a normal scrolling page.
   const isPerformanceView = useMatch("/play/:songId") !== null;
+  useReportTimezone(auth.user);
 
   // Route guard: the API already 403s non-admins; this just keeps them off the pages.
   const RequireAdmin = ({ children }: { children: ReactNode }) =>
@@ -82,7 +104,8 @@ export default function App() {
       <>
         <AuthPage
           onEntered={(kind) => {
-            if (kind !== "login") navigate(`/welcome/assessment?from=${kind}`);
+            // Signing in lands on Today; a new account goes through onboarding first.
+            navigate(kind === "login" ? "/" : `/welcome/assessment?from=${kind}`, { replace: kind === "login" });
           }}
         />
         <FeedbackWidget />
@@ -100,6 +123,7 @@ export default function App() {
       </a>
       <AppHeader
         isAdmin={auth.user?.role === "admin"}
+        displayName={auth.user?.display_name ?? null}
         onLogout={auth.logout}
         onOpenFeedback={isPerformanceView ? () => setFeedbackOpen(true) : undefined}
         widthClassName={isPerformanceView ? "" : PAGE_WIDTH}
@@ -114,18 +138,26 @@ export default function App() {
         }
       >
         <Routes>
-          <Route path="/" element={<LessonListPage />} />
+          <Route path="/" element={<TodayPage />} />
+          <Route path="/learn" element={<LessonListPage />} />
           <Route path="/welcome/assessment" element={<AssessmentRoute />} />
           <Route path="/welcome/save-progress" element={<SaveProgressPage />} />
+          <Route path="/welcome/goal" element={<DailyGoalPage />} />
           <Route path="/lessons/:lessonId" element={<LessonPlayerPage />} />
-          <Route path="/practice-gym" element={<PracticeGymPage />} />
-          <Route path="/record" element={<RecordingPage />} />
-          <Route path="/history" element={<PracticeHistoryPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/practice" element={<PracticePage tab="songs" />} />
+          <Route path="/practice/gym" element={<PracticePage tab="gym" />} />
+          <Route path="/practice/record" element={<PracticePage tab="record" />} />
+          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/play" element={<SongBrowserPage />} />
-          <Route path="/library" element={<SongLibraryPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
+          {/* Old addresses. */}
+          <Route path="/play" element={<Redirect to="/practice" />} />
+          <Route path="/practice-gym" element={<Redirect to="/practice/gym" />} />
+          <Route path="/record" element={<Redirect to="/practice/record" />} />
+          <Route path="/history" element={<Redirect to="/progress" params={{ tab: "history" }} />} />
+          <Route path="/dashboard" element={<Redirect to="/progress" />} />
+          <Route path="/lessons" element={<Redirect to="/learn" />} />
+          <Route path="/library" element={<SongLibraryPage />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
@@ -133,6 +165,8 @@ export default function App() {
       </main>
       <FeedbackWidget open={feedbackOpen} onOpenChange={setFeedbackOpen} showLauncher={!isPerformanceView} />
       <AudioNoticeToasts />
+      <RewardToasts />
+      {!isPerformanceView && <BottomTabBar />}
     </div>
   );
 }

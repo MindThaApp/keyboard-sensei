@@ -113,7 +113,11 @@ progressionRouter.get("/users/me/progression", async (req, res, next) => {
 progressionRouter.get("/songs/stars/me", async (req, res, next) => {
   try {
     const snapshot = await loadSnapshot(prisma, uid(req));
-    res.json({ stars: Object.fromEntries(songStarsById(snapshot.playAlong)) });
+    res.json({
+      stars: Object.fromEntries(songStarsById(snapshot.playAlong)),
+      // Songs the course has unlocked so far, for the library's "Ready for you" shelf.
+      readyForYou: readyForYou(snapshot, snapshot.songs),
+    });
   } catch (e) {
     next(e);
   }

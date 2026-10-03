@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
 import SongExcerptPicker from "./SongExcerptPicker";
@@ -26,7 +27,12 @@ function DifficultyDots({ level }: { level: number }) {
 }
 
 export default function PracticeGymPage() {
-  const [selectedDrillId, setSelectedDrillId] = useState<string | null>(null);
+  // ?drill=<id> opens a drill straight away (the Today screen's warm-up links here).
+  const [params] = useSearchParams();
+  const [selectedDrillId, setSelectedDrillId] = useState<string | null>(() => {
+    const requested = params.get("drill");
+    return practiceGymDrills.some((drill) => drill.id === requested) ? requested : null;
+  });
   const selectedDrill = practiceGymDrills.find((d) => d.id === selectedDrillId) ?? null;
 
   const [songs, setSongs] = useState<Song[] | null>(null);

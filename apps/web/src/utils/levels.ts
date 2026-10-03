@@ -22,20 +22,6 @@ export function levelLabel(level: string): string {
   );
 }
 
-const LEVEL_ACHIEVEMENT_PREFIX = "level_complete_";
-
-/**
- * Whether an achievement can actually be earned with the curriculum that exists. The API
- * defines a "graduate" achievement for every level it knows about, including levels with
- * no lessons yet (late intermediate, advanced, virtuoso) — showing those as locked goals
- * promises content that isn't there.
- */
-export function isAchievementReachable(key: string, levelsWithLessons: ReadonlySet<string>): boolean {
-  if (!key.startsWith(LEVEL_ACHIEVEMENT_PREFIX)) return true;
-  const level = key.slice(LEVEL_ACHIEVEMENT_PREFIX.length).replace(/_/g, "-");
-  return levelsWithLessons.has(level);
-}
-
 /** The lesson a "Continue" button should open: the first unlocked one, else the first not completed. */
 export function nextLessonFor(lessons: readonly LessonListItem[]): LessonListItem | null {
   return (

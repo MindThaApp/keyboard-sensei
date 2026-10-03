@@ -346,7 +346,7 @@ export type DailyGoalMinutes = (typeof DAILY_GOAL_OPTIONS)[number];
 export const getDailySummary = () => request<DailySummary>("/users/me/summary");
 export const getToday = () => request<TodayResponse>("/users/me/today");
 export const getProgression = () => request<ProgressionResponse>("/users/me/progression");
-export const getMySongStars = () => request<{ stars: Record<string, SongStars> }>("/songs/stars/me");
+export const getMySongStars = () => request<{ stars: Record<string, SongStars>; readyForYou: ReadySong[] }>("/songs/stars/me");
 export const getSongStars = (songId: string) =>
   request<{ songId: string } & SongStars>(`/songs/${encodeURIComponent(songId)}/stars`);
 export const updateDailyGoal = (daily_goal_minutes: DailyGoalMinutes) =>
