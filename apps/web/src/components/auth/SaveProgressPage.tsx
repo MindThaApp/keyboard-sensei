@@ -33,7 +33,7 @@ export default function SaveProgressPage() {
             void applyAssessmentPlacement(scores)
               .then(() => {
                 resetProgress();
-                navigate("/", { replace: true });
+                navigate("/welcome/goal", { replace: true });
               })
               .catch((e) => setError(e instanceof Error ? e.message : "Unable to apply placement"))
           }

@@ -18,6 +18,7 @@ import {
 } from "../../utils/keyboardRange";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 import AudioLatencySection from "./AudioLatencySection";
+import DailyGoalSection from "./DailyGoalSection";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
@@ -510,13 +511,13 @@ export default function SettingsPage() {
   // restores the list as it was; a reload (no state) falls back to /play.
   const cameFromPlay = activeTab === "library" && params.get("from") === "play";
   const returnState = (location.state as { returnTo?: unknown } | null)?.returnTo;
-  const backTo = typeof returnState === "string" && returnState.startsWith("/play") ? returnState : "/play";
+  const backTo = typeof returnState === "string" && returnState.startsWith("/practice") ? returnState : "/practice";
 
   return (
     <div className="space-y-6">
       {cameFromPlay && (
         <Link to={backTo} className="inline-block text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
-          ← Back to Play along
+          ← Back to songs
         </Link>
       )}
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
@@ -538,7 +539,12 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
-      {activeTab === "account" && <AccountSection />}
+      {activeTab === "account" && (
+        <>
+          <DailyGoalSection />
+          <AccountSection />
+        </>
+      )}
       {activeTab === "appearance" && <AppearanceSection />}
       {activeTab === "instruments" && <InstrumentSection />}
       {activeTab === "midi" && (

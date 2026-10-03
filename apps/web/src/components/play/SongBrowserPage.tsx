@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getMyPlayAlongAttempts, getSongs, type PlayAlongAttemptSummary, type Song } from "../../services/api";
+import { getMyPlayAlongAttempts, getMySongStars, getSongs, type SongStars, type PlayAlongAttemptSummary, type Song } from "../../services/api";
 import SongFilterBar from "../library/SongFilterBar";
 import Pagination from "../library/Pagination";
+import { StarRating } from "../progress/ProgressBits";
 import {
   buildShelves,
   difficultyLabel,
@@ -77,7 +78,7 @@ function BestScore({ score }: { score: number | undefined }) {
   );
 }
 
-function SongRow({ song, best }: { song: Song; best: number | undefined }) {
+function SongRow({ song, best, stars }: { song: Song; best: number | undefined; stars: number }) {
   return (
     <li>
       <Link
@@ -94,6 +95,7 @@ function SongRow({ song, best }: { song: Song; best: number | undefined }) {
         <div className="hidden flex-wrap justify-end gap-1 md:flex">
           <SongBadges song={song} />
         </div>
+        {stars > 0 && <StarRating stars={stars} className="text-sm" />}
         <BestScore score={best} />
         <DifficultyDots level={song.difficulty} />
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">
@@ -105,7 +107,7 @@ function SongRow({ song, best }: { song: Song; best: number | undefined }) {
   );
 }
 
-function ShelfRow({ shelf, bests }: { shelf: Shelf; bests: Record<string, { score: number }> }) {
+function ShelfRow({ shelf, bests, stars }: { shelf: Shelf; bests: Record<string, { score: number }>; stars: Record<string, SongStars> }) {
   const headingId = `shelf-${shelf.id}`;
   return (
     <section aria-labelledby={headingId} className="space-y-2">
@@ -128,7 +130,10 @@ function ShelfRow({ shelf, bests }: { shelf: Shelf; bests: Record<string, { scor
               <span className="mt-auto flex items-center gap-2 pt-1">
                 <DifficultyDots level={song.difficulty} />
                 <span className="text-xs tabular-nums text-slate-600 dark:text-slate-300">{formatDuration(song.duration_sec)}</span>
-                <span className="ml-auto"><BestScore score={bests[song.id]?.score} /></span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  {(stars[song.id]?.best ?? 0) > 0 && <StarRating stars={stars[song.id]!.best} />}
+                  <BestScore score={bests[song.id]?.score} />
+                </span>
               </span>
             </Link>
           </li>
@@ -142,6 +147,8 @@ export default function SongBrowserPage() {
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [bests, setBests] = useState<Record<string, { score: number; accuracy: number }>>({});
   const [recent, setRecent] = useState<PlayAlongAttemptSummary[]>([]);
+  const [stars, setStars] = useState<Record<string, SongStars>>({});
+  const [readyIds, setReadyIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const listTopRef = useRef<HTMLDivElement>(null);
 
@@ -161,11 +168,17 @@ export default function SongBrowserPage() {
         setRecent(response.recent);
       })
       .catch(() => undefined);
+    getMySongStars()
+      .then((response) => {
+        setStars(response.stars);
+        setReadyIds(response.readyForYou.map((ready) => ready.songId));
+      })
+      .catch(() => undefined);
   }, []);
 
   const matching = useMemo(() => (songs ? sortSongs(filterSongs(songs, filters), filters.sort) : null), [songs, filters]);
   const page = useMemo(() => (matching ? paginate(matching, requestedPage, PAGE_SIZE) : null), [matching, requestedPage]);
-  const shelves = useMemo(() => (songs ? buildShelves(songs, recent) : []), [songs, recent]);
+  const shelves = useMemo(() => (songs ? buildShelves(songs, recent, readyIds) : []), [songs, recent, readyIds]);
   const showShelves = !hasActiveFilters(filters) && (page?.page ?? 1) === 1;
 
   const updateFilters = (next: SongFilters) => setParams(filtersToParams(next, 1), { replace: true });
@@ -191,7 +204,7 @@ export default function SongBrowserPage() {
         </div>
         <Link
           to="/settings?tab=library&from=play"
-          state={{ returnTo: `/play${params.toString() ? `?${params.toString()}` : ""}` }}
+          state={{ returnTo: `/practice${params.toString() ? `?${params.toString()}` : ""}` }}
           className="ml-auto text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
         >
           Manage library →
@@ -201,7 +214,7 @@ export default function SongBrowserPage() {
       {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       {!songs && !error && <p className="text-sm text-slate-600 dark:text-slate-300">Loading library…</p>}
 
-      {showShelves && shelves.map((shelf) => <ShelfRow key={shelf.id} shelf={shelf} bests={bests} />)}
+      {showShelves && shelves.map((shelf) => <ShelfRow key={shelf.id} shelf={shelf} bests={bests} stars={stars} />)}
 
       {songs && (
         <section aria-labelledby="all-songs" className="space-y-3">
@@ -212,7 +225,7 @@ export default function SongBrowserPage() {
           {page && page.items.length > 0 && (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
               {page.items.map((song) => (
-                <SongRow key={song.id} song={song} best={bests[song.id]?.score} />
+                <SongRow key={song.id} song={song} best={bests[song.id]?.score} stars={stars[song.id]?.best ?? 0} />
               ))}
             </ul>
           )}

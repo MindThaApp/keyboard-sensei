@@ -110,6 +110,13 @@ describe("URL params", () => {
 });
 
 describe("buildShelves", () => {
+  it("puts the songs the course unlocked first, in course order, skipping unknown ids", () => {
+    const songs = [song({ id: "a" }), song({ id: "b" })];
+    const shelves = buildShelves(songs, [], ["b", "missing", "a"]);
+    expect(shelves[0]).toMatchObject({ id: "ready", title: "Ready for you" });
+    expect(shelves[0]!.songs.map((s) => s.id)).toEqual(["b", "a"]);
+  });
+
   const songs = [
     song({ id: "b1", collection: "beginner", difficulty: 2, note_count: 80 }),
     song({ id: "b2", collection: "beginner", difficulty: 1, note_count: 40 }),
