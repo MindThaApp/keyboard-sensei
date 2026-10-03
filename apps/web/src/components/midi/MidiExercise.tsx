@@ -8,7 +8,8 @@ import VirtualPiano from "../piano/VirtualPiano";
 import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
-import { groupIntoMeasures, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
+import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { estimateKey, type KeyInfo } from "../../utils/keySignature";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
@@ -50,6 +51,8 @@ interface Props {
    * cancelled, submitted, or the component unmounts.
    */
   onRecordingClock?: (clock: { startTimeMs: number; effectiveBpm: number } | null) => void;
+  /** Key of the song an excerpt comes from — drawn as a key signature (see notationFor). */
+  notationKey?: KeyInfo;
 }
 
 type Phase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
@@ -93,62 +96,38 @@ function liveNotesFor(exercise: MidiExerciseDef, effectiveBpm: number): LiveNote
  * Builds barred notation for an exercise. Notes at or above middle C go on
  * the treble staff, notes below on the bass staff — as a grand staff when
  * the exercise spans both registers (single-clef rendering used to strand
- * C5 on ledger lines above a bass staff). Notes are grouped into measures
- * (with rest-filling for under-filled bars) using the exercise's
- * beatsPerBar/beatUnit, defaulting to 4/4 for older content predating those
- * fields.
+ * C5 on ledger lines above a bass staff). `engrave` does the rest: bars from
+ * the exercise's beatsPerBar/beatUnit (4/4 for older content predating those
+ * fields), chords, ties, the fewest correct rests, and pitch spelling.
+ *
+ * `key` is the key of the song an excerpt comes from: it is drawn as a key
+ * signature. Authored lessons pass none — their sharps and flats are often the
+ * point of the lesson, so every accidental stays written out, but notes are
+ * still SPELLED for the key the notes imply (B♭, not A♯, in an F-major tune).
  */
-function notationFor(exercise: MidiExerciseDef) {
-  const beatsPerBar = exercise.beatsPerBar ?? 4;
-  const beatUnit = exercise.beatUnit ?? 4;
-  const timeSignature = `${beatsPerBar}/${beatUnit}`;
-
-  const beatEventsFor = (events: typeof exercise.expected): BeatEvent[] => {
-    const groups = new Map<number, typeof exercise.expected>();
-    for (const event of events) groups.set(event.startBeat, [...(groups.get(event.startBeat) ?? []), event]);
-    return [...groups.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([startBeat, group]) => ({
-        ids: group.map((event) => event.id),
-        keys: group.map((event) => midiToVexKey(event.note)),
-        startBeat,
-        durationBeats: Math.max(...group.map((event) => event.durationBeats)),
-      }));
-  };
-
-  // How many measures a hand's events naturally span, from measure 0 through
-  // the last measure containing a note (mirrors groupIntoMeasures' own
-  // measureIndex arithmetic).
-  const measureCountFor = (events: typeof exercise.expected): number =>
-    events.length === 0 ? 0 : Math.floor(Math.max(...events.map((event) => event.startBeat)) / beatsPerBar) + 1;
-
-  const treble = exercise.expected.filter((event) => event.note >= 60);
-  const bass = exercise.expected.filter((event) => event.note < 60);
-  if (treble.length > 0 && bass.length > 0) {
-    // Both hands are grouped independently, so a hand that rests for a full
-    // measure needs a shared minMeasureCount to keep array position aligned
-    // with absolute bar number between the two staves (see groupIntoMeasures).
-    const sharedMeasureCount = Math.max(measureCountFor(treble), measureCountFor(bass));
-    return {
-      grandStaff: true,
-      treble: {
-        clef: "treble",
-        timeSignature,
-        measures: groupIntoMeasures(beatEventsFor(treble), beatsPerBar, sharedMeasureCount).map((notes) => ({ notes })),
-      },
-      bass: {
-        clef: "bass",
-        timeSignature,
-        measures: groupIntoMeasures(beatEventsFor(bass), beatsPerBar, sharedMeasureCount).map((notes) => ({ notes })),
-      },
-    };
-  }
-  const events = treble.length > 0 ? treble : bass;
-  return {
-    clef: treble.length > 0 ? "treble" : "bass",
-    timeSignature,
-    measures: groupIntoMeasures(beatEventsFor(events), beatsPerBar).map((notes) => ({ notes })),
-  };
+export function notationFor(exercise: MidiExerciseDef, key?: KeyInfo) {
+  const numerator = exercise.beatsPerBar ?? 4;
+  const denominator = exercise.beatUnit ?? 4;
+  // Exercise beats are NOTATED beats (eighths in 6/8); engrave works in quarter notes.
+  const quartersPerBeat = 4 / denominator;
+  const input: EngraveInputNote[] = exercise.expected.map((event) => ({
+    id: event.id,
+    midi: event.note,
+    staff: event.note >= 60 ? "treble" : "bass",
+    startBeat: event.startBeat * quartersPerBeat,
+    endBeat: (event.startBeat + event.durationBeats) * quartersPerBeat,
+  }));
+  const hasTreble = input.some((n) => n.staff === "treble");
+  const hasBass = input.some((n) => n.staff === "bass");
+  const staves: StaffName[] = hasTreble && hasBass ? ["treble", "bass"] : [hasBass ? "bass" : "treble"];
+  const spellingKey = key ?? estimateKey(exercise.expected.map((event) => ({ midi: event.note, weight: event.durationBeats })));
+  const { staves: engraved } = engrave(input, staves, {
+    meters: [{ startBeat: 0, numerator, denominator }],
+    keys: [{ startBeat: 0, key: spellingKey }],
+    showKeySignature: key !== undefined,
+  });
+  if (staves.length === 2) return { grandStaff: true, treble: engraved.treble, bass: engraved.bass };
+  return { ...engraved[staves[0]] };
 }
 
 function SubmetricBar({ label, value }: { label: string; value: number }) {
@@ -168,7 +147,7 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock }: Props) {
+export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey }: Props) {
   const { subscribe, mockAdapter } = useMidiContext();
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
@@ -276,7 +255,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     [],
   );
 
-  const notation = useMemo(() => (exercise ? notationFor(exercise) : null), [exercise]);
+  const notation = useMemo(() => (exercise ? notationFor(exercise, notationKey) : null), [exercise, notationKey]);
 
   if (!exercise) {
     return <section className="card p-4 text-sm">Loading exercise…</section>;

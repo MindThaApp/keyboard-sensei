@@ -1,8 +1,8 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import NotationRenderer, { type NotationRendererHandle } from "../notation/NotationRenderer";
-import { groupIntoMeasures, measureIndexForBeat, midiToVexKey, type BeatEvent } from "../../utils/measureNotation";
-import { barRangesFrom, type SongBeatGrid, type TimeSignatureSegment } from "../../utils/playalongSong";
+import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { barRangesFrom, type SongBeatGrid, type SongKeyChange, type TimeSignatureSegment } from "../../utils/playalongSong";
 
 export interface ScrollingScoreHandle {
   /** Called from the EXISTING play-along rAF loop, every frame — mutates the
@@ -18,6 +18,7 @@ interface Props {
   notes: PlayAlongNote[];
   grid: SongBeatGrid;
   timeSignatureSegments: TimeSignatureSegment[];
+  keys: SongKeyChange[];
   verticalRange?: { lowestNote: number; highestNote: number };
 }
 
@@ -157,17 +158,15 @@ export function evalMonotoneCubic(spline: MonotoneCubicSpline, x: number): numbe
  * FULL tempo map (see `buildBeatGrid` in playalongSong.ts) — tempo-map-
  * correct for any rubato, not a fixed-BPM approximation. Denominator-aware:
  * a notated beat in 9/8 is 2/3 of a quarter note, not a whole one (Clair de
- * Lune, this feature's rubato verification piece, is in 9/8) — converting via
- * `4 / bar.denominator` keeps the beat axis in the same quarter-note units
- * `groupIntoMeasures`/`measureIndexForBeat` (measureNotation.ts) expect.
+ * Lune's music is in 9/8) — converting via `4 / bar.denominator` keeps the
+ * beat axis in the quarter-note units utils/engraving.ts expects.
  *
  * These SAME anchors are used both to quantize notes for rendering
- * (`quantizeNotesToGrid`, note.startS -> beat) and to place the highlight
+ * (`engraveSong`, note.startS -> beat) and to place the highlight
  * (songTimeS -> beat, in ScrollingScore's setSongTime) — using one shared
  * mapping for both is what keeps the highlight landing on the note actually
  * sounding regardless of how the tempo wanders, instead of drifting the way
- * a fixed-BPM conversion would (see NotationPreviewStrip's quantizeToBeats,
- * which accepts that drift because it's "display only").
+ * a fixed-BPM conversion would.
  */
 export function buildQuarterBeatAnchors(grid: SongBeatGrid, segments: TimeSignatureSegment[]): Point[] {
   if (grid.bars.length === 0) return [{ x: 0, y: 0 }];
@@ -190,9 +189,6 @@ export function buildQuarterBeatAnchors(grid: SongBeatGrid, segments: TimeSignat
   return anchors;
 }
 
-const SIXTEENTH = 0.25;
-const snapToSixteenth = (beats: number): number => Math.round(beats / SIXTEENTH) * SIXTEENTH;
-
 export interface ScrollNote {
   id: string;
   midi: number;
@@ -202,28 +198,66 @@ export interface ScrollNote {
   durationBeats: number;
 }
 
-/** Quantizes note times to beats via the tempo-map-correct anchors above (NOT a fixed BPM). */
-export function quantizeNotesToGrid(notes: PlayAlongNote[], anchors: Point[]): ScrollNote[] {
-  return notes.map((n, i) => {
-    const startBeat = snapToSixteenth(lerpSeries(anchors, n.startS));
-    const endBeat = snapToSixteenth(lerpSeries(anchors, n.startS + n.durationS));
-    return {
-      id: `n${i}`,
-      midi: n.midi,
-      hand: n.hand,
-      startBeat,
-      durationBeats: Math.max(SIXTEENTH, endBeat - startBeat),
-    };
+/**
+ * Engraves the whole song as a grand staff. Note times go to beats through
+ * the tempo-map-correct anchors above (NOT a fixed BPM), then `engrave`
+ * quantizes them to the meter's grid (sixteenths, or triplets where the
+ * playing is in threes), spells them in the song's key(s), and lays out
+ * chords, ties and rests. `legato` absorbs the small early releases of a
+ * human performance that would otherwise be notated as rest clutter.
+ */
+export function engraveSong(
+  notes: PlayAlongNote[],
+  anchors: Point[],
+  segments: TimeSignatureSegment[],
+  keys: SongKeyChange[],
+  barCount: number,
+): { data: Record<string, unknown>; scrollNotes: ScrollNote[] } {
+  const input: EngraveInputNote[] = notes.map((n, i) => ({
+    id: `n${i}`,
+    midi: n.midi,
+    staff: n.hand === "left" ? "bass" : "treble",
+    startBeat: lerpSeries(anchors, n.startS),
+    endBeat: lerpSeries(anchors, n.startS + n.durationS),
+  }));
+  // A melody-only song (the beginner pack) gets one staff, not a grand staff
+  // whose bass is nothing but whole rests.
+  const staves: StaffName[] = (["treble", "bass"] as const).filter((staff) => input.some((n) => n.staff === staff));
+  if (staves.length === 0) staves.push("treble");
+  const result = engrave(input, staves, {
+    meters: segments.map((seg) => ({ startBeat: seg.startBeat, numerator: seg.numerator, denominator: seg.denominator })),
+    keys: keys.map((k) => ({ startBeat: k.startBeat, key: k.key })),
+    showKeySignature: true,
+    minMeasureCount: barCount,
+    legato: true,
+    clefChanges: true,
   });
+  return {
+    data:
+      staves.length === 2
+        ? { grandStaff: true, treble: result.staves.treble, bass: result.staves.bass }
+        : { ...result.staves[staves[0]] },
+    scrollNotes: result.quantized.map((q) => ({
+      id: q.id,
+      midi: q.midi,
+      hand: q.staff === "bass" ? "left" : "right",
+      startBeat: q.startBeat,
+      durationBeats: q.durationBeats,
+    })),
+  };
 }
 
-const VIEWPORT_HEIGHT_PX = 240;
+const DEFAULT_VIEWPORT_HEIGHT_PX = 240;
+// The viewport takes the rendered score's own height (a wide-ranging piece
+// needs ledger lines a fixed 240px clipped off), within these bounds.
+const MIN_VIEWPORT_HEIGHT_PX = 160;
+const MAX_VIEWPORT_HEIGHT_PX = 340;
 
 /**
  * A continuous, teleprompter-style scrolling score: one endless horizontal
  * ribbon of notation with the currently-sounding note(s) highlighted (via
- * NotationRenderer's existing `activeNoteIds`, same mechanism
- * NotationPreviewStrip already uses). At the start the highlight moves
+ * NotationRenderer's `setActiveNoteIds`, a CSS-class toggle on the drawn
+ * SVG). At the start the highlight moves
  * rightward while the ribbon stays still; once it reaches the viewport's
  * horizontal centre it pins there and the ribbon scrolls right-to-left
  * underneath it instead; near the end (once the ribbon has run out) the
@@ -239,16 +273,15 @@ const VIEWPORT_HEIGHT_PX = 240;
  * paper over the seam.
  */
 const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function ScrollingScore(
-  { notes, grid, timeSignatureSegments, verticalRange },
+  { notes, grid, timeSignatureSegments, keys, verticalRange },
   ref,
 ) {
   const anchors = useMemo(() => buildQuarterBeatAnchors(grid, timeSignatureSegments), [grid, timeSignatureSegments]);
-  const scrollNotes = useMemo(() => quantizeNotesToGrid(notes, anchors), [notes, anchors]);
-  const barLengths = useMemo(
-    () => barRangesFrom(timeSignatureSegments, 0, grid.bars.length).map((r) => r.beatsPerBar),
-    [timeSignatureSegments, grid.bars.length],
+  const { data, scrollNotes } = useMemo(
+    () => engraveSong(notes, anchors, timeSignatureSegments, keys, grid.bars.length),
+    [notes, anchors, timeSignatureSegments, keys, grid.bars.length],
   );
-  const barLengthsKey = barLengths.join(",");
+  const idToBeat = useMemo(() => new Map(scrollNotes.map((n) => [n.id, n.startBeat])), [scrollNotes]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const ribbonRef = useRef<HTMLDivElement>(null);
@@ -260,47 +293,14 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
   // a monotone cubic built from them is what setSongTime actually evaluates
   // (see buildMonotoneCubic's docstring for why not a plain lerp).
   const beatXSplineRef = useRef<MonotoneCubicSpline>({ xs: [], ys: [], ms: [] });
-  const idToBeatRef = useRef<Map<string, number>>(new Map());
+  const idToBeatRef = useRef(idToBeat);
+  idToBeatRef.current = idToBeat;
   // The currently-highlighted note ids. Compared by VALUE every frame in
   // setSongTime; only mutates NotationRenderer's already-drawn SVG classes
   // when the SET actually changes — at the rate notes strike, not at 60fps.
   const activeIdsRef = useRef<Set<string>>(new Set());
 
-  const data = useMemo(() => {
-    const idToBeat = new Map<string, number>();
-    const toBeatEvents = (hand: "left" | "right"): BeatEvent[] => {
-      const groups = new Map<number, ScrollNote[]>();
-      for (const n of scrollNotes.filter((note) => note.hand === hand)) {
-        groups.set(n.startBeat, [...(groups.get(n.startBeat) ?? []), n]);
-      }
-      return [...groups.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(([startBeat, group]) => {
-          for (const n of group) idToBeat.set(n.id, n.startBeat);
-          return {
-            ids: group.map((n) => n.id),
-            keys: group.map((n) => midiToVexKey(n.midi)),
-            startBeat,
-            durationBeats: Math.max(...group.map((n) => n.durationBeats)),
-          };
-        });
-    };
-
-    const right = toBeatEvents("right");
-    const left = toBeatEvents("left");
-    const measureCountFor = (events: BeatEvent[]): number =>
-      events.length === 0 ? 0 : measureIndexForBeat(barLengths, Math.max(...events.map((e) => e.startBeat))) + 1;
-    const sharedMeasureCount = Math.max(measureCountFor(right), measureCountFor(left), barLengths.length);
-
-    idToBeatRef.current = idToBeat;
-    return {
-      grandStaff: true,
-      treble: { clef: "treble", measures: groupIntoMeasures(right, barLengths, sharedMeasureCount).map((n) => ({ notes: n })) },
-      bass: { clef: "bass", measures: groupIntoMeasures(left, barLengths, sharedMeasureCount).map((n) => ({ notes: n })) },
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollNotes, barLengthsKey]);
-
+  const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT_PX);
   const handleLayout = useCallback((positions: { id: string; x: number }[]) => {
     const points: Point[] = [];
     for (const { id, x } of positions) {
@@ -309,6 +309,11 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
       points.push({ x: beat, y: x });
     }
     beatXSplineRef.current = buildMonotoneCubic(points);
+    // Once per (re)draw, never per frame.
+    const renderedHeight = ribbonRef.current?.offsetHeight ?? 0;
+    if (renderedHeight > 0) {
+      setViewportHeight(Math.min(MAX_VIEWPORT_HEIGHT_PX, Math.max(MIN_VIEWPORT_HEIGHT_PX, renderedHeight)));
+    }
   }, []);
 
   useImperativeHandle(
@@ -356,7 +361,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
 
   return (
     <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
-      <div ref={viewportRef} className="relative overflow-hidden" style={{ height: VIEWPORT_HEIGHT_PX }}>
+      <div ref={viewportRef} className="relative overflow-hidden" style={{ height: viewportHeight }}>
         <div ref={ribbonRef} className="absolute left-0 top-0 will-change-transform">
           <NotationRenderer
             ref={notationRef}

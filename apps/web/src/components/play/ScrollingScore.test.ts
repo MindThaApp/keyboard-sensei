@@ -6,8 +6,10 @@ import {
   buildQuarterBeatAnchors,
   evalMonotoneCubic,
   lerpSeries,
-  quantizeNotesToGrid,
+  engraveSong,
 } from "./ScrollingScore";
+
+const cMajor = [{ startBeat: 0, startS: 0, key: { fifths: 0, mode: "major" as const } }];
 
 /** Steady 120bpm, 4/4, 2 bars — a beat every 0.5s, a bar every 2s. */
 function steady4_4Grid(): SongBeatGrid {
@@ -154,11 +156,11 @@ describe("buildMonotoneCubic / evalMonotoneCubic", () => {
   });
 });
 
-describe("quantizeNotesToGrid", () => {
+describe("engraveSong quantization", () => {
   it("converts note.startS/durationS to quarter-note beats via the grid anchors, matching a fixed-BPM conversion when the tempo really is steady", () => {
     const anchors = buildQuarterBeatAnchors(steady4_4Grid(), segments4_4);
     // 120bpm: 0.5s/beat. A note starting at 0.75s, lasting 0.5s, starts on beat 1.5 and lasts 1 beat.
-    const [quantized] = quantizeNotesToGrid([note(60, 0.75, 0.5)], anchors);
+    const [quantized] = engraveSong([note(60, 0.75, 0.5)], anchors, segments4_4, cMajor, 2).scrollNotes;
     expect(quantized.startBeat).toBeCloseTo(1.5);
     expect(quantized.durationBeats).toBeCloseTo(1);
   });
@@ -184,7 +186,7 @@ describe("quantizeNotesToGrid", () => {
     const grid: SongBeatGrid = { bars, beats, steadyBpm: null, clickSafe: false };
     const anchors = buildQuarterBeatAnchors(grid, segments4_4);
     // A note starting exactly at t=3s (the second beat of bar 1, now 1s long) must land on quarter-beat 5, not 6.
-    const [quantized] = quantizeNotesToGrid([note(60, 3, 0.25)], anchors);
+    const [quantized] = engraveSong([note(60, 3, 0.25)], anchors, segments4_4, cMajor, 2).scrollNotes;
     expect(quantized.startBeat).toBeCloseTo(5);
   });
 });
