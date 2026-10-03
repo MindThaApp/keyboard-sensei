@@ -82,7 +82,7 @@ export const repertoireExercises: MidiExercise[] = [
 
 export const repertoireLessons: Lesson[] = [
   defineLesson({
-    n: 25, title: "Ode to Joy (Beethoven)", level: "intermediate", branch: "repertoire",
+    id: "lesson-25", title: "Ode to Joy (Beethoven)", level: "intermediate", branch: "repertoire",
     estimatedMinutes: 20,
     objectives: [
       "Play the full sixteen-beat Ode to Joy phrase pair from memory or score without stopping",
@@ -110,7 +110,7 @@ export const repertoireLessons: Lesson[] = [
     skillRewards: rewards({ sight_reading: 2, note_reading: 3, technique: 2, timing: 2, rhythm: 2 }),
   }),
   defineLesson({
-    n: 26, title: "Mozart's theme: Ah! vous dirai-je, maman", level: "intermediate", branch: "repertoire",
+    id: "lesson-26", title: "Mozart's theme: Ah! vous dirai-je, maman", level: "intermediate", branch: "repertoire",
     estimatedMinutes: 22,
     objectives: [
       "Play the melody and the sustained left-hand bass line together at one steady pulse",
@@ -142,7 +142,7 @@ export const repertoireLessons: Lesson[] = [
     skillRewards: rewards({ note_reading: 3, technique: 3, timing: 3, rhythm: 2, sight_reading: 1 }),
   }),
   defineLesson({
-    n: 27, title: "Minuet in G (Petzold)", level: "intermediate", branch: "repertoire",
+    id: "lesson-27", title: "Minuet in G (Petzold)", level: "intermediate", branch: "repertoire",
     estimatedMinutes: 25,
     objectives: [
       "Play the four-bar minuet opening with even eighth-note runs between the quarter-note landings",

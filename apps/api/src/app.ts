@@ -26,6 +26,8 @@ import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { dashboardRouter } from "./dashboard.js";
 import { unlockLesson } from "./progress.js";
+import { narrationVoiceIdSchema } from "./narration-voices.js";
+import { instrumentUploadRateLimit, loginRateLimit, registerRateLimit, songUploadRateLimit } from "./rate-limits.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -39,7 +41,7 @@ const registerSchema = credentials.extend({
 const updateProfileSchema = z
   .object({
     display_name: z.string().trim().min(1).max(80).optional(),
-    narration_voice_id: z.string().min(1).max(100).nullable().optional(),
+    narration_voice_id: narrationVoiceIdSchema.nullable().optional(),
   })
   .refine(
     (value) => value.display_name !== undefined || value.narration_voice_id !== undefined,
@@ -47,7 +49,7 @@ const updateProfileSchema = z
   );
 
 const narrationSchema = z.object({
-  voiceId: z.string().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/),
+  voiceId: narrationVoiceIdSchema,
 });
 
 const changePasswordSchema = z.object({
@@ -129,6 +131,10 @@ const lessonTitleFromJson = (lessonJson: Prisma.JsonValue): string => {
 
 export const app: ReturnType<typeof express> = express();
 
+// Behind Caddy -> nginx in the LAN deploy; without this every request appears to come
+// from the proxy and the IP-keyed auth rate limits would be shared by all clients.
+app.set("trust proxy", env.TRUST_PROXY);
+
 app.use(
   cors({
     origin: env.CORS_ORIGIN.split(",").map((value) => value.trim()),
@@ -144,8 +150,14 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.post("/auth/register", async (req, res, next) => {
+app.post("/auth/register", registerRateLimit, async (req, res, next) => {
   try {
+    if (!env.REGISTRATION_OPEN) {
+      res.status(403).json({
+        error: { code: "registration_closed", message: "Sign-up is closed. Ask an administrator for an account." },
+      });
+      return;
+    }
     const input = registerSchema.parse(req.body);
     const password_hash = await bcrypt.hash(input.password, 12);
     const user = await prisma.user.create({
@@ -170,7 +182,7 @@ app.post("/auth/register", async (req, res, next) => {
   }
 });
 
-app.post("/auth/login", async (req, res, next) => {
+app.post("/auth/login", loginRateLimit, async (req, res, next) => {
   try {
     const input = credentials.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
@@ -216,6 +228,10 @@ app.get("/tts/audio/:id", async (req, res, next) => {
 });
 
 app.use(requireAuth);
+
+// Path-scoped (not per-route) so they run after requireAuth and can key on req.userId.
+app.use("/songs/upload", songUploadRateLimit);
+app.use("/instruments/upload", instrumentUploadRateLimit);
 
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
@@ -287,6 +303,7 @@ app.get("/lessons", async (req, res, next) => {
     const uid = userId(req);
     const admin = await isAdmin(uid);
     const rows = await prisma.lesson.findMany({
+      where: { retired_at: null },
       orderBy: { order: "asc" },
       include: { progress: { where: { user_id: uid } } },
     });
@@ -316,10 +333,10 @@ app.get("/lessons/:id", async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         progress: { where: { user_id: userId(req) } },
-        exercises: true,
+        exercises: { where: { retired_at: null } },
       },
     });
-    if (!row) {
+    if (!row || row.retired_at) {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
@@ -374,6 +391,8 @@ app.post("/lessons/:lessonId/sections/:sectionIndex/narrate", async (req, res, n
       return;
     }
     const result = await getOrCreateNarration(prisma, {
+      userId: userId(req),
+      userDailyLimit: env.TTS_USER_DAILY_LIMIT,
       lessonId: lesson.id,
       sectionIndex,
       voiceId,
@@ -382,6 +401,10 @@ app.post("/lessons/:lessonId/sections/:sectionIndex/narrate", async (req, res, n
     res.json({ audioUrl: `/tts/audio/${result.narration.id}`, cached: result.cached, usage: result.usage });
   } catch (e) {
     if (e instanceof TtsLimitError) {
+      if (e.scope === "user-daily") {
+        res.status(429).json({ error: { code: "tts_user_daily_limit_reached", message: e.message } });
+        return;
+      }
       res.status(402).json({ error: { code: "tts_limit_reached", message: e.message } });
       return;
     }
@@ -396,7 +419,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       where: { id: req.params.id },
       include: { lesson: true },
     });
-    if (!row) {
+    if (!row || row.retired_at || row.lesson.retired_at) {
       res.status(404).json({ error: { code: "not_found", message: "Exercise not found" } });
       return;
     }
@@ -463,6 +486,7 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
     // so we scan. The lessons table is small (dozens of rows), so a full scan per
     // answer is fine; prefer this clarity over a raw-SQL jsonpath query.
     const rows = await prisma.lesson.findMany({
+      where: { retired_at: null },
       select: { id: true, order: true, lesson_json: true },
     });
 
@@ -482,7 +506,10 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
       return;
     }
     if (selectedAnswer >= found.question.options.length) {
-      throw new Error("Selected answer is outside the available options");
+      res.status(400).json({
+        error: { code: "invalid_answer", message: "Selected answer is outside the available options" },
+      });
+      return;
     }
 
     // correctIndex is optional on the shared QuizQuestion type (it is stripped from
@@ -606,6 +633,7 @@ app.post("/users/me/assessment-placement", async (req, res, next) => {
     if (placement.completedLessonCount > 0) {
       const uid = userId(req);
       const rows = await prisma.lesson.findMany({
+        where: { retired_at: null },
         orderBy: { order: "asc" },
         take: placement.completedLessonCount + 1,
       });
@@ -681,6 +709,15 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
     res.status(404).json({ error: { code: "not_found", message: "Record not found" } });
+    return;
+  }
+  // Errors that carry an explicit 4xx status are client errors, not 500s: e.g.
+  // createInstrumentFromBytes's Object.assign(new Error(...), { statusCode: 422 }), and
+  // body-parser's own errors (malformed JSON -> 400, oversized body -> 413).
+  const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+  if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500) {
+    const code = statusCode === 413 ? "payload_too_large" : statusCode === 422 ? "unprocessable" : "bad_request";
+    res.status(statusCode).json({ error: { code, message: (error as Error).message } });
     return;
   }
   console.error(error);
