@@ -1,5 +1,6 @@
 import type { Lesson, MidiExercise } from "@keyboard-sensei/shared-types";
 import { defineLesson, quiz, midiSection, note, rewards, ELEMENTARY_CONFIG, INTERMEDIATE_CONFIG } from "./helpers.js";
+import { vexKey } from "./build.js";
 
 // Repertoire batch 1 — lessons 25–27: first real public-domain pieces.
 // Each piece's VexFlow notation is generated from the same [pitch, startBeat, durationBeats]
@@ -7,14 +8,9 @@ import { defineLesson, quiz, midiSection, note, rewards, ELEMENTARY_CONFIG, INTE
 
 type NoteDatum = readonly [pitch: number, startBeat: number, durationBeats: number];
 
-const KEY_FOR_PITCH: Record<number, string> = {
-  41: "f/2", 43: "g/2", 48: "c/3",
-  60: "c/4", 62: "d/4", 64: "e/4", 65: "f/4", 67: "g/4", 69: "a/4", 71: "b/4",
-  72: "c/5", 74: "d/5", 76: "e/5", 78: "f#/5", 79: "g/5",
-};
 const DURATION_FOR_BEATS: Record<number, string> = { 0.5: "8", 1: "q", 1.5: "qd", 2: "h", 4: "w" };
 const vexNotes = (data: readonly NoteDatum[]) =>
-  data.map(([pitch, , beats]) => ({ keys: [KEY_FOR_PITCH[pitch]!], duration: DURATION_FOR_BEATS[beats]! }));
+  data.map(([pitch, , beats]) => ({ keys: [vexKey(pitch)], duration: DURATION_FOR_BEATS[beats]! }));
 
 // --- Lesson 25: Ode to Joy (Beethoven) — right hand, C position, 4/4 ---------------------------
 
@@ -74,7 +70,7 @@ export const repertoireExercises: MidiExercise[] = [
     ],
   },
   {
-    exerciseId: "exercise-27", tempoBpm: 88, difficulty: "intermediate", ...INTERMEDIATE_CONFIG,
+    exerciseId: "exercise-27", tempoBpm: 88, difficulty: "intermediate", ...INTERMEDIATE_CONFIG, beatsPerBar: 3,
     expected: MINUET_IN_G.map(([pitch, start, beats], i) =>
       note(`minuet-${i}`, pitch, start, beats, "right", null)),
   },
@@ -83,7 +79,6 @@ export const repertoireExercises: MidiExercise[] = [
 export const repertoireLessons: Lesson[] = [
   defineLesson({
     id: "lesson-25", title: "Ode to Joy (Beethoven)", level: "intermediate", branch: "repertoire",
-    estimatedMinutes: 20,
     objectives: [
       "Play the full sixteen-beat Ode to Joy phrase pair from memory or score without stopping",
       "Hold the dotted-quarter/eighth cadence figure in bars 4 and 8 without rushing the short note",
@@ -111,7 +106,6 @@ export const repertoireLessons: Lesson[] = [
   }),
   defineLesson({
     id: "lesson-26", title: "Mozart's theme: Ah! vous dirai-je, maman", level: "intermediate", branch: "repertoire",
-    estimatedMinutes: 22,
     objectives: [
       "Play the melody and the sustained left-hand bass line together at one steady pulse",
       "Land each left-hand change (C, F, and G bass notes) exactly with its right-hand beat",
@@ -143,7 +137,6 @@ export const repertoireLessons: Lesson[] = [
   }),
   defineLesson({
     id: "lesson-27", title: "Minuet in G (Petzold)", level: "intermediate", branch: "repertoire",
-    estimatedMinutes: 25,
     objectives: [
       "Play the four-bar minuet opening with even eighth-note runs between the quarter-note landings",
       "Count and feel three beats per bar, giving beat 1 a gentle emphasis",

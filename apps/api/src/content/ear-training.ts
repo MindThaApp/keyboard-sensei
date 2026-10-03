@@ -50,7 +50,6 @@ export const earTrainingLessons: Lesson[] = [
     title: "Ear training: steps and skips",
     level: "intermediate",
     branch: "theory",
-    estimatedMinutes: 15,
     objectives: [
       "Tell a step (2nd) from a skip (3rd) by sound alone, without looking at the keys",
       "Play back a short three-note pattern from memory after hearing it",
@@ -98,7 +97,6 @@ export const earTrainingLessons: Lesson[] = [
     title: "Ear training: major or minor?",
     level: "intermediate",
     branch: "theory",
-    estimatedMinutes: 15,
     objectives: [
       "Recognize a triad as major or minor by its sound alone",
       "Play back a triad heard as one chord, matching all three notes",
@@ -146,7 +144,6 @@ export const earTrainingLessons: Lesson[] = [
     title: "Ear training: play a melody by ear",
     level: "intermediate",
     branch: "theory",
-    estimatedMinutes: 18,
     objectives: [
       "Catch a six-note melody by ear using direction and step-vs-skip listening",
       "Play back a heard melody from memory, keeping a steady pulse",
