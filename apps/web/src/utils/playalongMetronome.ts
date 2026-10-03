@@ -1,4 +1,4 @@
-import type { BeatGridEntry } from "./playalongSong";
+import type { BeatGridEntry } from "@keyboard-sensei/playalong-core";
 import { playClick, type MetronomeSound } from "./clickTimbres";
 import { registerAudioContext } from "./audioUnlock";
 

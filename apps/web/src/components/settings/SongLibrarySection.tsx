@@ -15,7 +15,7 @@ import {
   type UrlPreview,
 } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { parsePlayAlongSong } from "../../utils/playalongSong";
+import { parsePlayAlongSong } from "@keyboard-sensei/playalong-core";
 import { pianoSynth } from "../../utils/synth";
 import {
   DEFAULT_FILTERS,

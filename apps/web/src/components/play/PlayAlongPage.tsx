@@ -7,8 +7,7 @@ import {
   type PlayAlongResult,
 } from "@keyboard-sensei/midi-engine";
 import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
-import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
-import { PlayAlongEngine, type PlayAlongLiveStats } from "../../utils/playalongEngine";
+import { PlayAlongEngine, parsePlayAlongSong, type ParsedPlayAlongSong, type PlayAlongLiveStats } from "@keyboard-sensei/playalong-core";
 import { PlayAlongMetronome, CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
 import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
 import { useMidiContext } from "../midi/MidiContext";
@@ -26,6 +25,7 @@ import { OsmdNotation } from "./OsmdNotation";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout, type VisibilityMode } from "./stageLayout";
 import { formatDuration } from "../../utils/songLibrary";
+import { pianoSynth } from "../../utils/synth";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -135,7 +135,7 @@ export default function PlayAlongPage() {
   // actually takes effect on resume rather than only on the next attempt.
   // (lookaheadS needs no plumbing: drawWaterfall reads it from settings each frame.)
   useEffect(() => {
-    engineRef.current?.setTempoPct(settings.tempoPct);
+    engineRef.current?.setTempoPct(settings.tempoPct, performance.now());
   }, [settings.tempoPct]);
   useEffect(() => {
     engineRef.current?.setWaitMode(settings.waitMode);
@@ -248,10 +248,10 @@ export default function PlayAlongPage() {
     const engine = engineRef.current;
     if (!engine) return;
     if (engine.isPaused) {
-      engine.resume();
+      engine.resume(performance.now());
       setPaused(false);
     } else {
-      engine.pause();
+      engine.pause(performance.now());
       setPaused(true);
     }
   }, []);
@@ -357,11 +357,28 @@ export default function PlayAlongPage() {
       },
     });
     engineRef.current = engine;
+    // The engine announces guide notes; it no longer plays them itself.
+    const guideTimers = new Set<number>();
+    engine.on((event) => {
+      if (event.type === "guideSilence") {
+        for (const timer of guideTimers) window.clearTimeout(timer);
+        guideTimers.clear();
+        pianoSynth.stopAll();
+        return;
+      }
+      if (event.type !== "guideNoteOn" && event.type !== "guideNoteOff") return;
+      const timer = window.setTimeout(() => {
+        guideTimers.delete(timer);
+        if (event.type === "guideNoteOn") pianoSynth.playNote(event.midi, event.velocity);
+        else pianoSynth.stopNote(event.midi);
+      }, Math.max(0, event.atMs - performance.now()));
+      guideTimers.add(timer);
+    });
     setPaused(false);
     // clickSafe is false on the handful of recordings whose tempo lurches so hard
     // that a following click is a conductor, not a metronome — see buildBeatGrid.
     metronomeRef.current = parsed.grid.clickSafe ? new PlayAlongMetronome(parsed.grid.beats) : null;
-    engine.start();
+    engine.start(performance.now());
     setPhase("playing");
 
     let lastHudUpdate = 0;
@@ -369,7 +386,7 @@ export default function PlayAlongPage() {
       const active = engineRef.current;
       if (!active) return;
       const finished = active.tick(performance.now());
-      const songTime = active.songTime();
+      const songTime = active.songTime(performance.now());
 
       // Runs every frame (unlike the ~120ms-throttled HUD state below) and
       // mutates the ribbon's DOM transform directly via refs inside
