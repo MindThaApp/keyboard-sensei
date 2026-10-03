@@ -114,22 +114,26 @@ export default function SkillAssessmentPage({
   };
 
   return (
-    // Was max-w-3xl (768px) — narrower than the rest of the app, which made the
-    // keyboard on this page (the first thing a new user sees) tiny. Full-bleed,
-    // like every other page that shows a piano.
-    <main className="mx-[calc(50%-50vw)] w-screen space-y-5 px-4 py-8">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-          Optional skill assessment
-        </p>
-        <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Three MIDI prompts. Strong, consistent results unlock the first four lessons; otherwise you start at
-          lesson 1.
-        </p>
-        <div className="mt-3">
-          <StepIndicator index={index} currentDone={result !== null} />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
+            Optional skill assessment
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Three MIDI prompts. Strong, consistent results unlock the first four lessons; otherwise you start at
+            lesson 1.
+          </p>
+          <div className="mt-3">
+            <StepIndicator index={index} currentDone={result !== null} />
+          </div>
         </div>
+        {/* Up top, not below the exercise: a beginner shouldn't have to scroll past a
+            keyboard test to find the way out of it. */}
+        <button className="primary-button shrink-0" onClick={onSkip}>
+          Skip — I’m new to piano
+        </button>
       </div>
       <MidiStatusBar />
       <MidiExercise
@@ -145,9 +149,6 @@ export default function SkillAssessmentPage({
           {index === prompts.length - 1 ? "See placement" : "Next prompt"}
         </button>
       )}
-      <button className="secondary-button" onClick={onSkip}>
-        Skip — I’m new to piano
-      </button>
-    </main>
+    </div>
   );
 }

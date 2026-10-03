@@ -4,6 +4,10 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      screens: {
+        // Where the header's inline links stop fitting and collapse behind a Menu button.
+        nav: "900px",
+      },
       colors: {
         ink: "#1f2933",
         // The crimson felt strip that runs behind a piano's keys — primary accent.
