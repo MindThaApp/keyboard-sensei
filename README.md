@@ -81,8 +81,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, tests, and builds on
 
 To deploy from those prebuilt images, use `docker-compose.ghcr.yml`. The server needs a one-time `docker login ghcr.io` with a personal access token that has the `read:packages` scope (the repo and images are private).
 
-The alternative is building on the server itself with `docker-compose.deploy.yml` (rsync the repo over, then `docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build`). Prisma migrations apply automatically on container start.
+The alternative is building on the server itself with `docker-compose.deploy.yml` (rsync a clean checkout of `HEAD` over, then `docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build`). Prisma migrations apply automatically on container start.
 
-## Roadmap
+## Operations
 
-The maintained roadmap and current project status live in [CLAUDE.md](CLAUDE.md).
+[docs/operations.md](docs/operations.md) covers the live server: the deploy procedure (always from a clean worktree at `HEAD`), the server-side asset fetch/generate commands (library songs, beginner tunes, Essentials pack, instruments), backups and restore, LAN HTTPS and CA trust for Web MIDI, environment variables, and a table of gotchas and lessons learned from past bugs. Read the gotchas before changing notation rendering, timing/tempo code, or the play-along render loop.

@@ -193,8 +193,7 @@ export interface KeyboardSizing {
  * keyboard -> default -> ...), the width slider, and the pull-tab drag-to-resize
  * handles. This is the single source of truth a caller hands to two independent
  * renderers (Play-Along's piano AND its falling-note canvas) so they can never
- * compute two different geometries and drift apart — see
- * docs/superpowers/specs/2026-08-19-keyboard-sizing-controls-design.md.
+ * compute two different geometries and drift apart.
  */
 export function useKeyboardSizing({
   defaultRange,
