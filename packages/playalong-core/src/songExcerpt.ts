@@ -1,6 +1,6 @@
 import type { ExpectedNoteEvent, MidiExercise } from "@keyboard-sensei/shared-types";
 import { ELEMENTARY_CONFIG, INTERMEDIATE_CONFIG, BEGINNER_CONFIG } from "@keyboard-sensei/midi-engine";
-import type { ParsedPlayAlongSong } from "./playalongSong";
+import type { ParsedPlayAlongSong } from "./song";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 
 export type PracticeHand = "right" | "left" | "both";

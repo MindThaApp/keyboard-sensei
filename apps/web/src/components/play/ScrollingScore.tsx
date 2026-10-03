@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import NotationRenderer, { type NotationRendererHandle } from "../notation/NotationRenderer";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
-import { barRangesFrom, type SongBeatGrid, type SongKeyChange, type TimeSignatureSegment } from "../../utils/playalongSong";
+import { barRangesFrom, type SongBeatGrid, type SongKeyChange, type TimeSignatureSegment } from "@keyboard-sensei/playalong-core";
 
 export interface ScrollingScoreHandle {
   /** Called from the EXISTING play-along rAF loop, every frame — mutates the

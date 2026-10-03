@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Midi } from "@tonejs/midi";
-import { barRangeContaining, buildBeatGrid, parsePlayAlongSong } from "./playalongSong";
+import { barRangeContaining, buildBeatGrid, parsePlayAlongSong } from "./song";
 
 // Real library files (apps/api/data/midi-library) used as fixtures to prove the
 // denominator-aware bar-length fix against genuine, previously-mismeasured MIDI
 // data rather than only synthetic examples.
-import { hasLibraryFixtures } from "./libraryFixtures";
+import { hasLibraryFixtures } from "./test/libraryFixtures";
 
-const MIDI_LIBRARY_DIR = join(__dirname, "../../../api/data/midi-library");
+const MIDI_LIBRARY_DIR = join(__dirname, "../../../apps/api/data/midi-library");
 
 function loadLibraryFile(name: string): ArrayBuffer {
   const buf = readFileSync(join(MIDI_LIBRARY_DIR, name));

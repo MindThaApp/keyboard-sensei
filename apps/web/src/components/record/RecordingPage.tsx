@@ -4,8 +4,8 @@ import MidiStatusBar from "../midi/MidiStatusBar";
 import { useMidiContext } from "../midi/MidiContext";
 import VirtualPiano from "../piano/VirtualPiano";
 import { uploadSong, type SongGenre } from "../../services/api";
-import { MidiRecorder, type MidiRecordingResult } from "../../utils/midiRecorder";
-import { parsePlayAlongSong } from "../../utils/playalongSong";
+import { MidiRecorder, type MidiRecordingResult } from "@keyboard-sensei/playalong-core";
+import { parsePlayAlongSong } from "@keyboard-sensei/playalong-core";
 import { pianoSynth } from "../../utils/synth";
 
 const GENRES: { value: SongGenre; label: string }[] = [
@@ -66,7 +66,7 @@ export default function RecordingPage() {
       unsubscribeControlChange();
       clearPreview();
       recordingRef.current = false;
-      recorderRef.current.stop(Date.now());
+      recorderRef.current.stop(performance.now());
     };
   }, [subscribe, subscribeControlChange]);
 
@@ -74,7 +74,7 @@ export default function RecordingPage() {
     if (state !== "recording") return undefined;
     const interval = setInterval(() => {
       const snapshot = recorderRef.current.snapshot();
-      setElapsedSec(recorderRef.current.elapsedSecAt(Date.now()));
+      setElapsedSec(recorderRef.current.elapsedSecAt(performance.now()));
       setLiveNoteCount(snapshot.noteCount);
     }, 100);
     return () => clearInterval(interval);
@@ -93,7 +93,7 @@ export default function RecordingPage() {
 
   const stopRecording = () => {
     recordingRef.current = false;
-    const result = recorderRef.current.stop(Date.now());
+    const result = recorderRef.current.stop(performance.now());
     if (!result) {
       setRecording(null);
       setState("idle");
@@ -110,7 +110,7 @@ export default function RecordingPage() {
   const discard = () => {
     clearPreview();
     recordingRef.current = false;
-    recorderRef.current.stop(Date.now());
+    recorderRef.current.stop(performance.now());
     setRecording(null);
     setElapsedSec(0);
     setLiveNoteCount(0);

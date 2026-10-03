@@ -1,0 +1,23 @@
+{
+  // This package's runtime code must run anywhere JavaScript does: the browser, a
+  // React Native app, a Node test runner. So it compiles against the bare language
+  // library, with no DOM and no Node globals. Code that reaches for window,
+  // document, navigator, performance, AudioContext or requestAnimationFrame fails
+  // this typecheck. Tests, which read MIDI fixtures with node:fs, are checked
+  // separately by tsconfig.test.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/test"]
+}

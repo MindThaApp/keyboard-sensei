@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import type { MidiDeviceInfo, RawMidiEvent } from "@keyboard-sensei/shared-types";
-import { MockMidiAdapter, WebMidiAdapter, isWebMidiSupported } from "@keyboard-sensei/midi-engine";
+import { MockMidiAdapter } from "@keyboard-sensei/midi-engine";
+import { WebMidiAdapter, isWebMidiSupported } from "@keyboard-sensei/midi-engine/web";
 import { pianoSynth } from "../../utils/synth";
 import {
   DEFAULT_RANGE,
@@ -64,7 +65,9 @@ const MidiContext = createContext<MidiContextValue | null>(null);
  */
 export function MidiProvider({ children }: { children: ReactNode }) {
   const mockAdapterRef = useRef<MockMidiAdapter | null>(null);
-  if (!mockAdapterRef.current) mockAdapterRef.current = new MockMidiAdapter();
+  // performance.now(): the clock Web MIDI stamps hardware events with, so on-screen
+  // and hardware presses land on one timeline.
+  if (!mockAdapterRef.current) mockAdapterRef.current = new MockMidiAdapter(() => performance.now());
   const webAdapterRef = useRef<WebMidiAdapter | null>(null);
   if (!webAdapterRef.current) webAdapterRef.current = new WebMidiAdapter();
 
@@ -151,16 +154,10 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     setCalibrationState({ status: "idle" });
   }, [setCalibrationState]);
 
-  // MidiAdapter#onNoteOn/onNoteOff have no unsubscribe (by design, per the
-  // shared interface), so this registration must run exactly once even
-  // though React 18 StrictMode double-invokes effects without cleanup in
-  // dev — otherwise every note fires its listeners twice.
-  const listenersRegisteredRef = useRef(false);
-
+  // Every adapter registration returns its own unsubscribe, so this effect
+  // registers in its body and unregisters in its cleanup. Under React 18
+  // StrictMode's mount/unmount/mount that leaves exactly one live set of handlers.
   useEffect(() => {
-    if (listenersRegisteredRef.current) return;
-    listenersRegisteredRef.current = true;
-
     const mockAdapter = mockAdapterRef.current!;
     const webAdapter = webAdapterRef.current!;
     void mockAdapter.connect();
@@ -168,28 +165,35 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     const emit = (event: RawMidiEvent) => {
       for (const listener of listenersRef.current) listener(event);
     };
-    const emitControlChange = (controller: number, value: number) => {
-      const event = { controller, value, timestampMs: Date.now() };
-      for (const listener of controlChangeListenersRef.current) listener(event);
-    };
-
-    mockAdapter.onNoteOn((note, velocity, timestampMs) => {
-      pianoSynth.playNote(note, velocity);
-      emit({ note, velocity, type: "noteon", timestampMs });
-    });
-    mockAdapter.onNoteOff((note, timestampMs) => {
-      pianoSynth.stopNote(note);
-      emit({ note, velocity: 0, type: "noteoff", timestampMs });
-    });
-    mockAdapter.onControlChange((controller, value) => {
+    // Control changes carry the adapter's own timestamp (the performance.now()
+    // basis the notes use). They used to be stamped with Date.now(), which put a
+    // recorded sustain pedal ~decades away from the notes it was holding.
+    const handleControlChange = (controller: number, value: number, timestampMs: number) => {
       if (controller !== 64) return;
-      emitControlChange(controller, value);
+      const event = { controller, value, timestampMs };
+      for (const listener of controlChangeListenersRef.current) listener(event);
       const down = value >= 64;
       pianoSynth.setSustainPedal(down);
       setSustainPedalDown((current) => (current === down ? current : down));
-    });
+    };
+    const handleNoteOff = (note: number, timestampMs: number) => {
+      pianoSynth.stopNote(note);
+      emit({ note, velocity: 0, type: "noteoff", timestampMs });
+    };
 
-    webAdapter.onNoteOn((note, velocity, timestampMs) => {
+    const unsubscribers: (() => void)[] = [];
+    unsubscribers.push(
+      mockAdapter.onNoteOn((note, velocity, timestampMs) => {
+        pianoSynth.playNote(note, velocity);
+        emit({ note, velocity, type: "noteon", timestampMs });
+      }),
+      mockAdapter.onNoteOff(handleNoteOff),
+      mockAdapter.onControlChange(handleControlChange),
+      webAdapter.onNoteOff(handleNoteOff),
+      webAdapter.onControlChange(handleControlChange),
+    );
+
+    unsubscribers.push(webAdapter.onNoteOn((note, velocity, timestampMs) => {
       pianoSynth.playNote(note, velocity);
       const currentCalibration = calibrationRef.current;
       const calibrationHandled = currentCalibration.status !== "idle";
@@ -217,26 +221,19 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         return current;
       });
       emit({ note, velocity, type: "noteon", timestampMs });
-    });
-    webAdapter.onNoteOff((note, timestampMs) => {
-      pianoSynth.stopNote(note);
-      emit({ note, velocity: 0, type: "noteoff", timestampMs });
-    });
-    webAdapter.onControlChange((controller, value) => {
-      if (controller !== 64) return;
-      emitControlChange(controller, value);
-      const down = value >= 64;
-      pianoSynth.setSustainPedal(down);
-      setSustainPedalDown((current) => (current === down ? current : down));
-    });
+    }));
 
-    webAdapter.onStateChange((connectedDevices) => {
+    unsubscribers.push(webAdapter.onStateChange((connectedDevices) => {
       syncDevices(connectedDevices);
       setWebMidiConnected(connectedDevices.length > 0);
       setWebMidiError(connectedDevices.length === 0
         ? "Your MIDI keyboard was disconnected. Plug it back in — it should reconnect automatically."
         : null);
-    });
+    }));
+
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
   }, [syncDevices, setCalibrationState]);
 
   useEffect(() => {
