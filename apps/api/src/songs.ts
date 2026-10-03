@@ -8,6 +8,7 @@ import { requireAdmin } from "./auth.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
 import { attemptSchema, levelOf, personalBests } from "./practice-attempts.js";
+import { rewardPlayAlongAttempt, type Rewards } from "./progression/rewards.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -261,7 +262,14 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
       return;
     }
     const row = await prisma.playAlongAttempt.create({ data: { user_id: userId, song_id: songId, ...input } });
-    res.status(201).json({ id: row.id, score: row.score, accuracy: row.accuracy });
+    // Same policy as lesson attempts: the run is saved; progress awarding never fails it.
+    let rewards: Rewards | null = null;
+    try {
+      rewards = await rewardPlayAlongAttempt(prisma, { userId, attemptId: row.id });
+    } catch (error) {
+      console.error("Awarding progress failed", error);
+    }
+    res.status(201).json({ id: row.id, score: row.score, accuracy: row.accuracy, rewards });
   } catch (e) {
     next(e);
   }

@@ -4,6 +4,8 @@ import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
 import { LEVEL_LABEL, nextLessonFor } from "../../utils/levels";
 import { pathLabel, pathsInOrder, placeInPath } from "../../utils/paths";
+import { lessonStars } from "../../utils/stars";
+import { StarRating } from "../progress/ProgressBits";
 
 const BRANCH_LABEL: Record<string, string> = {
   technique: "Technique",
@@ -65,7 +67,9 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
         {completed ? <CheckIcon /> : locked ? <LockIcon /> : number}
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
+        {/* `relative` makes the truncating line clip the sr-only "(locked)"; without it that
+            span sat past the cut-off text and widened a phone's page by 16px. */}
+        <p className={`relative truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
           {lesson.title}
           {locked && <span className="sr-only"> (locked)</span>}
         </p>
@@ -74,7 +78,12 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
         </p>
       </div>
       <div className="shrink-0 text-right text-xs">
-        {completed && <span className="font-medium tabular-nums text-brass-700 dark:text-brass-300">Best {bestScore}</span>}
+        {completed && (
+          <span className="flex flex-col items-end gap-0.5">
+            <StarRating stars={lessonStars(status, bestScore ?? 0)} className="text-sm" />
+            <span className="font-medium tabular-nums text-brass-700 dark:text-brass-300">Best {bestScore}</span>
+          </span>
+        )}
         {!completed && !locked && (
           <span className="rounded-full bg-felt-50 px-2 py-0.5 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300">
             {isNext ? "Up next" : bestScore ? `Best ${bestScore}` : "Unlocked"}
