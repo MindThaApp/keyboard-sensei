@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
 import { LEVEL_LABEL, nextLessonFor } from "../../utils/levels";
+import { pathLabel, pathsInOrder, placeInPath } from "../../utils/paths";
 
 const BRANCH_LABEL: Record<string, string> = {
   technique: "Technique",
@@ -36,7 +37,7 @@ function ProgressBar({ value, className = "" }: { value: number; className?: str
   );
 }
 
-function LessonRow({ lesson, index, status, bestScore, isNext }: { lesson: LessonListItem; index: number; status: LessonStatus; bestScore: number | null; isNext: boolean }) {
+function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: LessonListItem; number: number; status: LessonStatus; bestScore: number | null; isNext: boolean }) {
   const locked = status === "locked";
   const completed = status === "completed";
 
@@ -61,7 +62,7 @@ function LessonRow({ lesson, index, status, bestScore, isNext }: { lesson: Lesso
               : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
         }`}
       >
-        {completed ? <CheckIcon /> : locked ? <LockIcon /> : index + 1}
+        {completed ? <CheckIcon /> : locked ? <LockIcon /> : number}
       </span>
       <div className="min-w-0 flex-1">
         <p className={`truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
@@ -103,10 +104,10 @@ export default function LessonListPage() {
   const statuses = lessons.map((lesson) => getLessonStatus(progress, lesson));
   const completedCount = statuses.filter((s) => s === "completed").length;
   const nextLesson = nextLessonFor(lessons);
-  const nextIndex = nextLesson ? lessons.indexOf(nextLesson) : -1;
+  const nextPlace = nextLesson ? placeInPath(lessons, nextLesson.id) : null;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
-  const levels = LEVEL_ORDER.filter((level) => lessons.some((l) => l.level === level));
+  const paths = pathsInOrder(lessons);
 
   return (
     <div className="space-y-8">
@@ -120,7 +121,7 @@ export default function LessonListPage() {
             <div>
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{nextLesson.title}</h1>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                Lesson {nextIndex + 1} of {lessons.length} · {LEVEL_LABEL[nextLesson.level]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
+                {pathLabel(nextLesson.path)} · Lesson {nextPlace?.position} of {nextPlace?.total} · {LEVEL_LABEL[nextLesson.level]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
                 {nextLesson.estimatedMinutes} min
                 {nextLesson.progress.bestScore > 0 && <> · Best {nextLesson.progress.bestScore}</>}
               </p>
@@ -142,38 +143,56 @@ export default function LessonListPage() {
         <section className="card p-6 text-center">
           <h1 className="text-2xl font-semibold">Path complete</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            You've completed every lesson in the Classical Technical Path. Keep your hands warm in the Practice Gym.
+            You've completed every lesson in every path. Keep your hands warm in the Practice Gym.
           </p>
         </section>
       )}
 
-      {levels.map((level) => {
-        const levelLessons = lessons.filter((l) => l.level === level);
-        const levelCompleted = levelLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
+      {paths.map((path) => {
+        const pathLessons = lessons.filter((l) => l.path === path);
+        const pathCompleted = pathLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
+        const pathLocked = pathLessons.every((l) => getLessonStatus(progress, l) === "locked");
+        const levels = LEVEL_ORDER.filter((level) => pathLessons.some((l) => l.level === level));
         return (
-          <section key={level}>
-            <div className="mb-3 flex items-center gap-3">
-              <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{LEVEL_LABEL[level]}</h2>
+          <section key={path} className="space-y-5" aria-label={pathLabel(path)}>
+            <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-2 dark:border-slate-700">
+              <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">{pathLabel(path)}</h2>
               <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {levelCompleted}/{levelLessons.length}
+                {pathCompleted}/{pathLessons.length} lessons
               </span>
-              <ProgressBar value={levelLessons.length ? levelCompleted / levelLessons.length : 0} className="w-24" />
+              {pathLocked && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Opens after &ldquo;{lessons.find((l) => l.id === pathLessons[0]!.unlockCriteria.requiresLessonIds[0])?.title}&rdquo;
+                </span>
+              )}
             </div>
-            <ol className="space-y-2">
-              {levelLessons.map((lesson) => {
-                const index = lessons.indexOf(lesson);
-                return (
-                  <LessonRow
-                    key={lesson.id}
-                    lesson={lesson}
-                    index={index}
-                    status={getLessonStatus(progress, lesson)}
-                    bestScore={getLessonBestScore(progress, lesson)}
-                    isNext={index === nextIndex}
-                  />
-                );
-              })}
-            </ol>
+            {levels.map((level) => {
+              const levelLessons = pathLessons.filter((l) => l.level === level);
+              const levelCompleted = levelLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
+              return (
+                <div key={level}>
+                  <div className="mb-3 flex items-center gap-3">
+                    <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{LEVEL_LABEL[level]}</h3>
+                    <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                      {levelCompleted}/{levelLessons.length}
+                    </span>
+                    <ProgressBar value={levelLessons.length ? levelCompleted / levelLessons.length : 0} className="w-24" />
+                  </div>
+                  <ol className="space-y-2">
+                    {levelLessons.map((lesson) => (
+                      <LessonRow
+                        key={lesson.id}
+                        lesson={lesson}
+                        number={pathLessons.indexOf(lesson) + 1}
+                        status={getLessonStatus(progress, lesson)}
+                        bestScore={getLessonBestScore(progress, lesson)}
+                        isNext={lesson === nextLesson}
+                      />
+                    ))}
+                  </ol>
+                </div>
+              );
+            })}
           </section>
         );
       })}

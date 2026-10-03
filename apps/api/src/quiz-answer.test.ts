@@ -1,11 +1,16 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const prismaMock = vi.hoisted(() => ({
-  lesson: { findMany: vi.fn() },
-  quizAttempt: { create: vi.fn(), findMany: vi.fn() },
-  userProgress: { upsert: vi.fn(), updateMany: vi.fn() },
-}));
+const prismaMock = vi.hoisted(() => {
+  const mock = {
+    lesson: { findMany: vi.fn() },
+    quizAttempt: { create: vi.fn(), findMany: vi.fn() },
+    userProgress: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    $transaction: vi.fn(),
+  };
+  mock.$transaction.mockImplementation((work: (tx: typeof mock) => unknown) => work(mock));
+  return mock;
+});
 
 vi.mock("./db.js", () => ({ prisma: prismaMock }));
 
@@ -40,6 +45,9 @@ beforeEach(() => {
   prismaMock.quizAttempt.findMany.mockResolvedValue(lesson.sections.flatMap((section) => section.type === "quiz" ? section.questions.map((item) => ({ question_id: item.id })) : []));
   prismaMock.userProgress.upsert.mockResolvedValue({});
   prismaMock.userProgress.updateMany.mockResolvedValue({ count: 0 });
+  prismaMock.userProgress.findUnique.mockResolvedValue(null);
+  prismaMock.userProgress.findMany.mockResolvedValue([]);
+  prismaMock.$transaction.mockImplementation((work: (tx: typeof prismaMock) => unknown) => work(prismaMock));
 });
 
 describe("POST /quiz-questions/:id/answer", () => {
