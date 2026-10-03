@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
 import SongExcerptPractice from "./SongExcerptPractice";
@@ -50,6 +50,17 @@ export default function PracticeGymPage() {
 
   const selectedSong = songs?.find((s) => s.id === selectedSongId) ?? null;
 
+  // Picking a drill or a song opens its exercise further down the page; bring it on
+  // screen so the keyboard isn't left below the fold.
+  const drillRef = useRef<HTMLDivElement | null>(null);
+  const excerptRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (selectedDrillId) drillRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+  }, [selectedDrillId]);
+  useEffect(() => {
+    if (selectedSongId) excerptRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+  }, [selectedSongId]);
+
   const selectDrill = (id: string) => {
     setSelectedSongId(null);
     setSelectedDrillId(id);
@@ -60,10 +71,7 @@ export default function PracticeGymPage() {
   };
 
   return (
-    // Full-bleed: the app shell caps content at max-w-5xl (1024px), which left the
-    // keyboard cramped even though the screen had room. Same escape hatch
-    // Play-Along uses.
-    <div className="mx-[calc(50%-50vw)] w-screen space-y-4 px-4">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">MIDI Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>
@@ -96,14 +104,16 @@ export default function PracticeGymPage() {
       </div>
 
       {selectedDrill && (
-        <MidiExercise
-          key={selectedDrill.id}
-          exerciseId={selectedDrill.exercise.exerciseId}
-          title={selectedDrill.label}
-          instructions={selectedDrill.description}
-          lessonId={null}
-          exercise={selectedDrill.exercise}
-        />
+        <div ref={drillRef} className="scroll-mt-3">
+          <MidiExercise
+            key={selectedDrill.id}
+            exerciseId={selectedDrill.exercise.exerciseId}
+            title={selectedDrill.label}
+            instructions={selectedDrill.description}
+            lessonId={null}
+            exercise={selectedDrill.exercise}
+          />
+        </div>
       )}
 
       <div>
@@ -113,7 +123,7 @@ export default function PracticeGymPage() {
         </p>
 
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {GENRES.map((item) => (
               <button
                 key={item.value}
@@ -176,7 +186,11 @@ export default function PracticeGymPage() {
         )}
       </div>
 
-      {selectedSong && <SongExcerptPractice key={selectedSong.id} song={selectedSong} />}
+      {selectedSong && (
+        <div ref={excerptRef} className="scroll-mt-3">
+          <SongExcerptPractice key={selectedSong.id} song={selectedSong} />
+        </div>
+      )}
     </div>
   );
 }

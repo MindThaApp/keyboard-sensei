@@ -1,7 +1,8 @@
-// @tonejs/midi ships CJS; a named ESM import breaks under real node.
-import ToneMidi from "@tonejs/midi";
-
-const { Midi } = ToneMidi;
+// The web app only ever runs through Vite (dev pre-bundling, prod Rollup, vitest),
+// all of which resolve this CJS package's named export — same as playalongSong.ts.
+// A default import (the API's workaround for raw Node ESM) resolves to undefined in
+// Vite's dev pre-bundle and crashed the whole app on load.
+import { Midi } from "@tonejs/midi";
 
 export interface RecorderNoteEvent {
   type: "noteon" | "noteoff";

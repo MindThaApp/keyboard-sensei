@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getDashboard, type DashboardActivity, type DashboardActivityType, type DashboardAchievement, type DashboardResponse } from "../../services/api";
+import { useProgressStore } from "../../state/progressStore";
+import { isAchievementReachable, levelLabel, nextLessonFor } from "../../utils/levels";
 
 const WEEKS_TO_SHOW = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -90,7 +93,7 @@ function ActivityCalendar({ recentActivity }: { recentActivity: DashboardActivit
         ))}
       </div>
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-        Shows days covered by your most recent activity, not your full history.
+        Filled squares are days you practised, taken from your 15 most recent sessions — older days may not show here.
       </p>
     </div>
   );
@@ -139,7 +142,7 @@ function LevelProgressCard({ dashboard }: { dashboard: DashboardResponse }) {
             return (
               <li key={level.level}>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-800 dark:text-slate-200">{level.level}</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{levelLabel(level.level)}</span>
                   <span className="tabular-nums text-slate-500 dark:text-slate-400">
                     {level.completed}/{level.total}
                   </span>
@@ -163,11 +166,11 @@ function AchievementCard({ achievement }: { achievement: DashboardAchievement })
   return (
     <li
       className={`card flex flex-col gap-1 p-4 ${
-        achievement.unlocked ? "" : "opacity-60 grayscale"
+        achievement.unlocked ? "" : "bg-slate-50 dark:bg-slate-900/60"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xl" aria-hidden>
+        <span className={`text-2xl ${achievement.unlocked ? "" : "grayscale"}`} aria-hidden>
           {achievement.unlocked ? "🏅" : "🔒"}
         </span>
         {achievement.unlocked && achievement.unlockedAt && (
@@ -191,14 +194,16 @@ function AchievementCard({ achievement }: { achievement: DashboardAchievement })
 }
 
 function AchievementsSection({ dashboard }: { dashboard: DashboardResponse }) {
+  const levelsWithLessons = new Set(dashboard.levelProgress.filter((level) => level.total > 0).map((level) => level.level));
+  const achievements = dashboard.achievements.filter((achievement) => isAchievementReachable(achievement.key, levelsWithLessons));
   return (
     <section className="card p-5">
       <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Achievements</h2>
-      {dashboard.achievements.length === 0 ? (
+      {achievements.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No achievements defined yet.</p>
       ) : (
         <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {dashboard.achievements.map((achievement) => (
+          {achievements.map((achievement) => (
             <AchievementCard key={achievement.key} achievement={achievement} />
           ))}
         </ul>
@@ -237,6 +242,14 @@ function RecentActivitySection({ dashboard }: { dashboard: DashboardResponse }) 
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const lessons = useProgressStore((s) => s.lessons);
+  const lessonsLoaded = useProgressStore((s) => s.loaded);
+  const loadLessons = useProgressStore((s) => s.loadAll);
+  const nextLesson = nextLessonFor(lessons);
+
+  useEffect(() => {
+    if (!lessonsLoaded) void loadLessons();
+  }, [lessonsLoaded, loadLessons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,7 +264,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
+        {nextLesson && (
+          <Link to={`/lessons/${nextLesson.id}`} className="primary-button">
+            Continue practising: {nextLesson.title} →
+          </Link>
+        )}
+      </div>
       <StreakCard dashboard={dashboard} />
       <LevelProgressCard dashboard={dashboard} />
       <AchievementsSection dashboard={dashboard} />

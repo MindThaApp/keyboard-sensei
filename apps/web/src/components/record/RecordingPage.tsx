@@ -155,7 +155,7 @@ export default function RecordingPage() {
 
   const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
   return (
-    <div className="mx-[calc(50%-50vw)] w-screen space-y-4 px-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold">Record</h1>
