@@ -13,7 +13,7 @@ import path from "node:path";
 import type { PrismaClient } from "@prisma/client";
 import { extractSongMetadata } from "../midi-metadata.js";
 import { ESSENTIALS_DIR, type EssentialsIndexEntry } from "./build.js";
-import { ESSENTIALS, attribution, contentRights, type EssentialsLevel } from "./manifest.js";
+import { ESSENTIALS, attribution, contentRights, sourceUrl, type EssentialsLevel } from "./manifest.js";
 import { applyEssentialsReplacements, readEssentialsIndex, type ReplacementReport } from "./replacements.js";
 
 const LEVEL_SUFFIX: Record<EssentialsLevel, string> = { beginner: " (Beginner)", intermediate: " (Intermediate)", full: "" };
@@ -45,7 +45,7 @@ export async function seedEssentials(prisma: PrismaClient, index: EssentialsInde
       duration_sec: meta.durationSec,
       note_count: meta.noteCount,
       content_rights: contentRights(piece),
-      source_url: piece.source.infoUrl,
+      source_url: sourceUrl(piece),
       attribution: attribution(piece),
       file_path,
       uploader_id: null,
