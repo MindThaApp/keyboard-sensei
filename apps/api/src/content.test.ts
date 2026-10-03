@@ -106,11 +106,12 @@ describe("seed content", () => {
       "Keep every note even in volume and length",
       "Balance all three chord tones at one volume",
       "Keep two moving lines even in tone and time",
+      "Keep a left-hand accompaniment light and even for four bars",
     ]);
     for (const lesson of lessons) {
       for (const objective of lesson.objectives) {
         if (knownDynamicsObjectives.has(objective)) continue;
-        expect(objective, lesson.id).not.toMatch(/\b(volume|loud|soft|dynamic|velocity|forte|piano dynamics|accent)/i);
+        expect(objective, lesson.id).not.toMatch(/\b(volume|loud|soft|quiet|light|dynamic|velocity|forte|accent)/i);
       }
     }
   });
