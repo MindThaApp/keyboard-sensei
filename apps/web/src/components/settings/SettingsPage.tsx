@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme, type AccentTheme, type Theme } from "../../contexts/ThemeContext";
@@ -497,14 +497,27 @@ function isSettingsTab(value: string | null): value is SettingsTab {
 
 export default function SettingsPage() {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const activeTab = isSettingsTab(params.get("tab")) ? params.get("tab") : "account";
 
   function selectTab(tab: SettingsTab) {
     setParams(tab === "account" ? {} : { tab });
   }
 
+  // /play links here as "Manage library →"; give it a way straight back.
+  // The link passes its own filtered /play URL in router state, so "back"
+  // restores the list as it was; a reload (no state) falls back to /play.
+  const cameFromPlay = activeTab === "library" && params.get("from") === "play";
+  const returnState = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  const backTo = typeof returnState === "string" && returnState.startsWith("/play") ? returnState : "/play";
+
   return (
     <div className="space-y-6">
+      {cameFromPlay && (
+        <Link to={backTo} className="inline-block text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          ← Back to Play along
+        </Link>
+      )}
       <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
       <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Settings sections">
         {SETTINGS_TABS.map((tab) => (
