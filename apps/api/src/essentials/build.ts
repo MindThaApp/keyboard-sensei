@@ -83,15 +83,60 @@ const LILYPOND_DEFAULT_BPM = 60;
  */
 export function loadSource(bytes: Uint8Array, piece: EssentialsPiece): MidiFile {
   const midi = new Midi(bytes);
-  if (piece.tempoBpm === undefined) return midi;
-  const tempos = midi.header.tempos;
-  const isDefault = tempos.length === 0 || (tempos.length === 1 && Math.abs(tempos[0].bpm - LILYPOND_DEFAULT_BPM) < 0.01);
-  if (!isDefault) {
-    throw new Error(`${piece.slug}: tempoBpm is set but the source has its own tempo (${tempos.map((t) => t.bpm.toFixed(1)).join(", ")})`);
+  const ppq = midi.header.ppq;
+  if (piece.tempoBpm !== undefined) {
+    const tempos = midi.header.tempos;
+    const isDefault = tempos.length === 0 || (tempos.length === 1 && Math.abs(tempos[0].bpm - LILYPOND_DEFAULT_BPM) < 0.01);
+    if (!isDefault) {
+      throw new Error(`${piece.slug}: tempoBpm is set but the source has its own tempo (${tempos.map((t) => t.bpm.toFixed(1)).join(", ")})`);
+    }
+    midi.header.tempos = [{ ticks: 0, bpm: piece.tempoBpm }];
   }
-  midi.header.tempos = [{ ticks: 0, bpm: piece.tempoBpm }];
+  if (piece.tempoFix) {
+    const scale = piece.tempoFix.scale ?? 1;
+    const tempos = midi.header.tempos.length > 0 ? midi.header.tempos : [{ ticks: 0, bpm: 120 }];
+    const fixed = new Map(tempos.map((tempo) => [tempo.ticks, tempo.bpm * scale]));
+    for (const { beat, bpm } of piece.tempoFix.at ?? []) fixed.set(Math.round(beat * ppq), bpm);
+    midi.header.tempos = [...fixed.entries()].sort((a, b) => a[0] - b[0]).map(([ticks, bpm]) => ({ ticks, bpm }));
+  }
+  if (piece.cutBeats) cutSpan(midi, piece.cutBeats);
+  if (piece.dropUnisonsIn) {
+    for (const index of piece.dropUnisonsIn) {
+      const others = new Set(
+        midi.tracks.flatMap((track, i) => (i === index ? [] : track.notes.map((note) => `${note.midi}@${note.ticks}`))),
+      );
+      const track = midi.tracks[index];
+      track.notes = track.notes.filter((note) => !others.has(`${note.midi}@${note.ticks}`));
+    }
+  }
   midi.header.update();
   return midi;
+}
+
+/** Remove [from, to) (quarter beats) from every track and the header, closing the gap. */
+function cutSpan(midi: MidiFile, [from, to]: [number, number]): void {
+  const ppq = midi.header.ppq;
+  const start = Math.round(from * ppq);
+  const end = Math.round(to * ppq);
+  const shift = end - start;
+  for (const track of midi.tracks) {
+    track.notes = track.notes.filter((note) => note.ticks < start || note.ticks >= end);
+    for (const note of track.notes) {
+      if (note.ticks >= end) note.ticks -= shift;
+      else if (note.ticks + note.durationTicks > start) note.durationTicks = start - note.ticks;
+    }
+  }
+  // Header events inside the span: the last one before `end` takes effect at `start`.
+  const move = <T extends { ticks: number }>(events: T[]): T[] => {
+    const before = events.filter((event) => event.ticks < start);
+    const inside = events.filter((event) => event.ticks >= start && event.ticks < end);
+    const after = events.filter((event) => event.ticks >= end).map((event) => ({ ...event, ticks: event.ticks - shift }));
+    const carried = inside.length > 0 && !after.some((event) => event.ticks === start) ? [{ ...inside[inside.length - 1], ticks: start }] : [];
+    return [...before, ...carried, ...after];
+  };
+  midi.header.tempos = move(midi.header.tempos);
+  midi.header.timeSignatures = move(midi.header.timeSignatures);
+  midi.header.keySignatures = move(midi.header.keySignatures);
 }
 
 /** Track indexes for each hand: the manifest's, else the play-along parser's rule. */
@@ -128,10 +173,15 @@ export function sourceNotes(midi: MidiFile, piece: EssentialsPiece): Arrangement
         // With a figuration length set, the tune is every other note of the
         // melody tracks (or of the right hand); the figuration never is.
         const inTune = tracks.melody.length > 0 ? tracks.melody.includes(index) : noteHand === "right";
-        const melody = figure === undefined ? tracks.melody.includes(index) : inTune && !isFigure(durationBeats, figure);
+        const startBeat = note.ticks / ppq;
+        const melody = piece.melodySpans
+          ? spanTracks(piece.melodySpans, startBeat).includes(index)
+          : figure === undefined
+            ? tracks.melody.includes(index)
+            : inTune && !isFigure(durationBeats, figure);
         notes.push({
           midi: note.midi,
-          startBeat: note.ticks / ppq,
+          startBeat,
           durationBeats,
           hand: noteHand,
           velocity: note.velocity,
@@ -141,6 +191,13 @@ export function sourceNotes(midi: MidiFile, piece: EssentialsPiece): Arrangement
     }
   }
   return notes.sort((a, b) => a.startBeat - b.startBeat || a.midi - b.midi);
+}
+
+/** The tracks carrying the tune at `beat`, per the manifest's melody spans. */
+function spanTracks(spans: { fromBeat: number; tracks: number[] }[], beat: number): number[] {
+  let current: number[] = [];
+  for (const span of [...spans].sort((a, b) => a.fromBeat - b.fromBeat)) if (span.fromBeat <= beat + 1e-6) current = span.tracks;
+  return current;
 }
 
 /** Within 2% of the figuration length (sources shorten notes slightly for articulation). */
@@ -172,6 +229,7 @@ export function arrangementMeta(midi: MidiFile, piece: EssentialsPiece): Arrange
     ...(tempos.length > 0 ? { quarterBpm: tempos[0].bpm } : {}),
     ...(piece.melodyStartBeat === undefined ? {} : { melodyStartBeat: piece.melodyStartBeat }),
     ...(piece.beginnerTimeScale === undefined ? {} : { beginnerTimeScale: piece.beginnerTimeScale }),
+    ...(piece.keepLeaps ? { keepLeaps: true } : {}),
   };
 }
 
@@ -385,7 +443,7 @@ export function checkVersion(
     const got = notes.map(key).sort();
     if (want.length !== got.length || want.some((k, i) => k !== got[i])) problems.push(`full version differs from source (${got.length} vs ${want.length} notes)`);
   } else {
-    melody = melodyLine(notes.filter((note) => note.hand === "right")).map((note) => note.midi);
+    melody = melodyLine(notes.filter((note) => note.hand === "right"), { keepLeaps: piece.keepLeaps }).map((note) => note.midi);
     const match = incipitMatches(melody, incipit, false);
     if (!match.ok) problems.push(`incipit: matched ${match.matched}/${incipit.length}`);
   }
@@ -429,5 +487,5 @@ export function fullMelodies(source: MidiFile, piece: EssentialsPiece): number[]
   const pool = (marked.length > 0 ? marked : right.length > 0 ? right : notes).filter(
     (note) => note.startBeat >= (piece.melodyStartBeat ?? 0) - 1e-6,
   );
-  return [melodyLine(notes, meta).map((note) => note.midi), extractMelody(pool).map((note) => note.midi)];
+  return [melodyLine(notes, meta).map((note) => note.midi), extractMelody(pool, { keepLeaps: piece.keepLeaps }).map((note) => note.midi)];
 }

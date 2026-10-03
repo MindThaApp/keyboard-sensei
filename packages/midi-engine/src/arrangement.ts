@@ -107,6 +107,8 @@ export interface ArrangementMeta {
    * (Moonlight's) as dotted quarter–eighth rather than rounding them to even eighths.
    */
   beginnerTimeScale?: 1 | 2;
+  /** The tune really leaps (often in octaves): don't swap isolated high notes for a closer one (see extractMelody). */
+  keepLeaps?: boolean;
 }
 
 export interface ArrangementResult {
@@ -200,12 +202,15 @@ export function simplifyArrangement(
  * `extractMelody`, with ornaments removed. Hands are taken as given — apply
  * `meta.splitPoint` first if you need it.
  */
-export function melodyLine(notes: readonly ArrangementNote[], meta: Pick<ArrangementMeta, "melodyStartBeat"> = {}): ArrangementNote[] {
+export function melodyLine(
+  notes: readonly ArrangementNote[],
+  meta: Pick<ArrangementMeta, "melodyStartBeat" | "keepLeaps"> = {},
+): ArrangementNote[] {
   const from = meta.melodyStartBeat ?? Number.NEGATIVE_INFINITY;
   const marked = notes.filter((note) => note.melody);
   const right = notes.filter((note) => note.hand === "right");
   const pool = marked.length > 0 ? marked : right.length > 0 ? right : notes;
-  return collapseOrnaments(extractMelody(pool.filter((note) => note.startBeat >= from - EPS)));
+  return collapseOrnaments(extractMelody(pool.filter((note) => note.startBeat >= from - EPS), { keepLeaps: meta.keepLeaps }));
 }
 
 /**
@@ -215,9 +220,11 @@ export function melodyLine(notes: readonly ArrangementNote[], meta: Pick<Arrange
  * skipped (this is what drops Moonlight-style accompaniment triplets under a held
  * tune). Then an isolated upward spike — a note 9+ semitones above both
  * neighbours while a note close to them sounded at the same onset — is swapped
- * for that closer note. Durations are clipped so the result is monophonic.
+ * for that closer note (unless `keepLeaps`: a tune in octaves that really
+ * leaps, like Brindisi's rising sixths). Durations are clipped so the result
+ * is monophonic.
  */
-export function extractMelody(notes: readonly ArrangementNote[]): ArrangementNote[] {
+export function extractMelody(notes: readonly ArrangementNote[], options: { keepLeaps?: boolean } = {}): ArrangementNote[] {
   const sorted = [...notes].sort((a, b) => a.startBeat - b.startBeat || b.midi - a.midi || a.durationBeats - b.durationBeats);
   const picked: { note: ArrangementNote; group: ArrangementNote[] }[] = [];
   let current: { midi: number; end: number } | null = null;
@@ -232,7 +239,7 @@ export function extractMelody(notes: readonly ArrangementNote[]): ArrangementNot
     current = { midi: top.midi, end: top.startBeat + top.durationBeats };
   }
 
-  for (let i = 1; i + 1 < picked.length; i++) {
+  for (let i = 1; !options.keepLeaps && i + 1 < picked.length; i++) {
     const prev = picked[i - 1].note.midi;
     const next = picked[i + 1].note.midi;
     const here = picked[i].note.midi;

@@ -52,6 +52,14 @@ export const ESSENTIALS_REPLACES: Record<string, Replacement> = {
   "silent-night": { beginnerPack: ["silent-night"] },
   "amazing-grace": { beginnerPack: ["amazing-grace"] },
   greensleeves: { beginnerPack: ["greensleeves"] },
+  // Top-up. Openings compared note by note against the library files.
+  "revolutionary-etude": { library: ["frederic-chopin-etude-op-10-no-12", "frederic-chopin-etude-c-moll-opus-10-no-12"] },
+  "air-on-the-g-string": { library: ["johann-sebastian-bach-air-on-a-g-string", "johann-sebastian-bach-air-in-d-major"] },
+  "debussy-arabesque-1": { library: ["claude-debussy-arabesque-n-1", "claude-debussy-premiere-arabesque-l66-no1"] },
+  "rachmaninoff-prelude-c-sharp-minor": { library: ["sergei-rachmaninoff-prelude-in-c-sharp-minor"] },
+  "brahms-waltz-op-39-15": { library: ["johannes-brahms-waltz-op39-no-15"] },
+  "happy-farmer": { library: ["robert-schumann-10le-gai-laboureur"] },
+  "twinkle-twinkle-little-star": { beginnerPack: ["twinkle-twinkle-little-star"] },
 };
 
 /** The generated Essentials versions on disk (empty if the pack was never generated). */

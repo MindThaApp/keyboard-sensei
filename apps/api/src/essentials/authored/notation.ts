@@ -29,6 +29,12 @@ export interface AuthoredScore {
   bpm: number;
   /** Length of an opening upbeat bar, in quarter beats (0 or absent: none). */
   pickupBeats?: number;
+  /**
+   * Meter changes: from written bar `bar` on (1-based, counting an upbeat
+   * bar as bar 1), the meter is `meter`. For tunes like Shenandoah whose
+   * sources alternate 4/4 and 3/4 bars.
+   */
+  meterChanges?: MeterChange[];
   /** The tune: a single line (no chords), played by the right hand. */
   melody: string;
   /** Further right-hand voices under the tune (harmony, inner parts). */
@@ -59,13 +65,25 @@ export function parseLength(token: string): number {
 
 export const barBeats = (meter: [number, number]): number => meter[0] * (4 / meter[1]);
 
+export interface MeterChange {
+  bar: number;
+  meter: [number, number];
+}
+
+/** The meter in force at written bar `bar` (1-based). */
+export function meterAt(meter: [number, number], changes: readonly MeterChange[], bar: number): [number, number] {
+  let current = meter;
+  for (const change of [...changes].sort((a, b) => a.bar - b.bar)) if (change.bar <= bar) current = change.meter;
+  return current;
+}
+
 /**
  * Parse one voice into sounding notes (ties merged, rests dropped), checking
- * every bar's length. Bar 1 is `pickupBeats` long when there is an upbeat;
- * the last bar may be short (an upbeat's other half). Times start at 0.
+ * every bar's length against the meter in force there. Bar 1 is
+ * `pickupBeats` long when there is an upbeat; the last bar may be short (an
+ * upbeat's other half). Times start at 0.
  */
-export function parseVoice(voice: string, meter: [number, number], pickupBeats = 0): ParsedNote[] {
-  const bar = barBeats(meter);
+export function parseVoice(voice: string, meter: [number, number], pickupBeats = 0, meterChanges: readonly MeterChange[] = []): ParsedNote[] {
   const notes: ParsedNote[] = [];
   const bars = voice.split("|").map((text) => text.trim());
   if (bars[bars.length - 1] === "") bars.pop();
@@ -91,7 +109,7 @@ export function parseVoice(voice: string, meter: [number, number], pickupBeats =
       tiedFrom = tie ? (tiedFrom ?? notes[notes.length - 1]) : null;
       beat += length;
     }
-    const expected = index === 0 && pickupBeats > 0 ? pickupBeats : bar;
+    const expected = index === 0 && pickupBeats > 0 ? pickupBeats : barBeats(meterAt(meter, meterChanges, index + 1));
     const got = beat - barStart;
     const isLast = index === bars.length - 1;
     const ok = Math.abs(got - expected) < 1e-6 || (isLast && got < expected + 1e-6 && got > 0);
@@ -114,7 +132,7 @@ export function voiceLength(voice: string): number {
 
 /** The tune's pitches in order (ties merged), for checking against the incipit. */
 export function melodyPitches(score: AuthoredScore): number[] {
-  return parseVoice(score.melody, score.meter, score.pickupBeats).map((note) => {
+  return parseVoice(score.melody, score.meter, score.pickupBeats, score.meterChanges).map((note) => {
     if (note.pitches.length !== 1) throw new Error("The melody voice must be a single line");
     return note.pitches[0];
   });
@@ -134,7 +152,7 @@ export function checkScore(score: AuthoredScore): string[] {
   const lengths = new Map<string, number>();
   for (const [name, voice] of voices) {
     try {
-      parseVoice(voice, score.meter, score.pickupBeats);
+      parseVoice(voice, score.meter, score.pickupBeats, score.meterChanges);
       lengths.set(name, voiceLength(voice));
     } catch (error) {
       problems.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -163,11 +181,22 @@ export function buildAuthoredMidi(score: AuthoredScore): Buffer {
   if (problems.length > 0) throw new Error(problems.join("; "));
   const midi = new Midi();
   midi.header.setTempo(score.bpm);
-  midi.header.timeSignatures = [{ ticks: 0, timeSignature: [...score.meter] }];
-  midi.header.update();
   const ppq = midi.header.ppq;
   const pickup = score.pickupBeats ?? 0;
   const offset = pickup > 0 ? barBeats(score.meter) - pickup : 0;
+  midi.header.timeSignatures = [{ ticks: 0, timeSignature: [...score.meter] }];
+  const changes = [...(score.meterChanges ?? [])].sort((a, b) => a.bar - b.bar);
+  if (changes.length > 0) {
+    // Each written bar starts where the previous one ends; bar 1 (padded upbeat or not) starts at 0.
+    const lastBar = Math.max(...changes.map((change) => change.bar));
+    let start = 0;
+    for (let bar = 1; bar <= lastBar; bar++) {
+      const change = changes.find((c) => c.bar === bar);
+      if (change && bar > 1) midi.header.timeSignatures.push({ ticks: Math.round(start * ppq), timeSignature: [...change.meter] });
+      start += bar === 1 ? barBeats(score.meter) : barBeats(meterAt(score.meter, changes, bar));
+    }
+  }
+  midi.header.update();
   const voices: [string, string, number][] = [
     [AUTHORED_TRACK.melody, score.melody, 0.8],
     ...(score.right ?? []).map((voice): [string, string, number] => [AUTHORED_TRACK.right, voice, 0.6]),
@@ -176,7 +205,7 @@ export function buildAuthoredMidi(score: AuthoredScore): Buffer {
   for (const [name, voice, velocity] of voices) {
     const track = midi.addTrack();
     track.name = name;
-    for (const note of parseVoice(voice, score.meter, pickup)) {
+    for (const note of parseVoice(voice, score.meter, pickup, score.meterChanges)) {
       for (const pitch of note.pitches) {
         track.addNote({
           midi: pitch,

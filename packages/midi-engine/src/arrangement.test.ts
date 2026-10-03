@@ -152,6 +152,13 @@ describe("simplifyArrangement: beginner", () => {
     expect(simplifyArrangement(albertiPiece(), {}, "beginner").timeScale).toBe(1);
   });
 
+  it("keeps a tune's real leaps in octaves when asked to", () => {
+    // F–D–F in octaves: the D6 is 9 semitones above both neighbours.
+    const tune = [n(65, 0, 1), n(77, 0, 1), n(74, 1, 1), n(86, 1, 1), n(65, 2, 1), n(77, 2, 1)];
+    expect(pitches(melodyLine(tune))).toEqual([77, 74, 77]);
+    expect(pitches(melodyLine(tune, { keepLeaps: true }))).toEqual([77, 86, 77]);
+  });
+
   it("keeps a dotted-eighth–sixteenth figure when the time scale is forced to 2", () => {
     const tune = [n(68, 0, 0.75), n(68, 0.75, 0.25), n(68, 1, 3), n(69, 4, 2)];
     const meta = { key: { tonic: 9, mode: "minor" as const } };

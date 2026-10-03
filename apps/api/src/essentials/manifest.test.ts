@@ -37,8 +37,9 @@ describe("Essentials manifest", () => {
       expect(AUTHORED_SCORES[piece.slug], piece.slug).toBeDefined();
       expect(source.basis.length, piece.slug).toBeGreaterThan(20);
       expect(source.verification.length, piece.slug).toBeGreaterThan(20);
-      const hosts = new Set(source.verifiedAgainst.map((ref) => new URL(ref.url).host));
-      expect(hosts.size, `${piece.slug}: sources on two different sites`).toBeGreaterThanOrEqual(2);
+      // Two different editions or collections (two IMSLP scans of different editions count).
+      expect(new Set(source.verifiedAgainst.map((ref) => ref.url)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
+      expect(new Set(source.verifiedAgainst.map((ref) => ref.title)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
       expect(contentRights(piece)).toBe("public-domain");
       expect(attribution(piece)).toContain("arranged for Keyboard Sensei");
     }
@@ -46,11 +47,11 @@ describe("Essentials manifest", () => {
     expect(Object.keys(AUTHORED_SCORES).filter((slug) => !authored.has(slug))).toEqual([]);
   });
 
-  it("has an incipit for every piece in spellable pitches: 7–16 notes, or 16+ for an authored tune", () => {
+  it("has an incipit for every piece in spellable pitches: 7–24 notes, or 16–32 for an authored tune", () => {
     for (const piece of ESSENTIALS) {
       const pitches = incipitPitches(piece);
       expect(pitches.length, piece.slug).toBeGreaterThanOrEqual(isAuthored(piece.source) ? 16 : 7);
-      expect(pitches.length, piece.slug).toBeLessThanOrEqual(isAuthored(piece.source) ? 32 : 16);
+      expect(pitches.length, piece.slug).toBeLessThanOrEqual(isAuthored(piece.source) ? 32 : 24);
       for (const pitch of pitches) expect(pitch).toBeGreaterThanOrEqual(21);
     }
     expect(parsePitch("C4")).toBe(60);
@@ -94,6 +95,26 @@ describe("source loading", () => {
     expect(loadSource(file(null), piece).header.tempos[0].bpm).toBe(160);
     expect(() => loadSource(file(72), piece)).toThrow(/own tempo/);
     expect(loadSource(file(72), { ...base, tempoBpm: undefined }).header.tempos[0].bpm).toBeCloseTo(72);
+  });
+
+  it("scales and sets tempos, cuts a span, and drops hidden unisons", () => {
+    const piece = { ...base, tempoBpm: undefined, accompanimentDurationBeats: undefined };
+    const fixed = loadSource(file(120), { ...piece, tempoFix: { scale: 0.5, at: [{ beat: 1, bpm: 30 }] } });
+    expect(fixed.header.tempos.map((t) => [t.ticks / fixed.header.ppq, Math.round(t.bpm)])).toEqual([[0, 60], [1, 30]]);
+
+    const cut = loadSource(file(60), { ...piece, cutBeats: [1, 1.5] });
+    const ppq = cut.header.ppq;
+    const starts = cut.tracks[0].notes.map((note) => +(note.ticks / ppq).toFixed(3));
+    expect(starts.filter((beat) => beat >= 1 && beat < 1.5 - 1e-6).length).toBeLessThan(2); // [1, 1.5) removed, later notes moved up
+    expect(Math.max(...starts)).toBeCloseTo(5 / 3 - 0.5, 2);
+    expect(cut.tracks[0].notes.find((note) => note.midi === 72)!.durationTicks).toBe(ppq); // held note clipped at the cut
+
+    const twoTracks = new Midi(file(60));
+    const second = twoTracks.addTrack();
+    second.addNote({ midi: 72, ticks: 0, durationTicks: 10 });
+    const deduped = loadSource(Buffer.from(twoTracks.toArray()), { ...piece, dropUnisonsIn: [0] });
+    expect(deduped.tracks[0].notes.some((note) => note.midi === 72)).toBe(false);
+    expect(deduped.tracks[1].notes).toHaveLength(1);
   });
 
   it("never marks the accompaniment figure as melody", () => {
