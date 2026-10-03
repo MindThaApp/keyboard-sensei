@@ -54,7 +54,12 @@ export default function LoopBarStrip({ barCount, range, onChange, disabled = fal
         }`}
         onPointerDown={(e) => {
           if (disabled) return;
-          e.currentTarget.setPointerCapture(e.pointerId);
+          try {
+            // Keep receiving moves when the finger slides off the strip.
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // The pointer is already gone; the drag still works while it's over the strip.
+          }
           const bar = barAt(e.clientX);
           anchorRef.current = bar;
           set(bar, bar);
@@ -80,7 +85,7 @@ export default function LoopBarStrip({ barCount, range, onChange, disabled = fal
         }}
       >
         {Array.from({ length: barCount }, (_, bar) =>
-          bar % labelEvery === 0 ? (
+          bar % labelEvery === 0 && (bar === 0 || bar / barCount < 0.96) ? (
             <span
               key={bar}
               className="pointer-events-none absolute top-0 h-full border-l border-slate-300 pl-0.5 text-[10px] leading-8 text-slate-500 dark:border-slate-600"
