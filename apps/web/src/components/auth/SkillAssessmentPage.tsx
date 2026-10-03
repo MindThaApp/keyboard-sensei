@@ -114,20 +114,20 @@ export default function SkillAssessmentPage({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-            Optional skill assessment
-          </p>
-          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Three MIDI prompts. Strong, consistent results unlock the first four lessons; otherwise you start at
-            lesson 1.
-          </p>
-          <div className="mt-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
+              Optional skill assessment
+            </p>
             <StepIndicator index={index} currentDone={result !== null} />
           </div>
+          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Three short prompts. Strong, consistent results unlock the first four lessons; otherwise you start at
+            lesson 1.
+          </p>
         </div>
         {/* Up top, not below the exercise: a beginner shouldn't have to scroll past a
             keyboard test to find the way out of it. */}
