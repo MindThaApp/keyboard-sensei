@@ -44,6 +44,49 @@ export interface VirtualPianoProps {
    * caller's shared state instead of a private one, so nothing can drift apart.
    */
   sizing?: KeyboardSizing;
+  /** Upper bound for the white keys' height. Key height otherwise scales with key width
+   *  (4:1), which made a fit-to-width 14-key keyboard ~290px tall. */
+  maxWhiteKeyHeightPx?: number;
+  /** False hides the key-size / instrument / auto-fit row, for a parent that renders
+   *  `KeyboardSizingControls` itself (Play-Along puts them in its settings panel). */
+  showControls?: boolean;
+  /** False hides the "use your computer keyboard" hint line. */
+  showHint?: boolean;
+}
+
+const DEFAULT_MAX_WHITE_KEY_HEIGHT_PX = 180;
+
+/**
+ * Key count + range label, instrument picker, key-size slider and the Auto-fit cycle
+ * button. Exported so a page can show them somewhere other than under the keys.
+ */
+export function KeyboardSizingControls({ sizing }: { sizing: KeyboardSizing }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+      <span className="mr-auto text-xs tabular-nums text-slate-500">
+        {sizing.keyCount} keys · {sizing.rangeLabel}
+      </span>
+      <InstrumentPicker compact />
+      <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+        Key size
+        <input
+          type="range"
+          min={ZOOM_MIN_PX}
+          max={ZOOM_MAX_PX}
+          value={sizing.widthPx}
+          onChange={(e) => sizing.setWidthPx(Number(e.target.value))}
+          className="h-6 w-24"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={sizing.advanceFit}
+        className="h-7 rounded border border-slate-300 px-2 text-xs leading-none text-slate-700 dark:border-slate-600 dark:text-slate-200"
+      >
+        {sizing.fitLabel}
+      </button>
+    </div>
+  );
 }
 
 /** Key height scales with key width so narrow zoom levels don't render absurdly tall keys. */
@@ -67,6 +110,9 @@ export default function VirtualPiano({
   disabled = false,
   scrollable = true,
   sizing: sizingProp,
+  maxWhiteKeyHeightPx = DEFAULT_MAX_WHITE_KEY_HEIGHT_PX,
+  showControls = true,
+  showHint = true,
 }: VirtualPianoProps) {
   const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
@@ -117,9 +163,32 @@ export default function VirtualPiano({
     containerWidthPx: containerWidth,
     persistenceKey: sizingProp ? null : deviceName,
     onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
+    keepTightRangeVisible: true,
   });
   const sizing = sizingProp ?? ownSizing;
   const { geometry } = sizing;
+
+  // When the keys are wider than the screen, start with the notes this exercise needs in
+  // view instead of the bottom of the keyboard (lesson 1's C3/C4/C5 used to start
+  // off-screen to the right). Re-centres only when the layout changes, never on a press.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const focusLow = recommendedRange?.lowestNote ?? null;
+  const focusHigh = recommendedRange?.highestNote ?? null;
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || !scrollable || focusLow === null || focusHigh === null) return;
+    if (scroller.scrollWidth <= scroller.clientWidth) return;
+    const low = geometry.xFor(focusLow);
+    const high = geometry.xFor(focusHigh);
+    if (!low || !high) return;
+    const centre = (low.x + high.x + high.width) / 2;
+    const keys = scroller.firstElementChild;
+    if (!keys) return;
+    // Where the keys start inside the scroll content (measured, not assumed: the drag
+    // handles overhang the keys and change scrollWidth).
+    const keysOffset = keys.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
+    scroller.scrollLeft = Math.max(0, Math.round(keysOffset + centre - scroller.clientWidth / 2));
+  }, [geometry, focusLow, focusHigh, scrollable, containerWidth]);
 
   const notes: number[] = [];
   for (let n = geometry.lowestNote; n <= geometry.highestNote; n++) notes.push(n);
@@ -127,7 +196,7 @@ export default function VirtualPiano({
   const blackNotes = notes.filter((n) => isBlackKey(n));
   const expectedSet = new Set(expectedNotes);
 
-  const whiteKeyHeightPx = geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO;
+  const whiteKeyHeightPx = Math.min(geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO, maxWhiteKeyHeightPx);
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
 
   function press(note: number) {
@@ -254,7 +323,7 @@ export default function VirtualPiano({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className={scrollable ? "w-full overflow-x-auto pb-1" : "w-full"}>
+      <div ref={scrollerRef} className={scrollable ? "w-full overflow-x-auto pb-1" : "w-full"}>
         <div
           className="relative mx-auto select-none"
           style={{ width: geometry.widthPx, minWidth: geometry.widthPx, height: whiteKeyHeightPx }}
@@ -287,7 +356,8 @@ export default function VirtualPiano({
                       className="absolute bottom-7 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-400/70"
                     />
                   )}
-                  {showLabels && <span className="text-[10px] text-slate-500">{midiNoteToName(note)}</span>}
+                  {/* White keys are white in every theme, so this can't use the themed muted grey. */}
+                  {showLabels && <span className="text-[10px] text-slate-600">{midiNoteToName(note)}</span>}
                 </button>
               );
             })}
@@ -340,30 +410,13 @@ export default function VirtualPiano({
           />
         </div>
       </div>
-      <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-        <span className="mr-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
-          {sizing.keyCount} keys · {sizing.rangeLabel}
-        </span>
-        <InstrumentPicker compact />
-        <input
-          type="range"
-          aria-label="Key size"
-          min={ZOOM_MIN_PX}
-          max={ZOOM_MAX_PX}
-          value={sizing.widthPx}
-          onChange={(e) => sizing.setWidthPx(Number(e.target.value))}
-          className="h-6 w-20 accent-felt-600"
-        />
-        <button
-          type="button"
-          onClick={sizing.advanceFit}
-          className="h-6 rounded border border-slate-300 px-2 text-[11px] leading-none text-slate-600 dark:border-slate-600 dark:text-slate-300"
-        >
-          {sizing.fitLabel}
-        </button>
-      </div>
-      {!disabled && (
-        <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+      {showControls && (
+        <div className="mt-1">
+          <KeyboardSizingControls sizing={sizing} />
+        </div>
+      )}
+      {showHint && !disabled && (
+        <p className="mt-2 text-center text-xs text-slate-500">
           No MIDI keyboard? Use your computer keyboard: A S D F G H J K (white keys), W E T Y U (black keys).
         </p>
       )}

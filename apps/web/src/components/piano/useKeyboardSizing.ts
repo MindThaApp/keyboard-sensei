@@ -14,8 +14,11 @@ export function clampZoomPx(px: number): number {
   return Math.min(ZOOM_MAX_PX, Math.max(ZOOM_MIN_PX, px));
 }
 
+// v2: before this, every fit-computed width was persisted too, then read back on the
+// next mount as if the user had chosen it — so a 72px fit from one tiny exercise turned
+// the next lesson's keyboard into a 2000px scroller. Old values are ignored on purpose.
 function zoomStorageKey(key: string): string {
-  return `keyboard-sensei-zoom:${key}`;
+  return `keyboard-sensei-zoom-v2:${key}`;
 }
 
 function loadZoom(key: string): number | null {
@@ -34,6 +37,14 @@ function saveZoom(key: string, px: number): void {
     localStorage.setItem(zoomStorageKey(key), String(px));
   } catch {
     // Private browsing / storage disabled — zoom just won't persist this session.
+  }
+}
+
+function clearZoom(key: string): void {
+  try {
+    localStorage.removeItem(zoomStorageKey(key));
+  } catch {
+    // Storage disabled — nothing was persisted in the first place.
   }
 }
 
@@ -70,6 +81,18 @@ function shrinkHigh(range: KeyRange): KeyRange {
   const candidate = snapDown(range.highestNote - 12);
   if (candidate < range.lowestNote + MIN_RANGE_SPAN_SEMITONES) return range;
   return { ...range, highestNote: candidate };
+}
+
+/**
+ * A saved (manual) key width, capped so `mustFit` still fits in the container when one
+ * is given. Pure, so the cap is unit-testable. The tight range is snapped to white keys
+ * first because only white keys take up width.
+ */
+export function capManualWidth(manualWidthPx: number, mustFit: KeyRange | undefined, containerWidthPx: number): number {
+  if (!mustFit || containerWidthPx <= 0) return manualWidthPx;
+  const snapped = snapRangeToWhiteKeys(mustFit);
+  const maxPx = clampZoomPx(fitWhiteKeyWidth(snapped.lowestNote, snapped.highestNote, containerWidthPx));
+  return Math.min(manualWidthPx, maxPx);
 }
 
 export function keyCountFor(range: KeyRange): number {
@@ -140,6 +163,11 @@ export interface UseKeyboardSizingOptions {
    *  so it can be recalibrated and persisted (mirrors MidiContext.setDeviceRange).
    *  Omit for Play-Along, where a manual range never recalibrates the device. */
   onDeviceRangeChange?: (range: KeyRange) => void;
+  /** Never let a saved key size push the tightRange's notes off-screen: the manual width
+   *  is capped at whatever still fits tightRange in the container. For exercises, whose
+   *  target notes must all be reachable without scrolling. Off for Play-Along, where
+   *  zooming in past the song's range and scrolling is a legitimate choice. */
+  keepTightRangeVisible?: boolean;
 }
 
 export interface KeyboardSizing {
@@ -176,6 +204,7 @@ export function useKeyboardSizing({
   containerWidthPx,
   persistenceKey = null,
   onDeviceRangeChange,
+  keepTightRangeVisible = false,
 }: UseKeyboardSizingOptions): KeyboardSizing {
   const hasTight = tightRange != null;
   const steps = useMemo(() => stepsFor(hasTight), [hasTight]);
@@ -197,12 +226,13 @@ export function useKeyboardSizing({
   // loaded) — always, unconditionally, per the spec. Skipped on the very first render
   // since the initial state already reflects the default step.
   const defaultRangeKey = `${defaultRange.lowestNote}:${defaultRange.highestNote}`;
-  const isFirstDefaultRangeRender = useRef(true);
+  // Compare against the previous key rather than a "first render" flag: StrictMode's
+  // mount→cleanup→mount runs this effect twice on mount, and a first-render flag let the
+  // second run through — silently discarding a saved key size on every mount in dev.
+  const prevDefaultRangeKeyRef = useRef(defaultRangeKey);
   useEffect(() => {
-    if (isFirstDefaultRangeRender.current) {
-      isFirstDefaultRangeRender.current = false;
-      return;
-    }
+    if (prevDefaultRangeKeyRef.current === defaultRangeKey) return;
+    prevDefaultRangeKeyRef.current = defaultRangeKey;
     setNamedIndex(0);
     setManualRange(null);
     setIsWidthFit(true);
@@ -235,23 +265,22 @@ export function useKeyboardSizing({
     containerWidthPx > 0
       ? clampZoomPx(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidthPx))
       : DEFAULT_WHITE_KEY_WIDTH_PX;
-  const widthPx = isWidthFit ? fitWidthPx : manualWidthPx;
-
-  // Persist every resulting width (fit-computed or manual), matching what VirtualPiano
-  // did inline before this hook existed — not just explicit slider changes.
-  useEffect(() => {
-    if (!persistenceKey) return;
-    saveZoom(persistenceKey, widthPx);
-  }, [persistenceKey, widthPx]);
+  const widthPx = isWidthFit
+    ? fitWidthPx
+    : capManualWidth(manualWidthPx, keepTightRangeVisible ? tightRange : undefined, containerWidthPx);
 
   const geometry = useMemo(
     () => keyboardGeometry(range.lowestNote, range.highestNote, widthPx),
     [range.lowestNote, range.highestNote, widthPx],
   );
 
+  // Only an explicit key-size choice persists. A fit-computed width belongs to the
+  // exercise and the screen it was computed for, never to the user's preference.
   function setWidthPx(px: number) {
+    const clamped = clampZoomPx(px);
     setIsWidthFit(false);
-    setManualWidthPx(clampZoomPx(px));
+    setManualWidthPx(clamped);
+    if (persistenceKey) saveZoom(persistenceKey, clamped);
   }
 
   function advanceFit() {
@@ -259,6 +288,8 @@ export function useKeyboardSizing({
     setNamedIndex(nextFitIndex(safeIndex, isManual, steps));
     setManualRange(null);
     setIsWidthFit(true);
+    // Choosing Auto-fit again means "stop using my saved key size".
+    if (persistenceKey) clearZoom(persistenceKey);
   }
 
   const dragRef = useRef<{
