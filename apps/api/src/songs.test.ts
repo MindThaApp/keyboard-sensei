@@ -5,7 +5,14 @@ import { Midi } from "@tonejs/midi";
 import { ZodError } from "zod";
 // Import from midi-metadata directly: songs.ts pulls in auth/db/config, whose
 // env parsing fails in CI where no .env exists.
-import { extractSongMetadata, InvalidMidiError } from "./midi-metadata.js";
+import {
+  difficultyLevel,
+  difficultyScore,
+  extractSongMetadata,
+  InvalidMidiError,
+  measureDifficultyFeatures,
+  type DifficultyFeatures,
+} from "./midi-metadata.js";
 
 const prismaMock = vi.hoisted(() => ({
   user: {
@@ -32,7 +39,16 @@ const ssrfMock = vi.hoisted(() => {
 
 vi.mock("./ssrf-safe-fetch.js", () => ssrfMock);
 
-import { songsRouter } from "./songs.js";
+import { songCollection, songsRouter } from "./songs.js";
+
+describe("songCollection", () => {
+  it("tags the authored beginner pack, and nothing else", () => {
+    expect(songCollection({ file_path: "/app/data/midi-library/beginner-ode-to-joy.mid", uploader_id: null })).toBe("beginner");
+    expect(songCollection({ file_path: "/app/data/midi-library/ludwig-van-beethoven-fur-elise.mid", uploader_id: null })).toBeNull();
+    // A user's upload can't claim the shelf by its filename.
+    expect(songCollection({ file_path: "/app/data/midi-library/beginner-x.mid", uploader_id: "user-1" })).toBeNull();
+  });
+});
 
 /** Build a valid in-range MIDI file: `count` quarter notes at 120bpm starting at C4. */
 function buildMidi(count: number, options: { midi?: number; durationEach?: number } = {}): Uint8Array {
@@ -70,7 +86,60 @@ describe("extractSongMetadata", () => {
     }
     const dense = extractSongMetadata(new Uint8Array(midi.toArray()));
     expect(dense.difficulty).toBeGreaterThan(sparse.difficulty);
-    expect(dense.difficulty).toBe(5);
+    expect(dense.difficulty).toBeGreaterThanOrEqual(4);
+  });
+
+  it("does not rate a ten-minute slow piece as easiest (the old '13Mai' bug)", () => {
+    const short = extractSongMetadata(buildMidi(60, { durationEach: 0.4 })); // ~30s, 2 nps
+    // Same density stretched across ~10 minutes: 0.7 notes/sec for 624s.
+    const midi = new Midi();
+    const track = midi.addTrack();
+    for (let i = 0; i < 440; i++) track.addNote({ midi: 60 + (i % 12), time: i * 1.42, duration: 1 });
+    const long = extractSongMetadata(new Uint8Array(midi.toArray()));
+    expect(long.durationSec).toBeGreaterThan(600);
+    expect(long.difficulty).toBeGreaterThan(1);
+    expect(short.difficulty).toBe(1);
+  });
+});
+
+describe("difficultyScore", () => {
+  const base: DifficultyFeatures = {
+    durationSec: 40,
+    notesPerSec: 1.5,
+    peakNotesPerSec: 2,
+    chordSize: 1,
+    rangeSemitones: 9,
+  };
+
+  it("puts a nursery-rhyme profile at level 1", () => {
+    expect(difficultyLevel(difficultyScore(base))).toBe(1);
+  });
+
+  it("rises with each factor: density, peak speed, chords, range and length", () => {
+    const score = difficultyScore(base);
+    expect(difficultyScore({ ...base, notesPerSec: 4 })).toBeGreaterThan(score);
+    expect(difficultyScore({ ...base, peakNotesPerSec: 8 })).toBeGreaterThan(score);
+    expect(difficultyScore({ ...base, chordSize: 3 })).toBeGreaterThan(score);
+    expect(difficultyScore({ ...base, rangeSemitones: 40 })).toBeGreaterThan(score);
+    expect(difficultyScore({ ...base, durationSec: 600 })).toBeGreaterThan(score);
+  });
+
+  it("saturates at level 5 for virtuoso density", () => {
+    expect(difficultyLevel(difficultyScore({ ...base, notesPerSec: 14, peakNotesPerSec: 16, chordSize: 2, rangeSemitones: 50 }))).toBe(5);
+  });
+});
+
+describe("measureDifficultyFeatures", () => {
+  it("counts simultaneous notes as one chord and ignores outlier pitches for range", () => {
+    const notes = [] as { midi: number; time: number }[];
+    for (let i = 0; i < 100; i++) {
+      notes.push({ midi: 60, time: i }, { midi: 64, time: i + 0.01 }, { midi: 67, time: i });
+    }
+    notes.push({ midi: 100, time: 50.5 }); // one stray high note
+    const features = measureDifficultyFeatures(notes, 100);
+    expect(features.chordSize).toBeCloseTo(301 / 101, 2);
+    expect(features.rangeSemitones).toBe(7);
+    expect(features.peakNotesPerSec).toBeCloseTo(3, 0);
   });
 
   it("rejects unparseable bytes", () => {
