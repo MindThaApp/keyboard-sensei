@@ -305,8 +305,7 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
   const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
   // Single source of truth for both the piano and the falling-note canvas below — they
   // read the exact same geometry, so resizing one resizes the other in lock-step and
-  // they can never drift apart (see docs/superpowers/specs/2026-08-19-keyboard-sizing-
-  // controls-design.md). No persistenceKey/onDeviceRangeChange: nothing here should
+  // they can never drift apart (see useKeyboardSizing). No persistenceKey/onDeviceRangeChange: nothing here should
   // carry over between songs or leak into another page's saved zoom for this device.
   const sizing = useKeyboardSizing({
     defaultRange,
@@ -371,7 +370,7 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     const current = runRef.current;
     // Runs every frame and mutates the ribbon's DOM transform directly via refs
     // inside ScrollingScore — never a setState, so this can't cause a 60fps React
-    // re-render (see docs/agent-briefing.md). The score is in song time.
+    // re-render (see docs/operations.md). The score is in song time.
     scrollingScoreRef.current?.setSongTime(runTime + current.offsetS);
 
     const canvas = canvasRef.current;

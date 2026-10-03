@@ -26,7 +26,7 @@ export interface DifficultyFeatures {
   /**
    * Notes per second in the busiest passages (90th percentile of 4s windows).
    * This is the "tempo" term: the library's performance MIDIs carry no
-   * trustworthy BPM (see CLAUDE.md), so speed is measured from the notes.
+   * trustworthy BPM (see docs/operations.md), so speed is measured from the notes.
    */
   peakNotesPerSec: number;
   /** Average notes struck together (onsets within 30ms count as one chord). */
