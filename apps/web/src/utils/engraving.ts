@@ -425,8 +425,11 @@ export function engrave(input: EngraveInputNote[], staves: StaffName[], options:
   });
 
   // Every staff spans the same bars, so a grand staff's hands line up bar for bar.
-  const lastOnset = quantized.reduce((max, n) => Math.max(max, n.startBeat), 0);
-  const lastBarIndex = Math.max(barAt(scratchBars, lastOnset).index, (options.minMeasureCount ?? 1) - 1, 0);
+  // The bars must reach the END of the last note, not just its onset: a note that rings
+  // over a barline after the last onset would otherwise outlast the final bar, and the
+  // span loop below could never advance past it.
+  const lastSound = quantized.reduce((max, n) => Math.max(max, n.startBeat + n.durationBeats), 0);
+  const lastBarIndex = Math.max(barAt(scratchBars, lastSound - 2 * EPS).index, (options.minMeasureCount ?? 1) - 1, 0);
   const bars = buildBars(meters, 0, lastBarIndex + 1);
   const endBeat = bars[bars.length - 1].start + bars[bars.length - 1].length;
 

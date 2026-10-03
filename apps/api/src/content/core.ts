@@ -77,66 +77,66 @@ export const coreLessons: Lesson[] = [
     {type:"notation",title:"C chromatic scale ascending",vexflowData:{clef:"treble",timeSignature:"4/4",notes:["c/4","c#/4","d/4","d#/4","e/4","f/4","f#/4","g/4","g#/4","a/4","a#/4","b/4","c/5"].map(keys=>({keys:[keys],duration:"8"}))}},
     {type:"quiz",questions:[quiz("q13-1","What does a flat do to a written note?",["Raises it one semitone","Lowers it one semitone","Lowers it one whole tone","Makes it shorter"],1,"A flat lowers its note by the distance to the nearest key: one semitone."),quiz("q13-2","Which pair is enharmonic on the piano?",["C♯ and D♭","C and D","E and F♯","B♭ and B"],0,"C-sharp and D-flat name the same piano key in different musical contexts.")]},
     midiSection("exercise-13","Ascending C chromatic scale","Play every key from C4 to C5 in order as even eighth notes. Use 1-3 on each two-key white/black unit, adjusting at E-F and B-C as shown.")
-  ],rewards({keyboard_layout:2,note_reading:2,theory:3,technique:1}),18),
+  ],rewards({keyboard_layout:2,note_reading:2,theory:3,technique:1})),
   lesson("lesson-14",14,"G major and D major scales","technique",[
     {type:"theory-card",title:"Major scales with sharps",body:"G major needs F♯ so its semitone pattern remains whole–whole–half–whole–whole–whole–half: G-A-B-C-D-E-F♯-G. D major adds C♯: D-E-F♯-G-A-B-C♯-D. For the right hand ascending, use 1-2-3, tuck the thumb under to 1, then 2-3-4-5. Keep the wrist level while the thumb travels."},
     {type:"notation",title:"G major and D major",vexflowData:{clef:"treble",timeSignature:"4/4",notes:["g/4","a/4","b/4","c/5","d/5","e/5","f#/5","g/5","d/4","e/4","f#/4","g/4","a/4","b/4","c#/5","d/5"].map(keys=>({keys:[keys],duration:"8"}))}},
     {type:"quiz",questions:[quiz("q14-1","Which sharps belong to D major?",["F♯ only","F♯ and C♯","C♯ and G♯","B♭ and E♭"],1,"D major has two sharps: F-sharp and C-sharp.")]},
     midiSection("exercise-14","One octave in G and D","Play G4–G5, pause one beat, then D4–D5. Use the correct sharps and an even pulse.")
-  ],rewards({technique:3,theory:2,keyboard_layout:1,timing:2}),20),
+  ],rewards({technique:3,theory:2,keyboard_layout:1,timing:2})),
   lesson("lesson-15",15,"Circle of fifths: the sharp-key side","theory",[
     {type:"markdown",title:"Moving clockwise by fifths",body:"Starting at C, each clockwise step rises a perfect fifth and adds one sharp: **C → G → D → A → E**. New sharps appear in a fixed order: **F♯, C♯, G♯, D♯**. A useful rule is that the newest sharp lies one semitone below the major key-note: D major's newest sharp is C♯. This lesson stays on the first four sharp keys; flat keys come later."},
     {type:"quiz",questions:[quiz("q15-1","Which key follows D major clockwise on the circle of fifths?",["F major","A major","B♭ major","E minor"],1,"A is a perfect fifth above D, so A major follows D major."),quiz("q15-2","What is the order of the first three sharps?",["C♯, F♯, G♯","F♯, C♯, G♯","F♯, G♯, C♯","G♯, D♯, A♯"],1,"Sharp key signatures add F-sharp, then C-sharp, then G-sharp.")]},
     midiSection("exercise-15","Hear the fifths connection","Play the G-major scale, pause, then the D-major scale. Notice that D is the fifth degree of G and that D major adds C♯.")
-  ],rewards({theory:4,keyboard_layout:1,note_reading:1}),17),
+  ],rewards({theory:4,keyboard_layout:1,note_reading:1})),
   lesson("lesson-16",16,"Natural minor scales: E minor and D minor","theory",[
     {type:"theory-card",title:"Natural minor beyond A",body:"The natural-minor pattern is whole–half–whole–whole–half–whole–whole. E natural minor uses E-F♯-G-A-B-C-D-E and shares G major's one-sharp key signature. D natural minor uses D-E-F-G-A-B♭-C-D and introduces B♭. Keep the seventh degree unraised here; raised sevenths belong to harmonic minor."},
     {type:"notation",title:"E natural minor and D natural minor",vexflowData:{clef:"treble",timeSignature:"4/4",notes:["e/4","f#/4","g/4","a/4","b/4","c/5","d/5","e/5","d/4","e/4","f/4","g/4","a/4","bb/4","c/5","d/5"].map(keys=>({keys:[keys],duration:"8"}))}},
     {type:"quiz",questions:[quiz("q16-1","Which altered note appears in E natural minor?",["C♯","F♯","G♯","B♭"],1,"E natural minor shares one sharp, F-sharp, with its relative major G."),quiz("q16-2","Which note is flat in D natural minor?",["E♭","A♭","B♭","D♭"],2,"D natural minor contains B-flat.")]},
     midiSection("exercise-16","Two natural-minor scales","Play E4–E5, pause, then D4–D5. Listen for the darker minor third from E to G and D to F.")
-  ],rewards({theory:3,note_reading:2,technique:2,timing:1}),20),
+  ],rewards({theory:3,note_reading:2,technique:2,timing:1})),
   lesson("lesson-17",17,"The dominant seventh chord","theory",[
     {type:"markdown",title:"Tension that points home",body:"A dominant seventh chord adds a minor seventh above the dominant triad. In C major, scale degree 5 is G, so **G7 = G-B-D-F**. The B and F form a tense tritone: B tends upward to C while F tends downward to E. Resolve G7 to C major and listen for instability becoming rest."},
     {type:"notation",title:"G7 resolving to C",vexflowData:{clef:"treble",timeSignature:"4/4",notes:[{keys:["g/3","b/3","d/4","f/4"],duration:"h"},{keys:["c/4","e/4","g/4"],duration:"h"}]}},
     {type:"quiz",questions:[quiz("q17-1","Which notes spell G7?",["G-B-D-F","G-B-D-F♯","G-B♭-D-F","C-E-G-B"],0,"G7 combines the G-major triad G-B-D with the minor seventh F."),quiz("q17-2","Where does the F in G7 normally resolve in C major?",["Up to G","Down to E","Down to C","It must stay on F"],1,"F commonly resolves down by semitone to E.")]},
     midiSection("exercise-17","G7 to C major","Play G3-B3-D4-F4 together, then resolve to C4-E4-G4. Make each chord a single coordinated attack.")
-  ],rewards({chords:4,theory:3,timing:2}),20),
+  ],rewards({chords:4,theory:3,timing:2})),
   lesson("lesson-18",18,"First and second inversions of triads","theory",[
     {type:"theory-card",title:"The bass note names the position",body:"A root-position C-major triad is C-E-G. Move C above the chord and E becomes the lowest note: **E-G-C**, first inversion. Move E above and G becomes lowest: **G-C-E**, second inversion. The chord remains C major because its pitch classes are still C, E, and G; inversion changes spacing, bass, and sound."},
     {type:"notation",title:"C major in two inversions",vexflowData:{clef:"treble",timeSignature:"4/4",notes:[{keys:["e/4","g/4","c/5"],duration:"h"},{keys:["g/4","c/5","e/5"],duration:"h"}]}},
     {type:"quiz",questions:[quiz("q18-1","Which spelling is C major in first inversion?",["C-E-G","E-G-C","G-C-E","E-G-B"],1,"First inversion places the third, E, in the bass."),quiz("q18-2","What is the lowest note of a second-inversion C-major triad?",["C","D","E","G"],3,"Second inversion places the fifth, G, in the bass.")]},
     midiSection("exercise-18","C-major inversions","Play E4-G4-C5 together, then G4-C5-E5 together. Use 1-3-5 and release cleanly between positions.")
-  ],rewards({chords:4,theory:3,technique:1,timing:1}),18),
+  ],rewards({chords:4,theory:3,technique:1,timing:1})),
   lesson("lesson-19",19,"Syncopation and dotted rhythms","theory",[
     {type:"markdown",title:"Notes across the usual accents",body:"A dot adds half of a note's original value, so a dotted quarter lasts one and a half beats. Count eighth-note subdivisions aloud: **1-and-2-and-3-and-4-and**. Syncopation emphasizes a weak subdivision or sustains a sound across a strong beat. Keep the underlying pulse steady; the accent moves, not the beat."},
     {type:"notation",title:"Dotted and off-beat rhythm",vexflowData:{clef:"treble",timeSignature:"4/4",notes:[{keys:["c/4"],duration:"qd"},{keys:["d/4"],duration:"8"},{keys:["e/4"],duration:"q"},{keys:["g/4"],duration:"qd"},{keys:["e/4"],duration:"8"},{keys:["d/4"],duration:"q"},{keys:["c/4"],duration:"h"}]}},
     {type:"quiz",questions:[quiz("q19-1","How long is a dotted quarter note?",["Half a beat","One beat","One and a half beats","Three beats"],2,"The dot adds half of the quarter note's one-beat value."),quiz("q19-2","What should remain steady during syncopation?",["The underlying pulse","Every note length","Only the loud notes","The hand position"],0,"Syncopation shifts emphasis while the pulse continues steadily.")]},
     midiSection("exercise-19","Count the off-beats","Count eighth-note subdivisions and play the written pattern. Hold each dotted quarter through its following 'and' before the short eighth note.")
-  ],rewards({rhythm:4,timing:3,note_reading:1}),20),
+  ],rewards({rhythm:4,timing:3,note_reading:1})),
   lesson("lesson-20",20,"Two-hand independence in contrary motion","technique",[
     {type:"theory-card",title:"Different directions, one pulse",body:"In contrary motion the hands travel in opposite physical directions at the same time. Start with the left hand on C3 and right hand on C5. As the left ascends C-D-E-F-G, the right descends C-B-A-G-F. Prepare both notes before each beat, keep both wrists relaxed, and listen for exactly two simultaneous attacks."},
     {type:"notation",title:"Contrary-motion five-note study",vexflowData:{grandStaff:true,treble:{clef:"treble",timeSignature:"5/4",notes:["c/5","b/4","a/4","g/4","f/4"].map(keys=>({keys:[keys],duration:"q"}))},bass:{clef:"bass",timeSignature:"5/4",notes:["c/3","d/3","e/3","f/3","g/3"].map(keys=>({keys:[keys],duration:"q"}))}}},
     midiSection("exercise-20","Opposite directions together","Play both hands together for five beats: left C3-D3-E3-F3-G3 while right C5-B4-A4-G4-F4. Slow down rather than letting one hand lead.")
-  ],rewards({technique:4,timing:3,note_reading:1}),20),
+  ],rewards({technique:4,timing:3,note_reading:1})),
   lesson("lesson-21",21,"Sustain pedal basics","technique",[
     {type:"markdown",title:"Clear changes with the damper pedal",body:"The right pedal lifts the dampers so notes continue after the keys are released. Sit so the heel rests on the floor and the ball of the foot controls the pedal. For legato harmony, play the new chord first, then quickly release and depress the pedal: **keys, lift, press**. This delayed change prevents gaps without mixing two harmonies. The exercise scores hand playing only; listen and manage the pedal yourself because pedal input is not captured."},
     {type:"quiz",questions:[quiz("q21-1","For a clean delayed pedal change, what happens first?",["Lift the pedal before playing","Play the new harmony","Press the pedal harder","Release every key early"],1,"Play the new chord first, then clear and reapply the pedal immediately."),quiz("q21-2","What usually causes blurred harmony?",["Changing the pedal just after the new chord","Keeping the heel supported","Holding the pedal through a harmony change","Using curved fingers"],2,"An unchanged pedal lets the old and new harmonies ring together.")]},
     midiSection("exercise-21","Chord changes with optional pedal","Play C major, F major, and G major with balanced 1-3-5 fingers. If you have a pedal, change it just after each new chord; scoring evaluates only the notes and timing.")
-  ],rewards({technique:4,chords:2,timing:2}),17),
+  ],rewards({technique:4,chords:2,timing:2})),
   lesson("lesson-22",22,"One-octave C-major and G-major arpeggios","technique",[
     {type:"theory-card",title:"A chord unfolded",body:"An arpeggio plays chord tones one after another. Ascending and descending C major is C-E-G-C-G-E-C; G major is G-B-D-G-D-B-G. Keep the line connected by shifting the hand smoothly rather than stretching rigidly. In the right hand, use 1-2-3-5 ascending, then 5-3-2-1 descending."},
     {type:"notation",title:"C and G major arpeggios",vexflowData:{clef:"treble",timeSignature:"4/4",notes:["c/4","e/4","g/4","c/5","g/4","e/4","c/4","g/4","b/4","d/5","g/5","d/5","b/4","g/4"].map(keys=>({keys:[keys],duration:"8"}))}},
     {type:"quiz",questions:[quiz("q22-1","Which pitches form a C-major arpeggio?",["C-D-E","C-E-G","C-F-G","C-E-A"],1,"An arpeggio unfolds the triad tones C, E, and G."),quiz("q22-2","Which notes form G major?",["G-B-D","G-B♭-D","G-C-D","G-A-D"],0,"G-B-D is the G-major triad.")]},
     midiSection("exercise-22","Blocked, then broken triads","Play C4-E4-G4 together, then unfold C4-E4-G4-C5-G4-E4-C4. Repeat the pattern with G4-B4-D5 together, then G4-B4-D5-G5-D5-B4-G4. The blocked chords establish each harmony; every arpeggio tone then has its own attack.")
-  ],rewards({technique:4,chords:3,timing:2}),20),
+  ],rewards({technique:4,chords:3,timing:2})),
   lesson("lesson-23",23,"Sight-reading drill 2","repertoire",[
     {type:"markdown",title:"Scan before you begin",body:"Before playing, identify the 4/4 meter, starting note C4, highest note A4, and the dotted-quarter/eighth pairs. Read by contour and interval: most notes move by step, with occasional skips. Choose a tempo that lets you continue without restarting."},
     {type:"notation",title:"Original intermediate reading study",vexflowData:{clef:"treble",timeSignature:"4/4",notes:[{keys:["c/4"],duration:"q"},{keys:["d/4"],duration:"q"},{keys:["e/4"],duration:"q"},{keys:["g/4"],duration:"qd"},{keys:["f/4"],duration:"8"},{keys:["e/4"],duration:"q"},{keys:["d/4"],duration:"q"},{keys:["e/4"],duration:"q"},{keys:["f/4"],duration:"q"},{keys:["a/4"],duration:"qd"},{keys:["g/4"],duration:"8"},{keys:["e/4"],duration:"q"},{keys:["d/4"],duration:"q"},{keys:["b/3"],duration:"q"},{keys:["c/4"],duration:"h"}],original:true}},
     midiSection("exercise-23","Read the whole phrase","Preview silently, then play from C4 through the final C4 without stopping. Preserve the dotted rhythms and let the melody's stepwise direction guide you.")
-  ],rewards({sight_reading:4,note_reading:3,rhythm:2,timing:2}),22),
+  ],rewards({sight_reading:4,note_reading:3,rhythm:2,timing:2})),
   lesson("lesson-24",24,"Intermediate technique assessment","technique",[
     {type:"markdown",title:"Four-part checkpoint",body:"This assessment combines the batch's core work. First play one octave of D major with F♯ and C♯. After a one-beat pause, play G7 as one coordinated chord. Then play C major in first inversion, E-G-C. Finish with a dotted-quarter D followed by an eighth-note C. Scan each part before beginning and keep one pulse throughout."},
     {type:"quiz",questions:[quiz("q24-1","Which sequence correctly summarizes the assessment?",["C chromatic, A minor, root-position C, whole note","D major, G7, first-inversion C, dotted rhythm","G major, D7, second-inversion C, triplets","D minor, G major, root-position C, syncopated rests"],1,"The checkpoint combines D major, G7, first-inversion C major, and a dotted rhythm.")]},
     midiSection("exercise-24","Intermediate checkpoint","Play D4-E4-F♯4-G4-A4-B4-C♯5-D5, pause, play G3-B3-D4-F4 together, then E4-G4-C5 together, and finish with dotted-quarter D4 and eighth-note C4.")
-  ],rewards({note_reading:3,rhythm:3,technique:3,theory:2,chords:3,timing:3}),25)
+  ],rewards({note_reading:3,rhythm:3,technique:3,theory:2,chords:3,timing:3}))
 ];
