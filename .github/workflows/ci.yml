@@ -54,6 +54,6 @@ jobs:
             ghcr.io/${{ github.repository }}-${{ matrix.app }}:${{ github.sha }}
           # Baked into the web bundle at build time; matches the home-server deploy.
           build-args: |
-            VITE_API_URL=http://192.168.4.4:3101
+            VITE_API_URL=/api
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max

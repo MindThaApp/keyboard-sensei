@@ -36,12 +36,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "3101:3001"
     restart: unless-stopped
 
   web:
-    # VITE_API_URL is baked into this image at CI build time (see .github/workflows/ci.yml).
+    # VITE_API_URL is baked as /api at CI build time and proxied by nginx.
     image: ghcr.io/ramin-azizi/keyboard-sensei-web:latest
     depends_on:
       - api

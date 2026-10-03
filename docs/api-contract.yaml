@@ -142,7 +142,7 @@ paths:
         required: true
         content: { application/json: { schema: { type: object, required: [selectedAnswer], properties: { selectedAnswer: { type: integer, minimum: 0 } } }, example: { selectedAnswer: 0 } } }
       responses:
-        '200': { description: Answer result, content: { application/json: { schema: { type: object, required: [correct, correctIndex, explanation], properties: { correct: { type: boolean }, correctIndex: { type: integer, minimum: 0 }, explanation: { type: string } } } } } }
+        '200': { description: 'Wrong answers return only correct; correct answers also return the answer key and explanation', content: { application/json: { schema: { type: object, required: [correct], properties: { correct: { type: boolean }, correctIndex: { type: integer, minimum: 0 }, explanation: { type: string } } } } } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
