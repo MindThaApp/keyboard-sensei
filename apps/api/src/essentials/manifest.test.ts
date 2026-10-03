@@ -5,7 +5,8 @@ import { deflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import ToneMidi from "@tonejs/midi";
 import { incipitMatches, loadSource, sameNotes, sourceNotes, unzipMember } from "./build.js";
-import { ESSENTIALS, attribution, contentRights, incipitPitches, parsePitch } from "./manifest.js";
+import { AUTHORED_SCORES } from "./authored/index.js";
+import { ESSENTIALS, attribution, contentRights, incipitPitches, isAuthored, parsePitch } from "./manifest.js";
 import { ESSENTIALS_REPLACES } from "./replacements.js";
 
 const { Midi } = ToneMidi;
@@ -16,22 +17,40 @@ describe("Essentials manifest", () => {
     expect(ESSENTIALS.map((piece) => piece.rank).sort((a, b) => a - b)).toEqual(ESSENTIALS.map((_, i) => i + 1));
   });
 
-  it("pins every source to a Mutopia URL and sha256, with a licence and attribution", () => {
+  it("pins every Mutopia source to a URL and sha256, with a licence and attribution", () => {
     for (const piece of ESSENTIALS) {
-      expect(piece.source.url).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.(mid|zip)$/);
-      expect(piece.source.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(piece.source.url.endsWith(".zip")).toBe(Boolean(piece.source.member));
-      expect(piece.source.mutopiaId).toMatch(/^Mutopia-\d{4}\/\d{2}\/\d{2}-\d+$/);
-      expect(attribution(piece)).toContain(piece.source.mutopiaId);
+      const { source } = piece;
+      if (isAuthored(source)) continue;
+      expect(source.url).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.(mid|zip)$/);
+      expect(source.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(source.url.endsWith(".zip")).toBe(Boolean(source.member));
+      expect(source.mutopiaId).toMatch(/^Mutopia-\d{4}\/\d{2}\/\d{2}-\d+$/);
+      expect(attribution(piece)).toContain(source.mutopiaId);
       expect(contentRights(piece)).toMatch(/^(public-domain|cc-by(-sa)?-\d\.\d)$/);
     }
   });
 
-  it("has an 7–16 note incipit for every piece, in spellable pitches", () => {
+  it("gives every authored piece a score, a basis and two independent sources for its tune", () => {
+    for (const piece of ESSENTIALS) {
+      const { source } = piece;
+      if (!isAuthored(source)) continue;
+      expect(AUTHORED_SCORES[piece.slug], piece.slug).toBeDefined();
+      expect(source.basis.length, piece.slug).toBeGreaterThan(20);
+      expect(source.verification.length, piece.slug).toBeGreaterThan(20);
+      const hosts = new Set(source.verifiedAgainst.map((ref) => new URL(ref.url).host));
+      expect(hosts.size, `${piece.slug}: sources on two different sites`).toBeGreaterThanOrEqual(2);
+      expect(contentRights(piece)).toBe("public-domain");
+      expect(attribution(piece)).toContain("arranged for Keyboard Sensei");
+    }
+    const authored = new Set(ESSENTIALS.filter((piece) => isAuthored(piece.source)).map((piece) => piece.slug));
+    expect(Object.keys(AUTHORED_SCORES).filter((slug) => !authored.has(slug))).toEqual([]);
+  });
+
+  it("has an incipit for every piece in spellable pitches: 7–16 notes, or 16+ for an authored tune", () => {
     for (const piece of ESSENTIALS) {
       const pitches = incipitPitches(piece);
-      expect(pitches.length, piece.slug).toBeGreaterThanOrEqual(7);
-      expect(pitches.length, piece.slug).toBeLessThanOrEqual(16);
+      expect(pitches.length, piece.slug).toBeGreaterThanOrEqual(isAuthored(piece.source) ? 16 : 7);
+      expect(pitches.length, piece.slug).toBeLessThanOrEqual(isAuthored(piece.source) ? 32 : 16);
       for (const pitch of pitches) expect(pitch).toBeGreaterThanOrEqual(21);
     }
     expect(parsePitch("C4")).toBe(60);

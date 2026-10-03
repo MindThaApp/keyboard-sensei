@@ -37,13 +37,34 @@ export interface MutopiaSource {
   infoUrl: string;
 }
 
+/**
+ * A piece arranged here, note by note, because no trustworthy Mutopia file
+ * exists (src/essentials/authored/<slug>.ts holds the score). The tune is the
+ * whole point, so it is checked note for note against at least two
+ * independent public-domain sources before it goes in; a tune that can't be
+ * confirmed twice is left out of the pack. The arrangement itself (harmony,
+ * bass, texture) is original to this project and public domain.
+ */
+export interface AuthoredSource {
+  kind: "authored";
+  /** What the notes are based on: the tune, and the composer's own harmony and bass where known. */
+  basis: string;
+  /** The independent public-domain sources the tune was checked against. */
+  verifiedAgainst: { title: string; url: string }[];
+  /** What was compared, and how any disagreement between the sources was settled. */
+  verification: string;
+}
+
+export const isAuthored = (source: MutopiaSource | AuthoredSource): source is AuthoredSource =>
+  (source as AuthoredSource).kind === "authored";
+
 export interface EssentialsPiece {
   slug: string;
   rank: number;
   title: string;
   composer: string;
   genre: "classical" | "jazz" | "other";
-  source: MutopiaSource;
+  source: MutopiaSource | AuthoredSource;
   /**
    * Which source tracks are which hand, and which carry the tune. Omitted:
    * the lowest-pitched track is the left hand and the rest the right (the
@@ -411,6 +432,21 @@ export const ESSENTIALS: EssentialsPiece[] = [
     source: { url: `${MUTOPIA}BachJS/BWV784/bach-invention-13/bach-invention-13.mid`, sha256: "e5b4dd4790ee2f2fdadca75630790a373363e1f6cb4558838e34bbad907364f1", licence: "Public Domain", mutopiaId: "Mutopia-2008/06/15-59", maintainer: "Allen Garvin", infoUrl: info(59) },
     incipit: "E4 A4 C5 B4 E4 B4 D5 C5 E5 G#4 E5 A4", incipitBasis: "known-melody",
   },
+
+  // ---- Authored: arranged here, tune checked against two independent PD sources.
+  {
+    slug: "twinkle-twinkle-little-star", rank: 59, title: "Twinkle, Twinkle, Little Star", composer: "Traditional", genre: "other",
+    source: {
+      kind: "authored",
+      basis: "The French air “Ah! vous dirai-je, maman” in Mozart's register, over the bass of Mozart's theme to his Variations K. 265.",
+      verifiedAgainst: [
+        { title: "Mozart, 12 Variations K. 265, Tema (Mozarts Werke, Breitkopf & Härtel, 1878)", url: "https://imslp.org/wiki/12_Variations_on_'Ah,_vous_dirai-je_maman',_K.265/300e_(Mozart,_Wolfgang_Amadeus)" },
+        { title: "Wikipedia, “Twinkle, Twinkle, Little Star” (score)", url: "https://en.wikipedia.org/wiki/Twinkle,_Twinkle,_Little_Star" },
+      ],
+      verification: "All 42 notes of the tune match both sources (Mozart's theme in 2/4 with two ornamented cadences, here plain as the song is sung). Bass read off the 1878 score, bars 1–8 and 9–12.",
+    },
+    incipit: "C5 C5 G5 G5 A5 A5 G5 F5 F5 E5 E5 D5 D5 C5 G5 G5 F5 F5 E5 E5 D5", incipitBasis: "pd-score",
+  },
 ];
 
 const NOTE_CLASS: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -425,15 +461,25 @@ export function parsePitch(name: string): number {
 
 export const incipitPitches = (piece: EssentialsPiece): number[] => piece.incipit.split(/\s+/).map(parsePitch);
 
-/** Attribution line for a piece's source edition. */
+/** Attribution line for a piece's source edition (or, for an authored piece, its provenance). */
 export function attribution(piece: EssentialsPiece): string {
   const { source } = piece;
+  if (isAuthored(source)) {
+    const checked = source.verifiedAgainst.map((ref) => ref.title).join("; ");
+    return `${piece.title} (${piece.composer}), arranged for Keyboard Sensei. ${source.basis} Tune checked against: ${checked}. Public Domain.`;
+  }
   const who = source.maintainer && source.maintainer !== "Anonymous" ? ` typeset by ${source.maintainer}` : "";
   return `${piece.title} (${piece.composer}),${who} for the Mutopia Project, ${source.mutopiaId}. ${source.licence}. ${source.infoUrl}`;
 }
 
+/** Where the piece came from, stored in Song.source_url. */
+export function sourceUrl(piece: EssentialsPiece): string {
+  return isAuthored(piece.source) ? piece.source.verifiedAgainst[0].url : piece.source.infoUrl;
+}
+
 /** Short licence tag stored in Song.content_rights. */
 export function contentRights(piece: EssentialsPiece): string {
+  if (isAuthored(piece.source)) return "public-domain";
   const licence = piece.source.licence;
   if (licence === "Public Domain") return "public-domain";
   const version = /(\d\.\d)$/.exec(licence)?.[1] ?? "";

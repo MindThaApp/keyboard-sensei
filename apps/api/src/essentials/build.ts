@@ -18,7 +18,8 @@ import {
   type ArrangementMeta,
   type ArrangementNote,
 } from "@keyboard-sensei/midi-engine";
-import { incipitPitches, type EssentialsLevel, type EssentialsPiece } from "./manifest.js";
+import { AUTHORED_TRACK } from "./authored/notation.js";
+import { incipitPitches, isAuthored, type EssentialsLevel, type EssentialsPiece } from "./manifest.js";
 
 const { Midi } = ToneMidi;
 export type MidiFile = InstanceType<typeof Midi>;
@@ -96,6 +97,12 @@ export function loadSource(bytes: Uint8Array, piece: EssentialsPiece): MidiFile 
 /** Track indexes for each hand: the manifest's, else the play-along parser's rule. */
 export function handTracks(midi: MidiFile, piece: EssentialsPiece): { right: number[]; left: number[]; melody: number[] } {
   if (piece.tracks) return { ...piece.tracks, melody: piece.tracks.melody ?? [] };
+  if (isAuthored(piece.source)) {
+    // An authored file names its tracks (see buildAuthoredMidi).
+    const named = (name: string) => midi.tracks.flatMap((track, index) => (track.name === name ? [index] : []));
+    const melody = named(AUTHORED_TRACK.melody);
+    return { right: [...melody, ...named(AUTHORED_TRACK.right)], left: named(AUTHORED_TRACK.left), melody };
+  }
   const withNotes = midi.tracks.map((track, index) => ({ track, index })).filter(({ track }) => track.notes.length > 0);
   if (withNotes.length < 2) return { right: withNotes.map(({ index }) => index), left: [], melody: [] };
   const mean = (t: MidiFile["tracks"][number]): number => t.notes.reduce((sum, note) => sum + note.midi, 0) / t.notes.length;
