@@ -17,38 +17,18 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { parsePlayAlongSong } from "../../utils/playalongSong";
 import { pianoSynth } from "../../utils/synth";
+import {
+  DEFAULT_FILTERS,
+  GENRE_OPTIONS as GENRES,
+  filterSongs,
+  formatDuration,
+  paginate,
+  type SongFilters,
+} from "../../utils/songLibrary";
+import SongFilterBar from "../library/SongFilterBar";
+import Pagination from "../library/Pagination";
 
-const GENRES: { value: SongGenre | "all"; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "classical", label: "Classical" },
-  { value: "pop", label: "Pop" },
-  { value: "film", label: "Film" },
-  { value: "game", label: "Game" },
-  { value: "jazz", label: "Jazz / Ragtime" },
-  { value: "other", label: "Other" },
-];
-
-type SourceFilter = "all" | "recordings" | "uploads" | "library";
-
-const SOURCES: { value: SourceFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "recordings", label: "My recordings" },
-  { value: "uploads", label: "My uploads" },
-  { value: "library", label: "Library" },
-];
-
-const matchesSource = (song: Song, source: SourceFilter): boolean => {
-  if (source === "recordings") return song.mine && song.content_rights === "user-recording";
-  if (source === "uploads") return song.mine && (song.content_rights === "user-upload" || song.content_rights === "user-import-url");
-  if (source === "library") return !song.mine;
-  return true;
-};
-
-const formatDuration = (seconds: number): string => {
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-};
+const PAGE_SIZE = 50;
 
 function DifficultyDots({ level }: { level: number }) {
   return (
@@ -136,6 +116,7 @@ function BrowseArchiveDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
         content_rights: "archive-import",
         notation_path: null,
         mine: true,
+        collection: null,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
@@ -460,9 +441,8 @@ export default function SongLibrarySection() {
   const { user } = useAuth();
   const [songs, setSongs] = useState<Song[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [genre, setGenre] = useState<SongGenre | "all">("all");
-  const [source, setSource] = useState<SourceFilter>("all");
+  const [filters, setFilters] = useState<SongFilters>(DEFAULT_FILTERS);
+  const [page, setPage] = useState(1);
   const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
@@ -473,17 +453,16 @@ export default function SongLibrarySection() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load songs"));
   }, []);
 
-  const visible = useMemo(() => {
-    if (!songs) return null;
-    const query = search.trim().toLowerCase();
-    const filtered = songs.filter(
-      (song) =>
-        (genre === "all" || song.genre === genre) &&
-        matchesSource(song, source) &&
-        (!query || song.title.toLowerCase().includes(query) || song.artist.toLowerCase().includes(query)),
-    );
-    return [...filtered].sort((a, b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title));
-  }, [songs, search, genre, source]);
+  // Managing the library is an artist-ordered catalogue, so no sort control here.
+  const matching = useMemo(
+    () => (songs ? filterSongs(songs, filters).sort((a, b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title)) : null),
+    [songs, filters],
+  );
+  const visible = matching ? paginate(matching, page, PAGE_SIZE) : null;
+  const updateFilters = (next: SongFilters) => {
+    setFilters(next);
+    setPage(1);
+  };
 
   const removeSong = async (song: Song) => {
     if (!window.confirm(`Permanently delete "${song.title}"? This cannot be undone.`)) return;
@@ -500,7 +479,7 @@ export default function SongLibrarySection() {
             Upload, import, and edit the songs available to play.
           </p>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "file" ? null : "file")); }}>
             Upload MIDI
           </button>
@@ -532,52 +511,18 @@ export default function SongLibrarySection() {
         />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          placeholder="Search title or artist…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-56 rounded-md border border-slate-300 bg-transparent px-2.5 py-1.5 text-sm dark:border-slate-600"
-        />
-        <div className="flex gap-1">
-          {GENRES.map((item) => (
-            <button
-              key={item.value}
-              onClick={() => setGenre(item.value)}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                genre === item.value
-                  ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1">
-          {SOURCES.map((item) => (
-            <button
-              key={item.value}
-              onClick={() => setSource(item.value)}
-              className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                source === item.value
-                  ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        {visible && <span className="text-xs text-slate-400">{visible.length} songs</span>}
-      </div>
+      <SongFilterBar
+        filters={filters}
+        onChange={updateFilters}
+        showSort={false}
+        summary={visible && songs ? (visible.total === 0 ? "No songs match" : `Showing ${visible.from}–${visible.to} of ${visible.total}`) : undefined}
+      />
 
       {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-      {!songs && !error && <p className="text-sm text-slate-500">Loading library…</p>}
+      {!songs && !error && <p className="text-sm text-slate-600 dark:text-slate-300">Loading library…</p>}
 
       <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-        {visible?.map((song) => {
+        {visible?.items.map((song) => {
           if (editingId === song.id) {
             return (
               <EditSongRow
@@ -625,7 +570,8 @@ export default function SongLibrarySection() {
           );
         })}
       </ul>
-      {visible && visible.length === 0 && <p className="text-sm text-slate-500">No songs match those filters.</p>}
+      {visible && visible.total === 0 && <p className="text-sm text-slate-600 dark:text-slate-300">No songs match those filters.</p>}
+      {visible && <Pagination page={visible.page} pageCount={visible.pageCount} onPageChange={setPage} />}
     </div>
   );
 }
