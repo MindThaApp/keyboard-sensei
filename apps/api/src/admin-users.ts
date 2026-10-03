@@ -132,7 +132,11 @@ adminUsersRouter.get("/admin/users/:id/progress", async (req, res, next) => {
   try {
     const targetId = id(req.params.id);
     const [lessons, progress] = await Promise.all([
-      prisma.lesson.findMany({ orderBy: { order: "asc" }, select: { id: true, order: true, lesson_json: true } }),
+      prisma.lesson.findMany({
+        where: { retired_at: null },
+        orderBy: { order: "asc" },
+        select: { id: true, order: true, lesson_json: true },
+      }),
       prisma.userProgress.findMany({ where: { user_id: targetId } }),
     ]);
     const byLesson = new Map(progress.map((row) => [row.lesson_id, row]));

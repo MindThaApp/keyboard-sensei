@@ -55,6 +55,22 @@ Demo login: `demo@keyboardsensei.local` / `demo-password`.
 
 Backend env: `DATABASE_URL`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`. Frontend env: `VITE_API_URL`.
 
+Optional backend env (see `apps/api/.env.example`):
+- `REGISTRATION_OPEN` — `true` (default) or `false`. `false` closes self-service sign-up (`POST /auth/register` returns 403); admins can still create accounts in the admin area.
+- `TRUST_PROXY` — number of reverse-proxy hops in front of the API (default `0`). Needed so the login/sign-up rate limits see real client IPs; the LAN deploy (Caddy → nginx → api) sets `2` in `docker-compose.deploy.yml`.
+- `TTS_USER_DAILY_LIMIT` — max new narration characters per user per UTC day (default `2500`), on top of the shared 10,000-character monthly pool.
+- `ADMIN_PASSWORD` — the seeded admin's password. The seed refuses to run without it when `NODE_ENV=production`.
+
+Real-database tests: `apps/api/src/integration.db.test.ts` runs the real app against Postgres when `TEST_DATABASE_URL` is set in the shell (not `.env`), and is skipped otherwise. It truncates every table, so it refuses any database whose name doesn't contain `test`:
+
+```sh
+export TEST_DATABASE_URL=postgresql://keyboard_sensei:keyboard_sensei@localhost:5432/keyboard_sensei_test
+DATABASE_URL=$TEST_DATABASE_URL pnpm --filter @keyboard-sensei/api exec prisma migrate deploy
+pnpm --filter @keyboard-sensei/api test
+```
+
+Lesson content: every lesson id is a permanent database key (user progress and attempts reference it), so ids are explicit literals in `apps/api/src/content/*` — never derived from position. Order is the lesson's position in `lessons` (`apps/api/src/content.ts`); new lessons can be inserted anywhere and should use a descriptive slug id (e.g. `lesson-hanon-1`). The seed reassigns orders in one transaction. Lessons/exercises removed from content are deleted only if no user data references them; otherwise they are kept, marked `retired_at`, and hidden (the seed prints a warning).
+
 The API contract is [docs/api-contract.yaml](docs/api-contract.yaml). Shared domain types, MIDI capture/scoring, note naming, and lesson validation live only in `packages/*`.
 
 ## CI/CD

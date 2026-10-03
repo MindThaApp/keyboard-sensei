@@ -134,8 +134,8 @@ const createInstrumentFromBytes = async (
   input: z.infer<typeof instrumentQuerySchema>,
   userId: string,
 ): Promise<ReturnType<typeof instrumentListItem>> => {
-  if (bytes.length === 0) throw Object.assign(new Error("empty"), { statusCode: 400 });
-  if (!detectInstrumentPack(bytes)) throw Object.assign(new Error("invalid"), { statusCode: 422 });
+  if (bytes.length === 0) throw Object.assign(new Error("Instrument pack is empty"), { statusCode: 400 });
+  if (!detectInstrumentPack(bytes)) throw Object.assign(new Error("Instrument must be MP3, OGG, WAV, FLAC, or a midi-js soundfont data-uri pack"), { statusCode: 422 });
   await mkdir(INSTRUMENT_LIBRARY_DIR, { recursive: true });
   const instrument = await prisma.instrument.create({
     data: {

@@ -25,6 +25,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       PORT: 3001
       CORS_ORIGIN: ${CORS_ORIGIN}
+      # Makes the seed refuse to run without ADMIN_PASSWORD (no published fallback).
+      NODE_ENV: production
+      # Caddy -> web (nginx) -> api: two proxy hops, so the login/sign-up rate limits
+      # key on the real client IP instead of nginx's.
+      TRUST_PROXY: 2
+      # Set REGISTRATION_OPEN=false in .env.deploy to close self-service sign-up.
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library

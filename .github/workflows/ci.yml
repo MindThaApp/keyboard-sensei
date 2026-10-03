@@ -8,6 +8,24 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # Real Postgres for apps/api/src/integration.db.test.ts (skipped when
+    # TEST_DATABASE_URL is unset). Every other API suite mocks Prisma.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: keyboard_sensei
+          POSTGRES_PASSWORD: keyboard_sensei
+          POSTGRES_DB: keyboard_sensei_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U keyboard_sensei"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://keyboard_sensei:keyboard_sensei@localhost:5432/keyboard_sensei_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,6 +36,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate # @prisma/client types must be generated before typecheck
       - run: pnpm typecheck
+      - run: pnpm db:migrate:deploy
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
       - run: pnpm test
       - run: pnpm build
 

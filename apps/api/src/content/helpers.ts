@@ -36,16 +36,52 @@ export const OBJECTIVES: Record<number, string[]> = {
   23: ["Preview meter, range, and rhythm patterns before playing", "Keep going through dotted rhythms without restarting"],
   24: ["Combine a sharp-key scale, a seventh chord, an inversion, and a dotted rhythm in one take", "Hold one pulse across four different textures"],
 };
-export const lesson = (n:number,title:string,branch:Lesson["branch"],sections:LessonSection[],skillRewards:Record<string,number>,estimatedMinutes=n<5?8:12):Lesson => ({id:`lesson-${String(n).padStart(2,"0")}`,path:"classical-technical",level:n<=6?"foundation":n<=12?"elementary":"intermediate",branch,title,estimatedMinutes,objectives:OBJECTIVES[n] ?? [`Understand ${title.toLowerCase()}`,"Apply the concept accurately at the keyboard"],sections,unlockCriteria:{requiresLessonIds:n===1?[]:[`lesson-${String(n-1).padStart(2,"0")}`],minScore:70},skillRewards});
+/**
+ * Core-batch lesson builder (lessons 1-24).
+ *
+ * `id` is the lesson's permanent database key: UserProgress, ExerciseAttempt and
+ * QuizAttempt rows on the live server are keyed on it, so it must NEVER change once
+ * shipped. It is deliberately not derived from `n` or from the lesson's position.
+ * `n` is only a frozen content key for the defaults below (level, estimated minutes,
+ * OBJECTIVES lookup) — it is not the lesson's order. Order comes from the lesson's
+ * position in the `lessons` array (src/content.ts), and the unlock chain
+ * (`unlockCriteria.requiresLessonIds`) is filled in there from that same position.
+ */
+export const lesson = (
+  id: string,
+  n: number,
+  title: string,
+  branch: Lesson["branch"],
+  sections: LessonSection[],
+  skillRewards: Record<string, number>,
+  estimatedMinutes = n < 5 ? 8 : 12,
+): Lesson => ({
+  id,
+  path: "classical-technical",
+  level: n <= 6 ? "foundation" : n <= 12 ? "elementary" : "intermediate",
+  branch,
+  title,
+  estimatedMinutes,
+  objectives: OBJECTIVES[n] ?? [`Understand ${title.toLowerCase()}`, "Apply the concept accurately at the keyboard"],
+  sections,
+  unlockCriteria: { requiresLessonIds: [], minScore: 70 },
+  skillRewards,
+});
 
 
-/** Fully explicit lesson builder for post-core batches (repertoire, ear training, ...). */
+/**
+ * Fully explicit lesson builder for post-core batches (repertoire, ear training, ...).
+ *
+ * `id` is permanent (see `lesson` above). Existing lessons keep their historical
+ * `lesson-NN` ids; NEW lessons must use a descriptive slug that says nothing about
+ * position, e.g. `"lesson-hanon-1"`, so they can be inserted anywhere in the sequence.
+ */
 export const defineLesson = (input: {
-  n: number; title: string; level: Lesson["level"]; branch: Lesson["branch"];
+  id: string; title: string; level: Lesson["level"]; branch: Lesson["branch"];
   objectives: string[]; sections: LessonSection[]; skillRewards: Record<string, number>;
-  estimatedMinutes: number; requiresLessonIds?: string[];
+  estimatedMinutes: number;
 }): Lesson => ({
-  id: `lesson-${String(input.n).padStart(2, "0")}`,
+  id: input.id,
   path: "classical-technical",
   level: input.level,
   branch: input.branch,
@@ -53,6 +89,20 @@ export const defineLesson = (input: {
   estimatedMinutes: input.estimatedMinutes,
   objectives: input.objectives,
   sections: input.sections,
-  unlockCriteria: { requiresLessonIds: input.requiresLessonIds ?? [`lesson-${String(input.n - 1).padStart(2, "0")}`], minScore: 70 },
+  unlockCriteria: { requiresLessonIds: [], minScore: 70 },
   skillRewards: input.skillRewards,
 });
+
+/**
+ * Link a sequence of lessons into the linear unlock chain by array position:
+ * each lesson requires the one before it. Lesson ids are never consulted, so a
+ * lesson can be inserted anywhere in the array without renumbering anything.
+ */
+export const chainLessons = (sequence: Lesson[]): Lesson[] =>
+  sequence.map((item, index) => ({
+    ...item,
+    unlockCriteria: {
+      ...item.unlockCriteria,
+      requiresLessonIds: index === 0 ? [] : [sequence[index - 1]!.id],
+    },
+  }));

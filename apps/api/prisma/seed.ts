@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient, ProgressStatus, type Prisma } from "@prisma/client";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import { exercises, lessons } from "../src/content.js";
+import { seedContent } from "../src/seed-content.js";
 const prisma=new PrismaClient();
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 
@@ -58,15 +59,21 @@ async function seedInstruments():Promise<void>{
 }
 
 async function main(){
+  // Checked before any write. Empty counts as unset: docker-compose passes ADMIN_PASSWORD
+  // as `${ADMIN_PASSWORD:-}`, i.e. "" when the deploy env doesn't define it.
+  const adminPassword=process.env.ADMIN_PASSWORD||undefined;
+  if(!adminPassword){
+    // Never seed a production admin with a password that is published in this repo.
+    if(process.env.NODE_ENV==="production")throw new Error("ADMIN_PASSWORD must be set when NODE_ENV=production; refusing to seed the admin with the dev fallback password");
+    console.warn("ADMIN_PASSWORD not set; seeding admin with the dev fallback password 'admin-sensei-dev'");
+  }
   lessons.forEach(validateLesson);exercises.forEach(validateMidiExercise);
   const password_hash=await bcrypt.hash("demo-password",12);
   const demo=await prisma.user.upsert({where:{email:"demo@keyboardsensei.local"},create:{email:"demo@keyboardsensei.local",display_name:"Demo User",password_hash},update:{display_name:"Demo User",password_hash}});
-  const adminPassword=process.env.ADMIN_PASSWORD;
-  if(!adminPassword)console.warn("ADMIN_PASSWORD not set; seeding admin with the dev fallback password 'admin-sensei-dev'");
   const admin_hash=await bcrypt.hash(adminPassword??"admin-sensei-dev",12);
   const admin=await prisma.user.upsert({where:{email:"admin@keyboardsensei.local"},create:{email:"admin@keyboardsensei.local",display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"},update:{display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"}});
-  for(const [index,lesson] of lessons.entries())await prisma.lesson.upsert({where:{id:lesson.id},create:{id:lesson.id,lesson_json:json(lesson),path:lesson.path,level:lesson.level,branch:lesson.branch,order:index+1},update:{lesson_json:json(lesson),path:lesson.path,level:lesson.level,branch:lesson.branch,order:index+1}});
-  for(const exercise of exercises){const lesson=lessons.find(item=>item.sections.some(section=>section.type==="midi-exercise"&&section.exerciseId===exercise.exerciseId));if(!lesson)throw new Error(`No lesson owns ${exercise.exerciseId}`);await prisma.exercise.upsert({where:{id:exercise.exerciseId},create:{id:exercise.exerciseId,exercise_json:json(exercise),lesson_id:lesson.id},update:{exercise_json:json(exercise),lesson_id:lesson.id}})}
+  const content=await seedContent(prisma,lessons,exercises);
+  if(content.deletedLessonIds.length>0||content.deletedExerciseIds.length>0)console.log(`Pruned unreferenced content: lessons [${content.deletedLessonIds.join(", ")}], exercises [${content.deletedExerciseIds.join(", ")}]`);
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});
   await seedSongs();
   await seedInstruments();
