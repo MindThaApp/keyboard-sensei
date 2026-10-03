@@ -224,6 +224,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const liveRafRef = useRef(0);
   const activeNoteIdsRef = useRef<string>("");
   const lastDeltaTimeoutRef = useRef<number | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const onRecordingClockRef = useRef(onRecordingClock);
   onRecordingClockRef.current = onRecordingClock;
 
@@ -390,6 +391,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   };
 
   const begin = () => {
+    // Bring the whole exercise (notation, keys, controls) on screen before the count-in.
+    // "auto", not "smooth": the count-in starts immediately and must not race a scroll.
+    sectionRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
     stopPreview();
     raw.current = [];
     setPlayed(false);
@@ -532,7 +536,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const capturing = phase === "recording";
 
   return (
-    <section className="card space-y-4 p-4">
+    <section ref={sectionRef} className="card scroll-mt-3 space-y-3 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-semibold">{title}</h2>
@@ -577,7 +581,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               +
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="img" aria-label={`Sheet music: ${title}`}>
             <div style={{ transform: `scale(${sheetScale})`, transformOrigin: "top left", width: `${100 / sheetScale}%` }}>
               <NotationRenderer
                 data={notation}
@@ -680,11 +684,23 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           </>
         )}
         {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
-        {!untimed && (
-          <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                Tempo <span className="text-slate-400 dark:text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
+      </div>
+
+      {/* Tempo, metronome and highlighting sit behind a disclosure: they're adjustments,
+          not the task, and on a first visit (the skill assessment) they crowded the
+          prompt and pushed the keyboard below the fold. */}
+      {!untimed && (
+        <details className="group rounded-lg border border-slate-200 text-xs dark:border-slate-700">
+          <summary className="cursor-pointer select-none px-3 py-2 text-slate-700 dark:text-slate-200">
+            Practice settings
+            <span className="ml-2 text-slate-500">
+              {Math.round(chosenBpm)} BPM · metronome {metronomeOn ? "on" : "off"} · highlighting {highlightEnabled ? "on" : "off"}
+            </span>
+          </summary>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-700">
+            <label className="flex flex-wrap items-center gap-2">
+              <span className="text-slate-700 dark:text-slate-200">
+                Tempo <span className="text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
               </span>
               <input
                 type="range"
@@ -695,18 +711,18 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                 disabled={capturing || phase === "counting-in"}
                 onChange={(e) => setTempoBpm(Number(e.target.value))}
                 aria-label="Practice tempo in beats per minute"
-                className="h-1.5 w-32 cursor-pointer accent-felt-600 disabled:opacity-50 sm:w-40"
+                className="h-1.5 w-32 cursor-pointer disabled:opacity-50 sm:w-40"
               />
-              <span className="whitespace-nowrap text-xs tabular-nums text-slate-700 dark:text-slate-200">
+              <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
                 <strong className="font-medium">{Math.round(chosenBpm)} BPM</strong>{" "}
-                <span className="text-slate-400 dark:text-slate-500">({Math.round(tempoPct)}% of written tempo)</span>
+                <span className="text-slate-500">({Math.round(tempoPct)}% of written tempo)</span>
               </span>
-            </div>
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-200">
               <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
               Metronome while playing
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <label className="flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={highlightEnabled}
@@ -725,8 +741,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               }}
             />
           </div>
-        )}
-      </div>
+        </details>
+      )}
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
 

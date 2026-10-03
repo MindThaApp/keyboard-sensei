@@ -88,5 +88,9 @@ export default function LiveNotationSection({ data, title }: { data: Record<stri
   );
 
   const activeNoteIds = useMemo(() => activeNoteIdsForHeldPitches(heldMidiNotes, data), [heldMidiNotes, data]);
-  return <NotationRenderer data={data} title={title} activeNoteIds={activeNoteIds} />;
+  return (
+    <div role="img" aria-label={`Sheet music${title ? `: ${title}` : ""}`}>
+      <NotationRenderer data={data} title={title} activeNoteIds={activeNoteIds} />
+    </div>
+  );
 }
