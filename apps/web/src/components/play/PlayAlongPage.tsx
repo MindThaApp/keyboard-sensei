@@ -35,6 +35,7 @@ import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano } from "./PlayAlongLive"
 import { usePlayAlongRun } from "./usePlayAlongRun";
 import { usePracticeSong } from "./usePracticeSong";
 import LoopBarStrip from "./LoopBarStrip";
+import SongStars from "../progress/SongStars";
 import {
   afterLoop,
   HANDS_LABELS,
@@ -533,6 +534,7 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
           <p className="truncate text-xs text-slate-500">
             {song?.artist} · {formatDuration(parsed.durationS)} · {run.notes.length} notes to play
           </p>
+          <SongStars songId={sources.baseId} level={level} />
           <p className="truncate text-xs font-medium text-brass-700 dark:text-brass-300" aria-label="Practice mode">
             {summary}
           </p>
