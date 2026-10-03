@@ -4,12 +4,14 @@ import MarkdownSectionView from "./MarkdownSectionView";
 import TheoryCardSectionView from "./TheoryCardSectionView";
 import LiveNotationSection from "../notation/LiveNotationSection";
 import QuizSectionView from "../quiz/QuizSectionView";
-import MidiExercise from "../midi/MidiExercise";
+import ExerciseSet from "./ExerciseSet";
+import { groupExerciseRuns } from "./exerciseRuns";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
 import { getLesson } from "../../services/api";
 import { levelLabel } from "../../utils/levels";
+import { missingPrerequisites, pathLabel, placeInPath } from "../../utils/paths";
 
 export default function LessonPlayerPage() {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -52,14 +54,18 @@ export default function LessonPlayerPage() {
   if (lesson.progress.status === "locked") {
     return (
       <div className="space-y-2">
-        <p className="text-slate-700 dark:text-slate-200">Complete the previous lesson to unlock &ldquo;{lesson.title}&rdquo;.</p>
+        <p className="text-slate-700 dark:text-slate-200">
+          To unlock &ldquo;{lesson.title}&rdquo;, first complete:{" "}
+          {missingPrerequisites(lessons, lesson).map((title) => `“${title}”`).join(", ") || "the previous lesson"}.
+        </p>
         <Link to="/" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
       </div>
     );
   }
 
   const completed = lesson.progress.status === "completed";
-  const nextLesson = index + 1 < lessons.length ? lessons[index + 1]! : null;
+  const place = placeInPath(lessons, lesson.id)!;
+  const nextLesson = place.next;
   const nextUnlocked = nextLesson !== null && nextLesson.progress.status !== "locked";
 
   return (
@@ -68,8 +74,10 @@ export default function LessonPlayerPage() {
         <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
           <Link to="/" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
           <span aria-hidden>/</span>
+          <span>{pathLabel(lesson.path)}</span>
+          <span aria-hidden>/</span>
           <span className="tabular-nums">
-            {index + 1} of {lessons.length}
+            {place.position} of {place.total}
           </span>
         </nav>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{lesson.title}</h1>
@@ -106,7 +114,26 @@ export default function LessonPlayerPage() {
       {lesson.sections.some((section) => section.type === "midi-exercise") && <MidiStatusBar />}
 
       <div className="space-y-6">
-        {lesson.sections.map((section, sectionIndex) => {
+        {groupExerciseRuns(lesson.sections).map((block) => {
+          if (block.kind === "exercises") {
+            if (!detail) {
+              return (
+                <p key={block.index} className="text-sm text-slate-500 dark:text-slate-300">
+                  Loading exercises…
+                </p>
+              );
+            }
+            return (
+              <ExerciseSet
+                key={`${lesson.id}-${block.index}`}
+                lessonId={lesson.id}
+                sections={block.sections}
+                exercises={detail.exercises}
+                initialBests={detail.exerciseBests ?? {}}
+              />
+            );
+          }
+          const { section, index: sectionIndex } = block;
           switch (section.type) {
             case "markdown":
               return <MarkdownSectionView key={sectionIndex} section={section} lessonId={lesson.id} sectionIndex={sectionIndex} />;
@@ -116,17 +143,6 @@ export default function LessonPlayerPage() {
               return <LiveNotationSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
             case "quiz":
               return <QuizSectionView key={sectionIndex} section={section} />;
-            case "midi-exercise":
-              return (
-                <MidiExercise
-                  key={sectionIndex}
-                  exerciseId={section.exerciseId}
-                  title={section.title}
-                  instructions={section.instructions}
-                  lessonId={lesson.id}
-                  exercise={detail?.exercises.find((item) => item.exerciseId === section.exerciseId)}
-                />
-              );
             default:
               return null;
           }

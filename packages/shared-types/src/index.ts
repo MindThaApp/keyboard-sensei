@@ -20,8 +20,10 @@ export type LessonSection = MarkdownSection | TheoryCardSection | NotationSectio
 export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
+/** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
+export interface ExerciseKey { fifths: number; mode: "major" | "minor" }
 /** scoring "untimed" = only pitches (and chord togetherness) are scored — for find-the-notes drills with no pulse. Default "timed". */
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; expected: ExpectedNoteEvent[] }
+export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; expected: ExpectedNoteEvent[] }
 /** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
  * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
  * 25-200 BPM slider. The API accepts [10, 250]. */
@@ -54,7 +56,8 @@ export interface UserProgress {
   lessonStatuses: LessonProgress[];
 }
 export interface LessonListItem extends Lesson { order: number; progress: LessonProgress }
-export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[] }
+/** `exerciseBests`: the learner's best score per exercise in this lesson (absent = never attempted). */
+export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[]; exerciseBests: Record<string, number> }
 export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin" }
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
