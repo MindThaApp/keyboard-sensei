@@ -25,6 +25,11 @@ model User {
   narration_voice_id String?
   password_hash      String
   role               Role               @default(user)
+  // Minutes of practice a day the learner aims for (5 / 10 / 15 / 20).
+  daily_goal_minutes Int                @default(10)
+  // IANA zone the browser reported, so "today" and streak days follow the
+  // learner's own midnight. NULL until the web app first reports it (UTC).
+  timezone           String?
   created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]
@@ -35,6 +40,43 @@ model User {
   playalong_attempts PlayAlongAttempt[]
   achievements       UserAchievement[]
   tts_usage          TtsUserUsage[]
+  xp_events          XpEvent[]
+  practice_days      PracticeDay[]
+}
+
+/// One XP award. The ledger is the source of truth for a learner's XP: the total is
+/// the sum of `amount`. Every award carries a `dedupe_key` naming what earned it
+/// ("exercise-attempt:<id>", "first-pass:<exerciseId>", "daily-goal:<day>", ...), so
+/// the same thing can never pay twice and the history backfill is safe to re-run.
+model XpEvent {
+  id         String   @id @default(cuid())
+  user_id    String
+  // exercise | lesson | quiz | playalong | star | daily_goal | streak
+  source     String
+  amount     Int
+  reason     String
+  dedupe_key String
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, dedupe_key])
+  @@index([user_id, created_at])
+}
+
+/// Practice time per learner per calendar day (in their timezone), and whether that
+/// day's goal was met. `goal_minutes` is the goal in force that day, so raising the
+/// goal later never un-meets a past day and breaks a streak retroactively.
+model PracticeDay {
+  id           String    @id @default(cuid())
+  user_id      String
+  // YYYY-MM-DD in the learner's timezone.
+  day          String
+  seconds      Int       @default(0)
+  goal_minutes Int
+  goal_met_at  DateTime?
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, day])
 }
 
 model UserAchievement {
