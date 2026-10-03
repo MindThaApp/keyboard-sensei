@@ -16,7 +16,7 @@ const ex = {
     level: "intermediate",
     notes: [
       { id: "rh", notes: "E4 F#4 G#4 A4 | B4 C#5 D#5 E5 | D#5 C#5 B4 A4 | G#4 F#4 E4:2" },
-      { id: "lh", notes: "E3 F#3 G#3 A3 | B3 C#4 D#4 E4 | D#4 C#4 B3 A3 | G#3 F#3 E3:2", hand: "left" },
+      { id: "lh", notes: "E2 F#2 G#2 A2 | B2 C#3 D#3 E3 | D#3 C#3 B2 A2 | G#2 F#2 E2:2" },
     ],
   }),
   // B♭ and E♭ major
@@ -54,7 +54,7 @@ export const keyLessons: Lesson[] = [
       midiSection(ex.eTetrachords.exerciseId, "Warm-up: E major in two halves", "E-F♯-G♯-A, then B-C♯-D♯-E, each up and back."),
       midiSection(ex.eArpeggio.exerciseId, "E major arpeggio", "E-G♯-B-E and back, fingers 1-2-3-5."),
       midiSection(ex.eLh.exerciseId, "Left hand", "E2 up to E3 and back: 5-4-3-2-1-3-2-1."),
-      midiSection(ex.eHandsTogether.exerciseId, "Challenge: hands together", "Both hands, an octave apart, up and back. Go slowly: the thumbs cross at different moments in each hand."),
+      midiSection(ex.eHandsTogether.exerciseId, "Challenge: hands together", "Both hands, two octaves apart, up and back. Go slowly: the thumbs cross at different moments in each hand."),
     ],
     skillRewards: rewards({ technique: 3, theory: 2, keyboard_layout: 1 }),
   }),
