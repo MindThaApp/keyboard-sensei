@@ -4,7 +4,7 @@ Full-stack piano learning app. pnpm monorepo: `apps/web` (React/Vite/TypeScript/
 
 ## What it does
 
-- Growing Classical Technical Path: 24+ lessons spanning foundation to intermediate, with repertoire, ear-training, and technique batches landing over time.
+- Three learning paths — Classical Technique, Reading & Rhythm, and Modern Chords — from foundation to intermediate, each lesson a graded set of scored exercises.
 - MIDI exercise player: metronome count-in, ▶ Listen previews of the target, honest per-key feedback (green = right pitch, red = wrong/missed), pass/fail scoring.
 - **Play-along mode**: Synthesia-style falling notes over the piano for a ~300-song curated library (public-domain classical + pop/film covers) plus your own MIDI uploads. Tempo scaling (25–100%), adjustable look-ahead visibility, wait mode, guide audio, timing-judged scoring (perfect/good/ok/miss, combos) with difficulty multipliers, and per-song personal bests. Fetch the library with `pnpm --filter @keyboard-sensei/api exec tsx scripts/fetch-midi-library.ts`.
 - Play with an on-screen piano (mouse, touch, or computer keyboard) or real hardware via Web MIDI.

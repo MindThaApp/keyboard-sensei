@@ -42,7 +42,7 @@ export const OBJECTIVES: Record<number, string[]> = {
  * `id` is the lesson's permanent database key: UserProgress, ExerciseAttempt and
  * QuizAttempt rows on the live server are keyed on it, so it must NEVER change once
  * shipped. It is deliberately not derived from `n` or from the lesson's position.
- * `n` is only a frozen content key for the defaults below (level, estimated minutes,
+ * `n` is only a frozen content key for the defaults below (level and the
  * OBJECTIVES lookup) — it is not the lesson's order. Order comes from the lesson's
  * position in the `lessons` array (src/content.ts), and the unlock chain
  * (`unlockCriteria.requiresLessonIds`) is filled in there from that same position.
@@ -54,14 +54,15 @@ export const lesson = (
   branch: Lesson["branch"],
   sections: LessonSection[],
   skillRewards: Record<string, number>,
-  estimatedMinutes = n < 5 ? 8 : 12,
 ): Lesson => ({
   id,
   path: "classical-technical",
   level: n <= 6 ? "foundation" : n <= 12 ? "elementary" : "intermediate",
   branch,
   title,
-  estimatedMinutes,
+  // Placeholder: content.ts replaces every estimate with one computed from the lesson's
+  // actual material (see estimateLessonMinutes in build.ts).
+  estimatedMinutes: 1,
   objectives: OBJECTIVES[n] ?? [`Understand ${title.toLowerCase()}`, "Apply the concept accurately at the keyboard"],
   sections,
   unlockCriteria: { requiresLessonIds: [], minScore: 70 },
@@ -79,30 +80,42 @@ export const lesson = (
 export const defineLesson = (input: {
   id: string; title: string; level: Lesson["level"]; branch: Lesson["branch"];
   objectives: string[]; sections: LessonSection[]; skillRewards: Record<string, number>;
-  estimatedMinutes: number;
+  /** Defaults to the classical-technical path. */
+  path?: Lesson["path"];
+  /**
+   * Lessons from OTHER paths this one also needs (e.g. a reading lesson in sharp keys
+   * needs the lesson that teaches sharps). The previous lesson of its own path is added
+   * by chainLessons.
+   */
+  alsoRequires?: string[];
 }): Lesson => ({
   id: input.id,
-  path: "classical-technical",
+  path: input.path ?? "classical-technical",
   level: input.level,
   branch: input.branch,
   title: input.title,
-  estimatedMinutes: input.estimatedMinutes,
+  estimatedMinutes: 1, // placeholder, computed in content.ts (see estimateLessonMinutes)
   objectives: input.objectives,
   sections: input.sections,
-  unlockCriteria: { requiresLessonIds: [], minScore: 70 },
+  unlockCriteria: { requiresLessonIds: input.alsoRequires ?? [], minScore: 70 },
   skillRewards: input.skillRewards,
 });
 
 /**
- * Link a sequence of lessons into the linear unlock chain by array position:
- * each lesson requires the one before it. Lesson ids are never consulted, so a
- * lesson can be inserted anywhere in the array without renumbering anything.
+ * Link one path's lessons into a linear unlock chain by array position: each lesson
+ * requires the one before it, and the first requires `entry` (the lessons that open
+ * this path; none for the main path). Prerequisites a lesson already declares
+ * (`alsoRequires`) are kept. Lesson ids are never consulted for order, so a lesson can
+ * be inserted anywhere in the array without renumbering anything.
  */
-export const chainLessons = (sequence: Lesson[]): Lesson[] =>
+export const chainLessons = (sequence: Lesson[], entry: string[] = []): Lesson[] =>
   sequence.map((item, index) => ({
     ...item,
     unlockCriteria: {
       ...item.unlockCriteria,
-      requiresLessonIds: index === 0 ? [] : [sequence[index - 1]!.id],
+      requiresLessonIds: [
+        ...(index === 0 ? entry : [sequence[index - 1]!.id]),
+        ...item.unlockCriteria.requiresLessonIds,
+      ],
     },
   }));

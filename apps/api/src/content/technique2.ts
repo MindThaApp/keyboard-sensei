@@ -32,7 +32,7 @@ export const technique2Exercises: MidiExercise[] = [
 
 export const technique2Lessons: Lesson[] = [
   defineLesson({
-    id: "lesson-31", title: "A major scale", level: "intermediate", branch: "technique", estimatedMinutes: 18,
+    id: "lesson-31", title: "A major scale", level: "intermediate", branch: "technique",
     objectives: [
       "Spell A major with its three sharps: F♯, C♯, and G♯",
       "Play one octave of A major with right-hand fingering 1-2-3-1-2-3-4-5",
@@ -50,7 +50,7 @@ export const technique2Lessons: Lesson[] = [
     skillRewards: rewards({ technique: 3, theory: 2, keyboard_layout: 1, timing: 2 }),
   }),
   defineLesson({
-    id: "lesson-32", title: "F major and the first flat", level: "intermediate", branch: "theory", estimatedMinutes: 18,
+    id: "lesson-32", title: "F major and the first flat", level: "intermediate", branch: "theory",
     objectives: [
       "Explain why F major needs B♭ to keep the whole–half pattern",
       "Locate F major one step counterclockwise from C on the circle of fifths",
@@ -68,7 +68,7 @@ export const technique2Lessons: Lesson[] = [
     skillRewards: rewards({ theory: 3, note_reading: 2, technique: 2, timing: 1 }),
   }),
   defineLesson({
-    id: "lesson-33", title: "A harmonic minor", level: "intermediate", branch: "theory", estimatedMinutes: 18,
+    id: "lesson-33", title: "A harmonic minor", level: "intermediate", branch: "theory",
     objectives: [
       "Raise the 7th degree of A natural minor from G to G♯",
       "Identify the augmented second between F and G♯",
@@ -86,7 +86,7 @@ export const technique2Lessons: Lesson[] = [
     skillRewards: rewards({ theory: 3, technique: 2, note_reading: 1, timing: 1 }),
   }),
   defineLesson({
-    id: "lesson-34", title: "Broken-chord accompaniment", level: "intermediate", branch: "technique", estimatedMinutes: 20,
+    id: "lesson-34", title: "Broken-chord accompaniment", level: "intermediate", branch: "technique",
     objectives: [
       "Turn a block chord into the root–fifth–third–fifth broken pattern",
       "Keep a left-hand accompaniment light and even for four bars",
