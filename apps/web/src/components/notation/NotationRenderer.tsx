@@ -455,7 +455,7 @@ function drawSystem(
  * ledger lines and accidentals — anything really drawn) and shrink the SVG's
  * viewBox/width/height down to that, with a small pad. This sizes to real
  * content instead of guessing a smaller constant (see the "magic numbers"
- * lesson in docs/agent-briefing.md — a previous clipping bug here came from
+ * entry in docs/operations.md — a previous clipping bug here came from
  * exactly that kind of guess).
  */
 // Breathing room around the cropped ink. getBBox() returns the GEOMETRY box, which
