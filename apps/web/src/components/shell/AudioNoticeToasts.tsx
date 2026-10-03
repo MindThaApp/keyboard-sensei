@@ -5,7 +5,7 @@ export default function AudioNoticeToasts() {
   const notices = useAudioNotices();
   if (notices.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 left-4 z-50 flex max-w-sm flex-col gap-2" aria-live="polite">
+    <div className="pointer-events-none fixed bottom-20 left-4 z-50 flex max-w-sm nav:bottom-4 flex-col gap-2" aria-live="polite">
       {notices.map((notice) => (
         <div
           key={notice.id}

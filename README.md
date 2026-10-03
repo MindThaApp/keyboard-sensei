@@ -71,6 +71,8 @@ pnpm --filter @keyboard-sensei/api test
 
 Lesson content: every lesson id is a permanent database key (user progress and attempts reference it), so ids are explicit literals in `apps/api/src/content/*` — never derived from position. Order is the lesson's position in `lessons` (`apps/api/src/content.ts`); new lessons can be inserted anywhere and should use a descriptive slug id (e.g. `lesson-hanon-1`). The seed reassigns orders in one transaction. Lessons/exercises removed from content are deleted only if no user data references them; otherwise they are kept, marked `retired_at`, and hidden (the seed prints a warning).
 
+Progression (XP, stars, daily goal and streak, achievements) is awarded on the server when an attempt is saved; the formulas live in `apps/api/src/progression/` (XP table at the top of `xp.ts`). The XP ledger (`XpEvent`) is the source of truth, and every award is keyed by what earned it, so nothing pays twice. History saved before progression existed is backfilled by the seed, or on its own with `pnpm --filter @keyboard-sensei/api exec tsx scripts/backfill-progression.ts` — safe to re-run, it only adds what is missing.
+
 The API contract is [docs/api-contract.yaml](docs/api-contract.yaml). Shared domain types, MIDI capture/scoring, note naming, and lesson validation live only in `packages/*`.
 
 ## CI/CD

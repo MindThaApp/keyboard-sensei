@@ -9,6 +9,8 @@ interface Props {
   exercises: MidiExerciseDef[] | undefined;
   /** Best score per exercise id, as the API reported it when the lesson loaded. */
   initialBests: Record<string, number>;
+  /** Open on this exercise (a deep link), when it is part of this set. */
+  focusExerciseId?: string | null;
 }
 
 /**
@@ -17,9 +19,12 @@ interface Props {
  * the page holds one keyboard and one MIDI listener at a time. The lesson is passed
  * once every exercise here reaches the pass score.
  */
-export default function ExerciseSet({ lessonId, sections, exercises, initialBests }: Props) {
+export default function ExerciseSet({ lessonId, sections, exercises, initialBests, focusExerciseId }: Props) {
   const [bests, setBests] = useState<Record<string, number>>(initialBests);
-  const [selected, setSelected] = useState(() => firstUnpassedIndex(sections, initialBests, PASS_SCORE));
+  const [selected, setSelected] = useState(() => {
+    const focused = sections.findIndex((item) => item.exerciseId === focusExerciseId);
+    return focused >= 0 ? focused : firstUnpassedIndex(sections, initialBests, PASS_SCORE);
+  });
   const section = sections[selected]!;
   const passedCount = sections.filter((item) => (bests[item.exerciseId] ?? 0) >= PASS_SCORE).length;
 

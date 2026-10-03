@@ -91,7 +91,7 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+    <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2 nav:bottom-4">
       {open && (
         <section aria-label="Send feedback" className="card w-72 space-y-3 p-4 shadow-lg">
           <div className="flex items-center justify-between">
