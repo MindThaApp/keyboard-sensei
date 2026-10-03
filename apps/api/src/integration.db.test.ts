@@ -193,7 +193,9 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         body: { selectedAnswer: wrongIndex },
       });
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ correct: false });
+      expect(res.body.correct).toBe(false);
+      // The progress rewards ride along, but nothing about the answer does.
+      expect(Object.keys(res.body).sort()).toEqual(["correct", "rewards"]);
     });
 
     it("an out-of-range answer index is a 400, not a 500", async () => {
@@ -604,4 +606,250 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       await m.prisma.song.deleteMany({ where: { id: { in: ["seed-ludwig-van-beethoven-fur-elise", "seed-scott-joplin-entertainer", beginner.id, upload.id] } } });
     });
   });
-});
+
+  describe("progression", () => {
+    // The Song Practice screen adds these columns to PlayAlongAttempt in its own
+    // migration. Create whichever are missing for this suite, and drop only those.
+    const EXTRA_COLUMNS: [string, string][] = [
+      ["arrangement_level", "TEXT"],
+      ["hands", "TEXT"],
+      ["loop_start_bar", "INTEGER"],
+      ["loop_end_bar", "INTEGER"],
+      ["is_loop", "BOOLEAN"],
+      ["multiplier", "DOUBLE PRECISION"],
+    ];
+    const added: string[] = [];
+
+    beforeAll(async () => {
+      const existing = await m.prisma.$queryRaw<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns WHERE table_name = 'PlayAlongAttempt'`;
+      const have = new Set(existing.map((row) => row.column_name));
+      for (const [name, type] of EXTRA_COLUMNS) {
+        if (have.has(name)) continue;
+        await m.prisma.$executeRawUnsafe(`ALTER TABLE "PlayAlongAttempt" ADD COLUMN "${name}" ${type}`);
+        added.push(name);
+      }
+    });
+
+    afterAll(async () => {
+      for (const name of added) await m.prisma.$executeRawUnsafe(`ALTER TABLE "PlayAlongAttempt" DROP COLUMN "${name}"`);
+    });
+
+    const ledgerTotal = async (userId: string) =>
+      (await m.prisma.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }))._sum.amount ?? 0;
+
+    const makeSong = (id: string, overrides: Record<string, unknown> = {}) =>
+      m.prisma.song.upsert({
+        where: { id },
+        update: {},
+        create: {
+          id,
+          title: `Song ${id}`,
+          artist: "Composer",
+          genre: "classical",
+          difficulty: 1,
+          duration_sec: 120,
+          note_count: 50,
+          content_rights: "public-domain",
+          file_path: `/nonexistent/essentials/${id}.mid`,
+          ...overrides,
+        },
+      });
+
+    /** A play-along attempt with the practice-screen fields set, rewarded the way the route does it. */
+    async function playWith(userId: string, songId: string, accuracy: number, extras: Record<string, unknown>) {
+      const id = `pa-${Math.random().toString(36).slice(2)}`;
+      await m.prisma.$executeRawUnsafe(
+        `INSERT INTO "PlayAlongAttempt" (id, user_id, song_id, score, accuracy, tempo_pct, lookahead_s, wait_mode, arrangement_level, hands, loop_start_bar, loop_end_bar, is_loop, multiplier)
+         VALUES ($1, $2, $3, $4, $5, 100, 3, false, $6, $7, $8, $9, $10, $11)`,
+        id,
+        userId,
+        songId,
+        accuracy,
+        accuracy,
+        extras.arrangement_level ?? null,
+        extras.hands ?? null,
+        extras.loop_start_bar ?? null,
+        extras.loop_end_bar ?? null,
+        extras.is_loop ?? null,
+        extras.multiplier ?? null,
+      );
+      const { rewardPlayAlongAttempt } = await import("./progression/rewards.js");
+      return rewardPlayAlongAttempt(m.prisma, { userId, attemptId: id });
+    }
+
+    it("awards XP into an auditable ledger, with diminishing returns for repeats", async () => {
+      const user = await createUser();
+      const gains: number[] = [];
+      for (let i = 0; i < 8; i += 1) {
+        const res = await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body: { performedNotes: perfectRun("exercise-01") } });
+        expect(res.status).toBe(201);
+        gains.push(res.body.rewards.xpGained);
+      }
+      // 20 + 25 first pass; then mastered (½): 10, 10; 4th–6th ½ again: 5; then a fifth: 2.
+      expect(gains).toEqual([45, 10, 10, 5, 5, 5, 2, 2]);
+      const total = gains.reduce((sum, gain) => sum + gain, 0);
+      expect(await ledgerTotal(user.id)).toBe(total);
+      const summary = await api("GET", "/users/me/summary", { token: user.token });
+      expect(summary.body.level.totalXp).toBe(total);
+      expect(await m.prisma.xpEvent.count({ where: { user_id: user.id, dedupe_key: "first-pass:exercise-01" } })).toBe(1);
+
+      // A real improvement earns the new-best bonus.
+      const second = exerciseIdsOf("lesson-01").find((id) => id !== "exercise-01")!;
+      const offKey = perfectRun(second).map((note) => ({ ...note, note: note.note + 1 }));
+      const weak = await api("POST", `/exercises/${second}/attempts`, { token: user.token, body: { performedNotes: offKey } });
+      expect(weak.status).toBe(201);
+      expect(weak.body.rewards.items.some((item: { reason: string }) => item.reason.startsWith("First pass"))).toBe(false);
+      const strong = await api("POST", `/exercises/${second}/attempts`, { token: user.token, body: { performedNotes: perfectRun(second) } });
+      expect(strong.body.rewards.items.map((item: { reason: string }) => item.reason).join("|")).toMatch(/First pass.*New best/);
+
+      // Re-running the backfill over this history adds nothing: every award is keyed.
+      const { backfillUser } = await import("./progression/backfill.js");
+      const before = await ledgerTotal(user.id);
+      await backfillUser(m.prisma, user.id);
+      expect(await ledgerTotal(user.id)).toBe(before);
+    });
+
+    it("backfills XP, practice days and achievements from existing history", async () => {
+      const user = await createUser();
+      await passEveryExercise(user.token, "lesson-01");
+      // Pretend that history predates the ledger.
+      await m.prisma.xpEvent.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.practiceDay.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.userAchievement.deleteMany({ where: { user_id: user.id } });
+
+      const { backfillUser } = await import("./progression/backfill.js");
+      const first = await backfillUser(m.prisma, user.id);
+      expect(first.xp).toBeGreaterThan(200);
+      expect(await ledgerTotal(user.id)).toBe(first.xp);
+      expect(await m.prisma.xpEvent.count({ where: { user_id: user.id, dedupe_key: "lesson-complete:lesson-01" } })).toBe(1);
+      expect((await m.prisma.practiceDay.findMany({ where: { user_id: user.id } })).length).toBe(1);
+      const keys = (await m.prisma.userAchievement.findMany({ where: { user_id: user.id } })).map((row) => row.achievement_key);
+      expect(keys).toEqual(expect.arrayContaining(["first_lesson_completed", "perfect_exercise"]));
+
+      const second = await backfillUser(m.prisma, user.id);
+      expect(second).toEqual({ xp: 0, achievements: 0 });
+    });
+
+    it("caps song stars by practice level, hands and loops, at each threshold", async () => {
+      const user = await createUser();
+      const cases: [Record<string, unknown>, number, number][] = [
+        [{}, 69, 0],
+        [{}, 70, 1],
+        [{}, 85, 2],
+        [{}, 95, 3], // null level = Full, both hands
+        [{ arrangement_level: "full", hands: "both" }, 99, 3],
+        [{ arrangement_level: "simplified", hands: "both" }, 99, 2],
+        [{ arrangement_level: "easy" }, 99, 1],
+        [{ arrangement_level: "melody" }, 99, 1],
+        [{ arrangement_level: "full", hands: "right" }, 99, 2],
+        [{ is_loop: true, loop_start_bar: 1, loop_end_bar: 4 }, 99, 0],
+      ];
+      for (const [index, [extras, accuracy, expected]] of cases.entries()) {
+        const songId = `stars-song-${index}`;
+        await makeSong(songId);
+        const rewards = await playWith(user.id, songId, accuracy, extras);
+        const res = await api("GET", `/songs/${songId}/stars`, { token: user.token });
+        expect(res.body.best, JSON.stringify(extras) + accuracy).toBe(expected);
+        expect(rewards.newStars.find((star) => star.id === songId)?.stars ?? 0).toBe(expected);
+      }
+      // Stars are kept per level: an Easy 1★ does not hide a Full 3★ on the same song.
+      await playWith(user.id, "stars-song-4", 99, { arrangement_level: "easy" });
+      const levels = await api("GET", "/songs/stars-song-4/stars", { token: user.token });
+      expect(levels.body).toMatchObject({ best: 3, byLevel: { full: 3, easy: 1 } });
+
+      // Loops earn a small, capped amount: at most 5 per attempt, 25 per song per day.
+      await makeSong("loop-song");
+      let loopXp = 0;
+      for (let i = 0; i < 7; i += 1) {
+        const rewards = await playWith(user.id, "loop-song", 100, { is_loop: true, loop_start_bar: 1, loop_end_bar: 2 });
+        loopXp += rewards.items.filter((item) => item.reason.startsWith("Looped")).reduce((sum, item) => sum + item.amount, 0);
+      }
+      expect(loopXp).toBe(25);
+    });
+
+    it("fills the daily goal from practice time and keeps a streak with a freeze", async () => {
+      const user = await createUser();
+      await api("PATCH", "/users/me", { token: user.token, body: { daily_goal_minutes: 5 } });
+      await makeSong("goal-song", { duration_sec: 200 });
+      const first = await playWith(user.id, "goal-song", 80, {});
+      expect(first.dailyGoal).toMatchObject({ goalMinutes: 5, met: false });
+      expect(first.dailyGoal.minutesToday).toBeCloseTo(3.3, 1);
+      const second = await playWith(user.id, "goal-song", 80, {});
+      expect(second.dailyGoal).toMatchObject({ met: true, justMet: true });
+      expect(second.items.map((item) => item.reason)).toContain("Daily goal met");
+      expect(second.newAchievements.map((a) => a.key)).toContain("daily_goal_first");
+      const third = await playWith(user.id, "goal-song", 80, {});
+      expect(third.dailyGoal.justMet).toBe(false);
+      expect(third.items.map((item) => item.reason)).not.toContain("Daily goal met");
+
+      // History (server-side dates): 7 goal days ending the day before yesterday,
+      // yesterday missed. The banked freeze covers yesterday; today extends it to 8.
+      const today = (await api("GET", "/users/me/summary", { token: user.token })).body.today as string;
+      const { addDays } = await import("./progression/days.js");
+      await m.prisma.practiceDay.createMany({
+        data: [-8, -7, -6, -5, -4, -3, -2].map((offset) => ({
+          user_id: user.id,
+          day: addDays(today, offset),
+          seconds: 600,
+          goal_minutes: 5,
+          goal_met_at: new Date(),
+        })),
+      });
+      const summary = await api("GET", "/users/me/summary", { token: user.token });
+      expect(summary.body.streak).toMatchObject({ current: 8, longest: 8, freezesAvailable: 0, frozenDays: [addDays(today, -1)] });
+
+      // The next save pays the milestones the streak has reached.
+      const fourth = await playWith(user.id, "goal-song", 80, {});
+      expect(fourth.items.map((item) => item.reason)).toEqual(expect.arrayContaining(["3-day streak", "7-day streak"]));
+      expect(fourth.newAchievements.map((a) => a.key)).toEqual(expect.arrayContaining(["streak_3", "streak_7"]));
+
+      // Without the freeze (two days missed), the streak is today alone.
+      await m.prisma.practiceDay.deleteMany({ where: { user_id: user.id, day: addDays(today, -2) } });
+      const broken = await api("GET", "/users/me/summary", { token: user.token });
+      expect(broken.body.streak.current).toBe(1);
+    });
+
+    it("evaluates achievements on save, once, and only for content that exists", async () => {
+      const user = await createUser();
+      const unlockedBy: string[][] = [];
+      for (const exerciseId of exerciseIdsOf("lesson-01")) {
+        const res = await api("POST", `/exercises/${exerciseId}/attempts`, { token: user.token, body: { performedNotes: perfectRun(exerciseId) } });
+        unlockedBy.push(res.body.rewards.newAchievements.map((a: { key: string }) => a.key));
+      }
+      expect(unlockedBy[0]).toContain("perfect_exercise");
+      expect(unlockedBy.at(-1)).toEqual(expect.arrayContaining(["first_lesson_completed", "lesson_three_star"]));
+      expect(unlockedBy.flat().filter((key) => key === "perfect_exercise")).toHaveLength(1);
+
+      const quiz = await api("POST", `/quiz-questions/${quizQuestions("lesson-02")[0]!.id}/answer`, { token: user.token, body: { selectedAnswer: 99 } });
+      expect(quiz.status).toBe(400);
+      const [question] = quizQuestions("lesson-02");
+      const answered = await api("POST", `/quiz-questions/${question!.id}/answer`, { token: user.token, body: { selectedAnswer: question!.correctIndex } });
+      expect(answered.body.rewards.newAchievements.map((a: { key: string }) => a.key)).toContain("first_quiz_attempt");
+
+      const progression = await api("GET", "/users/me/progression", { token: user.token });
+      const byKey = new Map(progression.body.achievements.map((a: { key: string }) => [a.key, a]));
+      expect(byKey.get("first_lesson_completed")).toMatchObject({ unlocked: true });
+      expect(byKey.get("lessons_5")).toMatchObject({ unlocked: false, progress: { current: 1, target: 5 } });
+      // Levels with no lessons, and Essentials goals with no Essentials songs, are not offered.
+      expect(byKey.has("level_complete_foundation")).toBe(true);
+      expect(byKey.has("level_complete_advanced")).toBe(false);
+      expect(byKey.has("essentials_master")).toBe(false);
+      expect(progression.body.achievements.length).toBeGreaterThan(30);
+      expect(progression.body.skills.find((s: { id: string }) => s.id === "reading").points).toBe((2 + 1) * 10 * 3);
+    });
+
+    it("unlocks an Essentials Beginner song when its lesson is completed", async () => {
+      const user = await createUser();
+      await makeSong("essentials-ode-to-joy-beginner", { title: "Ode to Joy (Beginner)", arrangement_group: "ode-to-joy", arrangement_level: "beginner" });
+      let unlocked: { id: string; title: string }[] = [];
+      for (const exerciseId of exerciseIdsOf("lesson-05")) {
+        const res = await api("POST", `/exercises/${exerciseId}/attempts`, { token: user.token, body: { performedNotes: perfectRun(exerciseId) } });
+        unlocked = unlocked.concat(res.body.rewards.unlockedSongs);
+      }
+      expect(unlocked).toEqual([{ id: "essentials-ode-to-joy-beginner", title: "Ode to Joy (Beginner)", lessonTitle: expect.any(String) }]);
+      const today = await api("GET", "/users/me/today", { token: user.token });
+      expect(today.body.readyForYou.map((song: { songId: string }) => song.songId)).toEqual(["essentials-ode-to-joy-beginner"]);
+      expect(today.body.song).toMatchObject({ songId: "essentials-ode-to-joy-beginner", hands: "right", level: "full" });
+    });
+  });});
