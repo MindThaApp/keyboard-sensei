@@ -23,6 +23,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { extractSongMetadata, InvalidMidiError } from "../src/midi-metadata.js";
+import { prepareLibraryManifest } from "../src/library-titles.js";
 
 const ZIP_URL = "https://raw.githubusercontent.com/lucasnfe/adl-piano-midi/master/midi/adl-piano-midi.zip";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -224,8 +225,15 @@ async function main(): Promise<void> {
     });
   }
 
+  // Clean titles and drop known duplicates (ids are unchanged). Dropped files
+  // stay on disk: a reseed keeps a duplicate's row if someone has attempts on it.
+  const prepared = prepareLibraryManifest(manifest);
+  for (const item of prepared.dropped) console.log(`Duplicate dropped: ${item.title} (${item.id}) → kept ${item.keptId}`);
+  for (const ids of prepared.unresolvedDuplicates) console.warn(`Possible duplicate, not in DUPLICATE_OF: ${ids.join(" = ")}`);
+  manifest.splice(0, manifest.length, ...prepared.entries);
+
   await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`\nAccepted ${manifest.length} songs → ${LIBRARY_DIR}`);
+  console.log(`\nAccepted ${manifest.length} songs (${prepared.renamed.length} titles cleaned) → ${LIBRARY_DIR}`);
   console.log(`Manifest → ${MANIFEST_PATH}`);
   if (rejected.length > 0) {
     console.log(`Rejected ${rejected.length}:`);
