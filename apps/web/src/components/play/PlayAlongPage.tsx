@@ -135,7 +135,11 @@ function loadSettings(): Settings {
   }
 }
 
-const gradeFor = (score: number): string => (score >= 110 ? "S" : score >= 90 ? "A" : score >= 70 ? "B" : score >= 50 ? "C" : "D");
+// The letter grades how well you played (accuracy), so a clean run on easier settings
+// still earns an A; the difficulty bonus shows up in the score number instead. "S" is
+// kept for near-perfect runs at full difficulty or harder.
+const gradeFor = (accuracyPct: number, score: number): string =>
+  accuracyPct >= 95 && score >= 100 ? "S" : accuracyPct >= 90 ? "A" : accuracyPct >= 75 ? "B" : accuracyPct >= 60 ? "C" : "D";
 
 type Phase = "ready" | "playing" | "done";
 
@@ -930,7 +934,7 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
         {phase === "done" && result && resultContext && (
           <section aria-label="Result" className="card shrink-0 p-4">
             <div className="flex flex-wrap items-center gap-4">
-              <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">{gradeFor(resultScore)}</span>
+              <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">{gradeFor(result.accuracyPct, resultScore)}</span>
               <div>
                 <p className="text-2xl font-semibold tabular-nums">{resultScore}</p>
                 <p className="text-xs text-slate-500">
