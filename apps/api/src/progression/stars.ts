@@ -42,7 +42,6 @@ export interface PlayAlongExtras {
   isLoop: boolean;
   loopStartBar: number | null;
   loopEndBar: number | null;
-  multiplier: number | null;
 }
 
 const isPracticeLevel = (value: unknown): value is PracticeLevel =>
@@ -62,7 +61,6 @@ export function playAlongExtras(row: Record<string, unknown>): PlayAlongExtras {
     isLoop: row.is_loop === true || loopStartBar !== null || loopEndBar !== null,
     loopStartBar,
     loopEndBar,
-    multiplier: finiteOrNull(row.multiplier),
   };
 }
 

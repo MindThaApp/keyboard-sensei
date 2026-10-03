@@ -284,7 +284,6 @@ export async function rewardPlayAlongAttempt(
     songId: attempt.songId,
     songTitle: song.title,
     score: attempt.score,
-    multiplier: attempt.extras.multiplier,
     isLoop: attempt.extras.isLoop,
     minutesPlayed: seconds / 60,
     earlierToday: earlierToday.filter((row) => row.extras.isLoop === attempt.extras.isLoop).length,
