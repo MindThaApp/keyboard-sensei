@@ -29,7 +29,8 @@ export default {
           400: "#d1ad3d",
           500: "#c9a227",
           600: "#a98720",
-          700: "#87691b",
+          // Darkened from #87691b (4.4:1 on brass-100) so brass-700 text passes AA on it.
+          700: "#7a5f18",
         },
         // Score paper.
         ivory: {
