@@ -1,5 +1,5 @@
 import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
-import type { BarGridEntry } from "../../utils/playalongSong";
+import type { BarGridEntry } from "@keyboard-sensei/playalong-core";
 
 /** Must match VirtualPiano's key layout so notes land on their keys. */
 export const WHITE_KEY_WIDTH_PX = 40;

@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MidiExercise as MidiExerciseDef, RawMidiEvent, ScoringResult } from "@keyboard-sensei/shared-types";
-import { JUDGE_WINDOWS_S, judgeNextPress, pairRawMidiEvents, type PlayAlongJudgment, type PlayAlongNote } from "@keyboard-sensei/midi-engine";
+import type { MidiExercise as MidiExerciseDef, ScoringResult } from "@keyboard-sensei/shared-types";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
-import { useMidiContext } from "./MidiContext";
 import MetronomeControls, { loadMetronomeSettings, saveMetronomeSettings, type MetronomeSettings } from "./MetronomeControls";
 import VirtualPiano from "../piano/VirtualPiano";
 import NotationRenderer from "../notation/NotationRenderer";
-import { useProgressStore } from "../../state/progressStore";
-import { metronome } from "../../utils/metronome";
+import { COUNT_IN_BEATS, useExerciseAttempt, type RecordingClock } from "./useExerciseAttempt";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
 import { estimateKey, type KeyInfo } from "../../utils/keySignature";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
@@ -16,7 +13,6 @@ import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notation
 export const PASS_SCORE = 70;
 
 const SHEET_SCALE_KEY = "ks-exercise-sheet-scale";
-const COUNT_IN_BEATS = 4;
 /** UI slider bounds (BPM). Narrower than the API's accepted tempoPct range — see tempoBpmBounds. */
 const SLIDER_MIN_BPM = 25;
 const SLIDER_MAX_BPM = 200;
@@ -50,47 +46,13 @@ interface Props {
    * actually begins (after any count-in), and with `null` when the attempt is
    * cancelled, submitted, or the component unmounts.
    */
-  onRecordingClock?: (clock: { startTimeMs: number; effectiveBpm: number } | null) => void;
+  onRecordingClock?: (clock: RecordingClock | null) => void;
   /** Key of the song an excerpt comes from — drawn as a key signature (see notationFor). */
   notationKey?: KeyInfo;
 }
 
-type Phase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
-
-/**
- * Converts a raw MIDI event's wall-clock timestamp (performance.now() basis)
- * into elapsed *performance* time in ms, relative to the start of the
- * attempt, excluding any time spent paused. `pausedMs` accumulates both
- * genuine pause duration and any resume count-in (which also isn't
- * performance) — see `pause`/`resumeExercise` below. This is what every
- * timestamp handed to pairRawMidiEvents/scoring is built from, so a pause is
- * invisible to scoring: freezing this value is the entire mechanism.
- */
-export function elapsedPerformanceMs(rawTimestampMs: number, startTimeMs: number, pausedMs: number): number {
-  return rawTimestampMs - startTimeMs - pausedMs;
-}
-
-const LIVE_POINTS: Record<PlayAlongJudgment, number> = { perfect: 10, good: 7, ok: 4, miss: -3 };
-const WRONG_PRESS_PENALTY = 2;
-
-interface LiveNote extends PlayAlongNote {
-  id: string;
-}
-
-/** Converts an exercise's beat-based expected notes into song-second-based notes for the live-follow overlay, using whatever tempo is actually being practiced at. */
-function liveNotesFor(exercise: MidiExerciseDef, effectiveBpm: number): LiveNote[] {
-  const msPerBeat = 60_000 / effectiveBpm;
-  const firstBeat = Math.min(...exercise.expected.map((n) => n.startBeat));
-  return exercise.expected
-    .map((event) => ({
-      id: event.id,
-      midi: event.note,
-      startS: ((event.startBeat - firstBeat) * msPerBeat) / 1000,
-      durationS: (event.durationBeats * msPerBeat) / 1000,
-      hand: "right" as const,
-    }))
-    .sort((a, b) => a.startS - b.startS);
-}
+// Re-exported: the pause-invisible-to-scoring clock is tested from here.
+export { elapsedPerformanceMs } from "./useExerciseAttempt";
 
 /**
  * Builds barred notation for an exercise. Notes at or above middle C go on
@@ -148,10 +110,6 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey }: Props) {
-  const { subscribe, mockAdapter } = useMidiContext();
-  const submitExercise = useProgressStore((s) => s.submitExercise);
-  const submitPractice = useProgressStore((s) => s.submitPracticeGym);
-
   // The span this exercise actually uses — drives VirtualPiano's "Fit to piece"
   // button, so the user can widen a too-narrow keyboard in one click.
   const exerciseRange = useMemo(() => {
@@ -170,92 +128,69 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     localStorage.setItem(SHEET_SCALE_KEY, String(sheetScale));
   }, [sheetScale]);
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [beat, setBeat] = useState<{ index: number; isCountIn: boolean } | null>(null);
   const [metronomeOn, setMetronomeOn] = useState(true);
   const [metronomeSettings, setMetronomeSettings] = useState<MetronomeSettings>(loadMetronomeSettings);
   const [highlightEnabled, setHighlightEnabled] = useState<boolean>(loadHighlightEnabled);
-  const [result, setResult] = useState<ScoringResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [played, setPlayed] = useState(false);
   const [tempoBpm, setTempoBpm] = useState<number | null>(null);
-  const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set());
-  const [liveScore, setLiveScore] = useState(0);
-  const [liveCombo, setLiveCombo] = useState(0);
-  const [lastDelta, setLastDelta] = useState<{ value: number; key: number } | null>(null);
-
-  const raw = useRef<RawMidiEvent[]>([]);
-  const start = useRef(0);
-  const active = useRef(false);
-  /** Total ms of the current attempt spent paused (or in a resume count-in), subtracted out of every performance timestamp. */
-  const pausedMs = useRef(0);
-  /** Wall-clock moment the current pause began; null when not paused. */
-  const pauseStart = useRef<number | null>(null);
-  const previewTimeouts = useRef<number[]>([]);
-  const previewSounding = useRef<Set<number>>(new Set());
-  const metronomeOnRef = useRef(metronomeOn);
-  metronomeOnRef.current = metronomeOn;
-  const metronomeSettingsRef = useRef(metronomeSettings);
-  metronomeSettingsRef.current = metronomeSettings;
-  const liveNotesRef = useRef<LiveNote[]>([]);
-  const liveJudgmentsRef = useRef<(PlayAlongJudgment | undefined)[]>([]);
-  const liveMissCursorRef = useRef(0);
-  const liveRafRef = useRef(0);
-  const activeNoteIdsRef = useRef<string>("");
-  const lastDeltaTimeoutRef = useRef<number | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
-  const onRecordingClockRef = useRef(onRecordingClock);
-  onRecordingClockRef.current = onRecordingClock;
 
-  const liveDueMidis = useMemo(
-    () => liveNotesRef.current.filter((n) => activeNoteIds.has(n.id)).map((n) => n.midi),
-    [activeNoteIds],
-  );
+  const writtenBpm = exercise?.tempoBpm ?? 100;
+  const { min: sliderMinBpm, max: sliderMaxBpm } = tempoBpmBounds(writtenBpm);
+  // Slider's chosen BPM IS the practice tempo; default to written tempo (100%) until the user moves it.
+  const chosenBpm = Math.min(sliderMaxBpm, Math.max(sliderMinBpm, tempoBpm ?? writtenBpm));
+  const effectiveBpm = chosenBpm;
+  const tempoPct = (chosenBpm / writtenBpm) * 100;
 
-  useEffect(
-    () =>
-      subscribe((event) => {
-        if (!active.current) return;
-        const elapsedMs = elapsedPerformanceMs(event.timestampMs, start.current, pausedMs.current);
-        raw.current.push({ ...event, timestampMs: elapsedMs });
-        if (event.type !== "noteon") return;
-        setPlayed(true);
-        if (exercise?.scoring === "untimed") return;
-        const songTimeS = elapsedMs / 1000;
-        const match = judgeNextPress(liveNotesRef.current, liveJudgmentsRef.current, event.note, songTimeS);
-        if (match) {
-          liveJudgmentsRef.current[match.index] = match.judgment;
-          setLiveCombo((c) => (match.judgment === "perfect" || match.judgment === "good" ? c + 1 : 0));
-          setLiveScore((s) => s + LIVE_POINTS[match.judgment]);
-          flashLiveDelta(LIVE_POINTS[match.judgment]);
-        } else {
-          setLiveCombo(0);
-          setLiveScore((s) => s - WRONG_PRESS_PENALTY);
-          flashLiveDelta(-WRONG_PRESS_PENALTY);
-        }
-      }),
-    [subscribe, exercise],
-  );
-
-  const stopPreview = () => {
-    for (const id of previewTimeouts.current) window.clearTimeout(id);
-    previewTimeouts.current = [];
-    for (const note of previewSounding.current) mockAdapter.triggerNoteOff(note);
-    previewSounding.current.clear();
-  };
-
-  // Cancel any sound/clicks/live-follow loop when the exercise unmounts.
-  useEffect(
-    () => () => {
-      stopPreview();
-      metronome.stop();
-      cancelAnimationFrame(liveRafRef.current);
-      onRecordingClockRef.current?.(null);
-    },
-    [],
-  );
+  const {
+    phase,
+    beat,
+    result,
+    error,
+    played,
+    activeNoteIds,
+    liveDueMidis,
+    liveScore,
+    liveCombo,
+    lastDelta,
+    listenNotes,
+    listen,
+    begin: beginAttempt,
+    pause,
+    resume,
+    cancel,
+    submit,
+  } = useExerciseAttempt({
+    exercise,
+    exerciseId,
+    lessonId,
+    effectiveBpm,
+    tempoPct,
+    metronomeOn,
+    metronomeSettings,
+    onCompleted,
+    onRecordingClock,
+  });
 
   const notation = useMemo(() => (exercise ? notationFor(exercise, notationKey) : null), [exercise, notationKey]);
+  // Stable across renders, so the memoised piano doesn't redraw on every live-score tick.
+  const notes = useMemo(() => [...new Set(exercise?.expected.map((n) => n.note) ?? [])], [exercise]);
+
+  // Honest per-key feedback: red only for wrong/missed pitches; expected
+  // notes you actually played show green even if timing or duration was off
+  // (that feedback belongs in text, not on the key you pressed correctly).
+  const feedback = useMemo(() => {
+    const byNote: Record<number, "correct" | "incorrect"> = {};
+    if (!result) return byNote;
+    for (const note of notes) byNote[note] = "correct";
+    for (const mistake of result.mistakes) {
+      const pitchIssue = ["missed", "wrong", "missing-chord-tone"].includes(mistake.issue);
+      const extraIssue = ["wrong", "extra", "extra-chord-tone"].includes(mistake.issue);
+      if (pitchIssue && mistake.expectedNote !== null) byNote[mistake.expectedNote] = "incorrect";
+      if (extraIssue && mistake.performedNote !== null) byNote[mistake.performedNote] = "incorrect";
+    }
+    return byNote;
+  }, [result, notes]);
+  const emptyNotes = useMemo<number[]>(() => [], []);
 
   if (!exercise) {
     return <section className="card p-4 text-sm">Loading exercise…</section>;
@@ -263,253 +198,18 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
 
   const untimed = exercise.scoring === "untimed";
   const hasChords = exercise.expected.some((event) => event.chordGroupId !== null);
-  const msPerBeat = 60_000 / exercise.tempoBpm;
-  const { min: sliderMinBpm, max: sliderMaxBpm } = tempoBpmBounds(exercise.tempoBpm);
-  // Slider's chosen BPM IS the practice tempo; default to written tempo (100%) until the user moves it.
-  const chosenBpm = Math.min(sliderMaxBpm, Math.max(sliderMinBpm, tempoBpm ?? exercise.tempoBpm));
-  const effectiveBpm = chosenBpm;
-  const tempoPct = (chosenBpm / exercise.tempoBpm) * 100;
-  const notes = [...new Set(exercise.expected.map((n) => n.note))];
   // Pad the keyboard to octave boundaries so it reads as an instrument, not a fragment.
   const low = Math.max(36, Math.min(...notes) - 2);
   const high = Math.min(96, Math.max(...notes) + 2);
   const lowestNote = Math.max(36, low - (low % 12));
   const highestNote = Math.min(96, high + (11 - (high % 12)));
 
-  /** Plays the expected performance through the piano so learners hear the target before attempting it. */
-  const listen = () => {
-    if (phase !== "idle" && phase !== "scored") return;
-    stopPreview();
-    setPhase("listening");
-    const firstBeat = Math.min(...exercise.expected.map((n) => n.startBeat));
-    let lastEnd = 0;
-    for (const event of exercise.expected) {
-      const onAt = (event.startBeat - firstBeat) * msPerBeat;
-      const offAt = onAt + event.durationBeats * msPerBeat;
-      lastEnd = Math.max(lastEnd, offAt);
-      previewTimeouts.current.push(
-        window.setTimeout(() => {
-          previewSounding.current.add(event.note);
-          mockAdapter.triggerNoteOn(event.note, 96);
-        }, onAt),
-      );
-      previewTimeouts.current.push(
-        window.setTimeout(() => {
-          previewSounding.current.delete(event.note);
-          mockAdapter.triggerNoteOff(event.note);
-        }, offAt),
-      );
-    }
-    previewTimeouts.current.push(window.setTimeout(() => setPhase((p) => (p === "listening" ? "idle" : p)), lastEnd + 150));
-  };
-
-  const flashLiveDelta = (value: number) => {
-    setLastDelta({ value, key: Date.now() });
-    if (lastDeltaTimeoutRef.current !== null) window.clearTimeout(lastDeltaTimeoutRef.current);
-    lastDeltaTimeoutRef.current = window.setTimeout(() => setLastDelta(null), 700);
-  };
-
-  const stopLiveFollow = () => {
-    cancelAnimationFrame(liveRafRef.current);
-    activeNoteIdsRef.current = "";
-    setActiveNoteIds(new Set());
-  };
-
-  /**
-   * `preserve`: on a pause→resume, keep the judgments/score/combo already
-   * earned (only the note timings are recomputed, in case the tempo changed
-   * while paused) instead of restarting the live overlay from zero — a fresh
-   * attempt still resets everything.
-   */
-  const startLiveFollow = (preserve = false) => {
-    liveNotesRef.current = liveNotesFor(exercise, effectiveBpm);
-    if (!preserve) {
-      liveJudgmentsRef.current = new Array<PlayAlongJudgment | undefined>(liveNotesRef.current.length).fill(undefined);
-      liveMissCursorRef.current = 0;
-      setLiveScore(0);
-      setLiveCombo(0);
-      setLastDelta(null);
-    }
-    activeNoteIdsRef.current = "";
-    setActiveNoteIds(new Set());
-
-    const tick = () => {
-      if (!active.current) return;
-      const songTimeS = elapsedPerformanceMs(performance.now(), start.current, pausedMs.current) / 1000;
-      const notes = liveNotesRef.current;
-      const judgments = liveJudgmentsRef.current;
-
-      while (liveMissCursorRef.current < notes.length) {
-        const note = notes[liveMissCursorRef.current];
-        if (note.startS + JUDGE_WINDOWS_S.ok > songTimeS) break;
-        if (judgments[liveMissCursorRef.current] === undefined) {
-          judgments[liveMissCursorRef.current] = "miss";
-          setLiveCombo(0);
-          setLiveScore((s) => s + LIVE_POINTS.miss);
-          flashLiveDelta(LIVE_POINTS.miss);
-        }
-        liveMissCursorRef.current += 1;
-      }
-
-      const due = notes
-        .map((note, index) => ({ note, index }))
-        .filter(
-          ({ note, index }) =>
-            judgments[index] === undefined && note.startS <= songTimeS && songTimeS < note.startS + note.durationS,
-        )
-        .map(({ note }) => note.id)
-        .join(",");
-      if (due !== activeNoteIdsRef.current) {
-        activeNoteIdsRef.current = due;
-        setActiveNoteIds(new Set(due ? due.split(",") : []));
-      }
-
-      liveRafRef.current = requestAnimationFrame(tick);
-    };
-    liveRafRef.current = requestAnimationFrame(tick);
-  };
-
   const begin = () => {
     // Bring the whole exercise (notation, keys, controls) on screen before the count-in.
     // "auto", not "smooth": the count-in starts immediately and must not race a scroll.
     sectionRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
-    stopPreview();
-    raw.current = [];
-    setPlayed(false);
-    setResult(null);
-    setError(null);
-    setBeat(null);
-    pausedMs.current = 0;
-    pauseStart.current = null;
-    if (untimed) {
-      // No pulse to lock onto — start recording immediately, no count-in, no clicks.
-      start.current = performance.now();
-      active.current = true;
-      setPhase("recording");
-      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
-      return;
-    }
-    setPhase("counting-in");
-    metronome.start({
-      bpm: effectiveBpm,
-      countInBeats: COUNT_IN_BEATS,
-      sound: metronomeSettingsRef.current.sound,
-      volume: metronomeSettingsRef.current.volume,
-      onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
-      onGo: () => {
-        start.current = performance.now();
-        active.current = true;
-        setPhase("recording");
-        if (!metronomeOnRef.current) metronome.stop();
-        startLiveFollow();
-        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
-      },
-    });
+    beginAttempt();
   };
-
-  /**
-   * Pauses recording without discarding the attempt: stops the metronome and
-   * the live-follow loop, and marks the wall-clock moment so `resumeExercise`
-   * can fold the gap (plus any resume count-in) into `pausedMs`, keeping
-   * every performance timestamp — already-captured and yet-to-come — on the
-   * same clock as an unpaused run. Notes already played stay in `raw.current`.
-   */
-  const pause = () => {
-    if (phase !== "recording") return;
-    metronome.stop();
-    active.current = false;
-    cancelAnimationFrame(liveRafRef.current);
-    pauseStart.current = performance.now();
-    setBeat(null);
-    setPhase("paused");
-    onRecordingClockRef.current?.(null);
-  };
-
-  /**
-   * Resumes a paused attempt. Re-runs the count-in (its clicks aren't
-   * recorded, same as the initial count-in — see elapsedPerformanceMs) using
-   * whatever tempo/metronome settings are current, so a tempo change made
-   * while paused takes effect from here on. `start.current` and
-   * `raw.current` are untouched, so this continues the same attempt.
-   */
-  const resumeExercise = () => {
-    if (phase !== "paused") return;
-    const unfreeze = () => {
-      if (pauseStart.current !== null) {
-        pausedMs.current += performance.now() - pauseStart.current;
-        pauseStart.current = null;
-      }
-    };
-    if (untimed) {
-      unfreeze();
-      active.current = true;
-      setPhase("recording");
-      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
-      return;
-    }
-    setPhase("counting-in");
-    metronome.start({
-      bpm: effectiveBpm,
-      countInBeats: COUNT_IN_BEATS,
-      sound: metronomeSettingsRef.current.sound,
-      volume: metronomeSettingsRef.current.volume,
-      onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
-      onGo: () => {
-        unfreeze();
-        active.current = true;
-        setPhase("recording");
-        if (!metronomeOnRef.current) metronome.stop();
-        startLiveFollow(true);
-        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
-      },
-    });
-  };
-
-  const cancel = () => {
-    metronome.stop();
-    active.current = false;
-    stopLiveFollow();
-    setBeat(null);
-    pausedMs.current = 0;
-    pauseStart.current = null;
-    setPhase("idle");
-    onRecordingClockRef.current?.(null);
-  };
-
-  const submit = async () => {
-    metronome.stop();
-    active.current = false;
-    stopLiveFollow();
-    setBeat(null);
-    onRecordingClockRef.current?.(null);
-    setPhase("submitting");
-    try {
-      const performedNotes = pairRawMidiEvents(raw.current);
-      const scored = lessonId
-        ? await submitExercise(exerciseId, { performedNotes, tempoPct })
-        : await submitPractice(exercise, { performedNotes, tempoPct });
-      setResult(scored);
-      setPhase("scored");
-      onCompleted?.(scored);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to score attempt");
-      setPhase("idle");
-    }
-  };
-
-  // Honest per-key feedback: red only for wrong/missed pitches; expected
-  // notes you actually played show green even if timing or duration was off
-  // (that feedback belongs in text, not on the key you pressed correctly).
-  const feedback: Record<number, "correct" | "incorrect"> = {};
-  if (result) {
-    for (const note of notes) feedback[note] = "correct";
-    for (const mistake of result.mistakes) {
-      const pitchIssue = ["missed", "wrong", "missing-chord-tone"].includes(mistake.issue);
-      const extraIssue = ["wrong", "extra", "extra-chord-tone"].includes(mistake.issue);
-      if (pitchIssue && mistake.expectedNote !== null) feedback[mistake.expectedNote] = "incorrect";
-      if (extraIssue && mistake.performedNote !== null) feedback[mistake.performedNote] = "incorrect";
-    }
-  }
 
   const passed = result !== null && result.score >= PASS_SCORE;
   const capturing = phase === "recording";
@@ -587,7 +287,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         lowestNote={lowestNote}
         highestNote={highestNote}
         recommendedRange={exerciseRange}
-        expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : []}
+        expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : emptyNotes}
+        soundingNotes={listenNotes}
         feedbackByNote={feedback}
       />
 
@@ -655,7 +356,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               </button>
             )}
             {phase === "paused" && (
-              <button className="primary-button" onClick={resumeExercise}>
+              <button className="primary-button" onClick={resume}>
                 Resume
               </button>
             )}

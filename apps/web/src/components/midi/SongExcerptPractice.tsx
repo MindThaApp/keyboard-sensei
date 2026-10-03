@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getSongFile, type Song } from "../../services/api";
-import { parsePlayAlongSong, songKeyAt, type ParsedPlayAlongSong } from "../../utils/playalongSong";
-import { buildSongExcerpt, type PracticeHand } from "../../utils/songExcerpt";
+import { parsePlayAlongSong, songKeyAt, type ParsedPlayAlongSong } from "@keyboard-sensei/playalong-core";
+import { buildSongExcerpt, type PracticeHand } from "@keyboard-sensei/playalong-core";
 import { AccompanimentPlayer } from "../../utils/accompanimentPlayer";
 import MidiExercise from "./MidiExercise";
 

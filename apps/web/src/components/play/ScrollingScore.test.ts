@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
-import type { BarGridEntry, BeatGridEntry, SongBeatGrid, TimeSignatureSegment } from "../../utils/playalongSong";
+import type { BarGridEntry, BeatGridEntry, SongBeatGrid, TimeSignatureSegment } from "@keyboard-sensei/playalong-core";
 import {
   buildMonotoneCubic,
   buildQuarterBeatAnchors,

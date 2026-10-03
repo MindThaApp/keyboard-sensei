@@ -14,6 +14,7 @@
     "@keyboard-sensei/lesson-engine": "workspace:*",
     "@keyboard-sensei/midi-engine": "workspace:*",
     "@keyboard-sensei/music-theory": "workspace:*",
+    "@keyboard-sensei/playalong-core": "workspace:*",
     "@keyboard-sensei/shared-types": "workspace:*",
     "@tonejs/midi": "^2.0.28",
     "opensheetmusicdisplay": "^2.0.0",

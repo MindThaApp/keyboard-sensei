@@ -28,6 +28,8 @@
       "@keyboard-sensei/shared-types": ["../../packages/shared-types/src/index.ts"],
       "@keyboard-sensei/lesson-engine": ["../../packages/lesson-engine/src/index.ts"],
       "@keyboard-sensei/midi-engine": ["../../packages/midi-engine/src/index.ts"],
+      "@keyboard-sensei/midi-engine/web": ["../../packages/midi-engine/src/web.ts"],
+      "@keyboard-sensei/playalong-core": ["../../packages/playalong-core/src/index.ts"],
       "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"]
     }
   },
