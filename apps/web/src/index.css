@@ -12,7 +12,28 @@
   --color-felt-700: 150 40 50;
   --color-felt-800: 122 34 43;
   --color-felt-900: 98 29 36;
+
+  /* Muted text (see tailwind.config.js textColor). Light: >= 4.6:1 on white, slate-50/100
+     and ivory; dark: >= 4.5:1 on slate-950/900/800 and the midnight blue. */
+  --text-slate-400: 91 103 121;
+  --text-slate-500: 86 98 117;
 }
+
+html.dark {
+  --text-slate-400: 163 177 196;
+  --text-slate-500: 148 163 184;
+}
+
+/* Score paper stays light in every theme, so muted text on it keeps the light values. */
+html.dark .bg-ivory-50 {
+  --text-slate-400: 91 103 121;
+  --text-slate-500: 86 98 117;
+}
+
+/* Accent text on dark surfaces: felt-400 measured 4.2–4.3:1 on slate-900 (3.5:1 on the
+   midnight blue); dark-mode text-felt-400 renders one step lighter, for every accent. */
+:root { --text-felt-400: var(--color-felt-400); }
+html.dark { --text-felt-400: var(--color-felt-300); }
 
 html[data-accent="ocean"] {
   --color-felt-50: 239 249 255;
@@ -57,6 +78,9 @@ html[data-theme="midnight"] body { background: radial-gradient(circle at top, #1
 @layer base {
   h1, h2, h3 { @apply font-display; }
   :focus-visible { @apply outline-none ring-2 ring-felt-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950; }
+  /* One accent for every native control — volume sliders were falling back to the
+     browser's default blue while tempo sliders used the brand colour. */
+  input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--color-felt-600)); }
 }
 
 @layer components {
