@@ -1,0 +1,7 @@
+{
+  // Production build: app sources only. Tests may import fixtures from other workspace
+  // apps (e.g. lesson content from apps/api) that aren't in the web image's build
+  // context; `pnpm typecheck` still checks them via tsconfig.json.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}
