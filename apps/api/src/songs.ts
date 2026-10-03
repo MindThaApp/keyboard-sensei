@@ -69,13 +69,18 @@ const songPatchSchema = z
 /**
  * A curated collection the song belongs to, for the shelves on /play.
  * "beginner": the authored pack from scripts/generate-beginner-pack.ts, which
- * writes `beginner-<slug>.mid` with no uploader. The client also has an
- * "essentials" shelf that stays hidden until songs are tagged with it here.
+ * writes `beginner-<slug>.mid` with no uploader. "essentials": the graded pack
+ * from scripts/generate-essentials-pack.ts, in data/midi-library/essentials/.
  */
 export type SongCollection = "beginner" | "essentials";
 
-export const songCollection = (song: { file_path: string; uploader_id: string | null }): SongCollection | null =>
-  !song.uploader_id && path.basename(song.file_path).startsWith("beginner-") ? "beginner" : null;
+export const songCollection = (song: { file_path: string; uploader_id: string | null }): SongCollection | null => {
+  if (song.uploader_id) return null;
+  if (path.basename(song.file_path).startsWith("beginner-")) return "beginner";
+  // The Essentials pack (src/essentials) lives in its own folder of the library.
+  if (path.basename(path.dirname(song.file_path)) === "essentials") return "essentials";
+  return null;
+};
 
 const songListItem = (song: {
   id: string;
@@ -89,6 +94,9 @@ const songListItem = (song: {
   notation_path: string | null;
   file_path: string;
   uploader_id: string | null;
+  arrangement_group: string | null;
+  arrangement_level: string | null;
+  attribution: string | null;
 }, userId: string) => ({
   id: song.id,
   title: song.title,
@@ -104,6 +112,10 @@ const songListItem = (song: {
   notation_path: song.notation_path ? "available" : null,
   mine: song.uploader_id === userId,
   collection: songCollection(song),
+  // Versions of one piece at different difficulty levels share a group.
+  arrangement_group: song.arrangement_group,
+  arrangement_level: song.arrangement_level,
+  attribution: song.attribution,
 });
 
 /** Song library routes; mounted behind requireAuth. */
@@ -122,7 +134,8 @@ songsRouter.get("/songs", async (req, res, next) => {
     const rows = await prisma.song.findMany({
       // Seeded songs (no uploader) are public; uploads are private to their
       // owner, except admins see everything.
-      where: admin ? {} : { OR: [{ uploader_id: null }, { uploader_id: userId }] },
+      // Retired songs (superseded by an Essentials version) stay out of the list.
+      where: admin ? { retired_at: null } : { retired_at: null, OR: [{ uploader_id: null }, { uploader_id: userId }] },
       orderBy: [{ artist: "asc" }, { title: "asc" }],
     });
     res.json({ songs: rows.map((row) => songListItem(row, userId)) });

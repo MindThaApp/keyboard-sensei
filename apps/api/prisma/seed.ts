@@ -10,6 +10,8 @@ import { exercises, lessons } from "../src/content.js";
 import { seedContent } from "../src/seed-content.js";
 import { DUPLICATE_OF, prepareLibraryManifest } from "../src/library-titles.js";
 import { extractSongMetadata, type SongMetadata } from "../src/midi-metadata.js";
+import { readEssentialsIndex, supersededLibraryIds } from "../src/essentials/replacements.js";
+import { seedEssentials } from "../src/essentials/seed.js";
 const prisma=new PrismaClient();
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 
@@ -56,7 +58,10 @@ async function seedSongs():Promise<void>{
   }
 
   let seeded=0,missing=0;
+  // Songs an Essentials version supersedes are not re-created (src/essentials/replacements.ts).
+  const superseded=supersededLibraryIds(readEssentialsIndex());
   for(const entry of prepared.entries){
+    if(superseded.has(entry.id))continue;
     const file_path=path.join(LIBRARY_DIR,entry.file);
     if(!existsSync(file_path)){missing+=1;continue}
     const metadata=await measureSongFile(file_path,{durationSec:entry.durationSec,noteCount:entry.noteCount,difficulty:entry.difficulty});
@@ -145,6 +150,11 @@ async function main(){
   if(content.deletedLessonIds.length>0||content.deletedExerciseIds.length>0)console.log(`Pruned unreferenced content: lessons [${content.deletedLessonIds.join(", ")}], exercises [${content.deletedExerciseIds.join(", ")}]`);
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});
   await seedSongs();
+  const essentials=await seedEssentials(prisma);
+  console.log(`Seeded ${essentials.seeded} Essentials versions${essentials.removed.length>0?`, removed ${essentials.removed.length} no longer generated`:""}`);
+  for(const label of essentials.replacements.deleted)console.log(`Essentials: removed superseded song ${label}`);
+  for(const label of essentials.replacements.retired)console.log(`Essentials: retired superseded song ${label}`);
+  for(const label of essentials.replacements.restored)console.log(`Essentials: restored ${label} (its replacement is missing)`);
   await remeasurePublicSongs();
   await seedInstruments();
   console.log(`Seeded ${lessons.length} lessons, ${exercises.length} exercises, demo user ${demo.email}, and admin ${admin.email}`);

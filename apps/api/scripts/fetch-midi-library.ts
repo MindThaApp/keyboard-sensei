@@ -24,6 +24,7 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { extractSongMetadata, InvalidMidiError } from "../src/midi-metadata.js";
 import { prepareLibraryManifest } from "../src/library-titles.js";
+import { readEssentialsIndex, supersededLibraryIds } from "../src/essentials/replacements.js";
 
 const ZIP_URL = "https://raw.githubusercontent.com/lucasnfe/adl-piano-midi/master/midi/adl-piano-midi.zip";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -231,6 +232,12 @@ async function main(): Promise<void> {
   for (const item of prepared.dropped) console.log(`Duplicate dropped: ${item.title} (${item.id}) → kept ${item.keptId}`);
   for (const ids of prepared.unresolvedDuplicates) console.warn(`Possible duplicate, not in DUPLICATE_OF: ${ids.join(" = ")}`);
   manifest.splice(0, manifest.length, ...prepared.entries);
+
+  // Songs an Essentials version supersedes stay out of the manifest (their
+  // files stay on disk, for any retired row's history). See src/essentials/replacements.ts.
+  const superseded = supersededLibraryIds(readEssentialsIndex());
+  for (const entry of manifest.filter((item) => superseded.has(item.id))) console.log(`Superseded by Essentials: ${entry.title} (${entry.id})`);
+  manifest.splice(0, manifest.length, ...manifest.filter((item) => !superseded.has(item.id)));
 
   await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`\nAccepted ${manifest.length} songs (${prepared.renamed.length} titles cleaned) → ${LIBRARY_DIR}`);
