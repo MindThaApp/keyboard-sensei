@@ -142,7 +142,11 @@ export function buildSongExcerpt(song: ParsedPlayAlongSong, options: ExcerptOpti
       tempoBpm: Math.max(20, Math.min(240, tempoBpm)),
       difficulty: options.songDifficulty >= 4 ? "advanced" : options.songDifficulty >= 2 ? "intermediate" : "beginner",
       ...config,
-      beatsPerBar: song.beatsPerBar,
+      // startBeat/durationBeats above count NOTATED beats off the grid (eighths
+      // in 6/8), so the meter must be stated in the same unit — song.beatsPerBar
+      // is in quarter notes, which put 6/8 barlines every three eighths.
+      beatsPerBar: bars[startBar]!.numerator,
+      beatUnit: bars[startBar]!.denominator,
       expected,
     },
     accompaniment,

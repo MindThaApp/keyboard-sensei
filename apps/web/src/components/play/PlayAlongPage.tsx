@@ -169,7 +169,7 @@ export default function PlayAlongPage() {
 
   // Fetch real MusicXML/.mxl notation for archive-imported songs, when
   // available (song.notation_path is a presence indicator, not a real path
-  // -- see songListItem() server-side). Falls back to NotationPreviewStrip
+  // -- see songListItem() server-side). Falls back to ScrollingScore
   // (below) for direct uploads/URL imports, which never have notation.
   useEffect(() => {
     setNotationBytes(null);
@@ -741,6 +741,7 @@ export default function PlayAlongPage() {
                   notes={parsed.notes}
                   grid={parsed.grid}
                   timeSignatureSegments={parsed.timeSignatureSegments}
+                  keys={parsed.keys}
                   verticalRange={notationVerticalRange}
                 />
               </div>

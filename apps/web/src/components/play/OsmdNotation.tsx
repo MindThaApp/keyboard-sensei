@@ -145,7 +145,7 @@ export function OsmdNotation({ notationBytes, songTimeS }: { notationBytes: Arra
     // window too, which in "both" view mode pushes the waterfall/piano
     // (what you actually play from) below the fold as a long piece
     // progresses. Computing the target manually confines scrolling to this
-    // panel only, matching how NotationPreviewStrip already behaves.
+    // panel only.
     //
     // behavior MUST be instant, not smooth-animated: songTimeS updates
     // roughly every 120ms during playback, faster than a smooth scroll
