@@ -1,7 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { AttemptSummary } from "@keyboard-sensei/shared-types";
+import type { AttemptSummary, LessonListItem } from "@keyboard-sensei/shared-types";
 import { getAttempts, getMyPlayAlongAttempts, type PlayAlongAttemptSummary } from "../../services/api";
+import { useProgressStore } from "../../state/progressStore";
+import { practiceGymDrills } from "../../data/practiceGymDrills";
+
+/**
+ * exerciseId -> the title a learner saw. Built from data the client already has: the
+ * lesson list carries each exercise section's title, and Gym drills are bundled.
+ */
+function exerciseTitles(lessons: readonly LessonListItem[]): Map<string, string> {
+  const titles = new Map<string, string>();
+  for (const drill of practiceGymDrills) titles.set(drill.exercise.exerciseId, drill.label);
+  for (const lesson of lessons) {
+    for (const section of lesson.sections) {
+      if (section.type === "midi-exercise") titles.set(section.exerciseId, section.title);
+    }
+  }
+  return titles;
+}
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -27,7 +44,7 @@ function ScoreBadge({ score, passThreshold = 70 }: { score: number; passThreshol
   );
 }
 
-function AttemptRow({ attempt }: { attempt: AttemptSummary }) {
+function AttemptRow({ attempt, exerciseTitle }: { attempt: AttemptSummary; exerciseTitle: string | undefined }) {
   return (
     <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900">
       <div className="min-w-0 flex-1">
@@ -37,7 +54,8 @@ function AttemptRow({ attempt }: { attempt: AttemptSummary }) {
         >
           {attempt.lessonTitle}
         </Link>
-        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{attempt.exerciseId}</p>
+        {/* Never the raw id ("exercise-01") — if the title is unknown, say nothing. */}
+        {exerciseTitle && <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{exerciseTitle}</p>}
       </div>
       <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{new Date(attempt.createdAt).toLocaleString()}</span>
       <ScoreBadge score={attempt.score} />
@@ -68,6 +86,14 @@ function PlayAlongRow({ attempt }: { attempt: PlayAlongAttemptSummary }) {
 function ExerciseHistory() {
   const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const lessons = useProgressStore((s) => s.lessons);
+  const lessonsLoaded = useProgressStore((s) => s.loaded);
+  const loadLessons = useProgressStore((s) => s.loadAll);
+  const titles = useMemo(() => exerciseTitles(lessons), [lessons]);
+
+  useEffect(() => {
+    if (!lessonsLoaded) void loadLessons();
+  }, [lessonsLoaded, loadLessons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +130,7 @@ function ExerciseHistory() {
       </div>
       <ol className="space-y-2">
         {attempts.map((attempt) => (
-          <AttemptRow key={attempt.id} attempt={attempt} />
+          <AttemptRow key={attempt.id} attempt={attempt} exerciseTitle={titles.get(attempt.exerciseId)} />
         ))}
       </ol>
     </div>

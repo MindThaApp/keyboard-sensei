@@ -2,15 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
-
-const LEVEL_LABEL: Record<string, string> = {
-  foundation: "Foundation",
-  elementary: "Elementary",
-  intermediate: "Intermediate",
-  "late-intermediate": "Late Intermediate",
-  advanced: "Advanced",
-  virtuoso: "Virtuoso",
-};
+import { LEVEL_LABEL, nextLessonFor } from "../../utils/levels";
 
 const BRANCH_LABEL: Record<string, string> = {
   technique: "Technique",
@@ -110,7 +102,7 @@ export default function LessonListPage() {
 
   const statuses = lessons.map((lesson) => getLessonStatus(progress, lesson));
   const completedCount = statuses.filter((s) => s === "completed").length;
-  const nextLesson = lessons.find((_, i) => statuses[i] === "unlocked") ?? lessons.find((_, i) => statuses[i] !== "completed") ?? null;
+  const nextLesson = nextLessonFor(lessons);
   const nextIndex = nextLesson ? lessons.indexOf(nextLesson) : -1;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
