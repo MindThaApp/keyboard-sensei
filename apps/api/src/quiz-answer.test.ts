@@ -13,6 +13,12 @@ const prismaMock = vi.hoisted(() => {
 });
 
 vi.mock("./db.js", () => ({ prisma: prismaMock }));
+// Progress rewards have their own (real-database) tests; here they are inert.
+vi.mock("./progression/rewards.js", () => ({
+  rewardQuizAnswer: vi.fn(async () => null),
+  rewardExerciseAttempt: vi.fn(async () => null),
+  rewardPlayAlongAttempt: vi.fn(async () => null),
+}));
 
 import { app } from "./app.js";
 import { lessons } from "./content.js";
@@ -53,13 +59,13 @@ beforeEach(() => {
 describe("POST /quiz-questions/:id/answer", () => {
   it("does not reveal the answer key after a wrong answer", async () => {
     const wrong = (correctIndex + 1) % question.options.length;
-    expect(await callQuizAnswer(wrong)).toEqual({ status: 200, body: { correct: false } });
+    expect(await callQuizAnswer(wrong)).toEqual({ status: 200, body: { correct: false, rewards: null } });
   });
 
   it("returns the answer key and explanation after a correct answer", async () => {
     expect(await callQuizAnswer(correctIndex)).toEqual({
       status: 200,
-      body: { correct: true, explanation: question.explanation, correctIndex },
+      body: { correct: true, explanation: question.explanation, correctIndex, rewards: null },
     });
   });
 });
