@@ -4,7 +4,8 @@ import { dismissRewards, usePendingRewards } from "../../state/rewards";
 import type { Rewards } from "../../services/api";
 import { StarRating } from "../progress/ProgressBits";
 
-const LEVEL_NAME: Record<string, string> = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" };
+const MAX_ACHIEVEMENTS_SHOWN = 3;
+const LEVEL_NAME:Record<string, string> = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" };
 
 /** Whether a reward has anything worth interrupting the learner for. */
 const worthShowing = (rewards: Rewards): boolean =>
@@ -45,13 +46,20 @@ function RewardCard({ id, rewards }: { id: number; rewards: Rewards }) {
               </span>
             </p>
           ))}
-          {rewards.newAchievements.map((achievement) => (
+          {rewards.newAchievements.slice(0, MAX_ACHIEVEMENTS_SHOWN).map((achievement) => (
             <p key={achievement.key}>
               <span aria-hidden>🏅 </span>
               <span className="font-semibold">Achievement unlocked: {achievement.title}</span>
               <span className="block text-xs text-slate-600 dark:text-slate-300">{achievement.description}</span>
             </p>
           ))}
+          {rewards.newAchievements.length > MAX_ACHIEVEMENTS_SHOWN && (
+            <p>
+              <Link to="/progress?tab=achievements" className="font-medium text-felt-700 underline dark:text-felt-300" onClick={() => dismissRewards(id)}>
+                and {rewards.newAchievements.length - MAX_ACHIEVEMENTS_SHOWN} more achievements
+              </Link>
+            </p>
+          )}
           {rewards.unlockedSongs.map((song) => (
             <p key={song.id}>
               <span aria-hidden>🎵 </span>

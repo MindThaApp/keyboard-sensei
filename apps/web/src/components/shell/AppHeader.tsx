@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 import { useDailySummary } from "../../state/useDailySummary";
 import { GoalRing } from "../progress/ProgressBits";
 
@@ -60,7 +61,8 @@ interface AppHeaderProps {
 
 /** Today's goal at a glance: ring + streak, linking to Today. */
 function GoalChip() {
-  const summary = useDailySummary();
+  const { user } = useAuth();
+  const summary = useDailySummary(user?.daily_goal_minutes);
   if (!summary) return null;
   const { minutesToday, goalMinutes, met } = summary.dailyGoal;
   return (

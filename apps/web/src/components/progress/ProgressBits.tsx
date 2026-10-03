@@ -48,7 +48,7 @@ export function StarRating({ stars, max = 3, className = "" }: { stars: number; 
   return (
     <span role="img" aria-label={`${stars} of ${max} stars`} title={`${stars} of ${max} stars`} className={`inline-flex shrink-0 gap-px leading-none ${className}`}>
       {Array.from({ length: max }, (_, index) => (
-        <span key={index} aria-hidden className={index < stars ? "text-brass-600 dark:text-brass-300" : "text-slate-300 dark:text-slate-600"}>
+        <span key={index} aria-hidden className={index < stars ? "text-brass-700 dark:text-brass-300" : "text-slate-400 dark:text-slate-500"}>
           ★
         </span>
       ))}

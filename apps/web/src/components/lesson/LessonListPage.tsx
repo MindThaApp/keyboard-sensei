@@ -67,7 +67,9 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
         {completed ? <CheckIcon /> : locked ? <LockIcon /> : number}
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
+        {/* `relative` makes the truncating line clip the sr-only "(locked)"; without it that
+            span sat past the cut-off text and widened a phone's page by 16px. */}
+        <p className={`relative truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
           {lesson.title}
           {locked && <span className="sr-only"> (locked)</span>}
         </p>
