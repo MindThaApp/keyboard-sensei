@@ -60,6 +60,10 @@ export const ESSENTIALS_REPLACES: Record<string, Replacement> = {
   "brahms-waltz-op-39-15": { library: ["johannes-brahms-waltz-op39-no-15"] },
   "happy-farmer": { library: ["robert-schumann-10le-gai-laboureur"] },
   "twinkle-twinkle-little-star": { beginnerPack: ["twinkle-twinkle-little-star"] },
+  "jingle-bells": { beginnerPack: ["jingle-bells"] },
+  "scarborough-fair": { beginnerPack: ["scarborough-fair"] },
+  "auld-lang-syne": { beginnerPack: ["auld-lang-syne"] },
+  "when-the-saints-go-marching-in": { beginnerPack: ["when-the-saints-go-marching-in"] },
 };
 
 /** The generated Essentials versions on disk (empty if the pack was never generated). */
