@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import NotationRenderer, { type NotationRendererHandle } from "../notation/NotationRenderer";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
@@ -376,4 +376,5 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
   );
 });
 
-export default ScrollingScore;
+// Memoised: the score is expensive to engrave and its props only change with the song.
+export default memo(ScrollingScore);
