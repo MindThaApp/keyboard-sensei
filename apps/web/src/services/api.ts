@@ -149,6 +149,8 @@ export interface Song {
   content_rights: string;
   notation_path: string | null;
   mine: boolean;
+  /** Curated collection for the /play shelves; null for everything else. */
+  collection: "beginner" | "essentials" | null;
 }
 export interface ArchiveEntryResult {
   id: string;
