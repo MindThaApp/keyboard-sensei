@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parsePlayAlongSong } from "./playalongSong";
+import { parsePlayAlongSong } from "./song";
 import { buildSongExcerpt } from "./songExcerpt";
-import { MIDI_LIBRARY_DIR, hasLibraryFixtures } from "./libraryFixtures";
+import { MIDI_LIBRARY_DIR, hasLibraryFixtures } from "./test/libraryFixtures";
 
 const load = (file: string) => {
   const bytes = readFileSync(path.join(MIDI_LIBRARY_DIR, file));

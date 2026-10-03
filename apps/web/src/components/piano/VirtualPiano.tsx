@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { isBlackKey } from "../play/waterfall";
@@ -28,6 +28,8 @@ export interface VirtualPianoProps {
   recommendedRange?: KeyRange;
   /** Notes to highlight as "play these next" — never shown as raw MIDI numbers, just visual key highlighting. */
   expectedNotes?: number[];
+  /** Notes the app is playing (e.g. a Listen preview), drawn as held down. */
+  soundingNotes?: number[];
   /** Post-attempt feedback coloring, keyed by MIDI note number. */
   feedbackByNote?: Record<number, "correct" | "incorrect">;
   showLabels?: boolean;
@@ -99,12 +101,13 @@ const BLACK_KEY_HEIGHT_RATIO = 24 / 40; // matches the previous fixed h-24 vs h-
  * app demoable without real MIDI hardware. Also reflects real hardware
  * input, since it listens to the same combined event stream it emits into.
  */
-export default function VirtualPiano({
+function VirtualPiano({
   lowestNote = 48,
   highestNote = 72,
   range: rangeProp,
   recommendedRange,
   expectedNotes = [],
+  soundingNotes = [],
   feedbackByNote = {},
   showLabels = true,
   disabled = false,
@@ -195,6 +198,7 @@ export default function VirtualPiano({
   const whiteNotes = notes.filter((n) => !isBlackKey(n));
   const blackNotes = notes.filter((n) => isBlackKey(n));
   const expectedSet = new Set(expectedNotes);
+  const soundingSet = new Set(soundingNotes);
 
   const whiteKeyHeightPx = Math.min(geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO, maxWhiteKeyHeightPx);
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
@@ -311,7 +315,7 @@ export default function VirtualPiano({
 
   function keyColorClasses(note: number, isBlack: boolean): string {
     const feedback = feedbackByNote[note];
-    const isPressed = pressedNotes.has(note);
+    const isPressed = pressedNotes.has(note) || soundingSet.has(note);
     const isExpected = expectedSet.has(note);
 
     if (feedback === "correct") return isBlack ? "bg-emerald-600" : "bg-emerald-200";
@@ -340,7 +344,7 @@ export default function VirtualPiano({
                   key={note}
                   type="button"
                   aria-label={midiNoteToName(note)}
-                  aria-pressed={pressedNotes.has(note)}
+                  aria-pressed={pressedNotes.has(note) || soundingSet.has(note)}
                   className={`relative flex items-end justify-center pb-2 rounded-b-md border border-slate-300 transition-colors touch-none ${keyColorClasses(
                     note,
                     false,
@@ -370,7 +374,7 @@ export default function VirtualPiano({
                 key={note}
                 type="button"
                 aria-label={midiNoteToName(note)}
-                aria-pressed={pressedNotes.has(note)}
+                aria-pressed={pressedNotes.has(note) || soundingSet.has(note)}
                 className={`absolute top-0 rounded-b-md border border-slate-900 z-10 transition-colors touch-none ${keyColorClasses(
                   note,
                   true,
@@ -423,3 +427,7 @@ export default function VirtualPiano({
     </div>
   );
 }
+
+// Memoised so a parent re-render (a score tick, a live-follow highlight elsewhere on
+// the page) does not re-render all 88 keys when the piano's own props are unchanged.
+export default memo(VirtualPiano);

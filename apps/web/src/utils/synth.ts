@@ -1,4 +1,4 @@
-import { registerAudioContext } from "./audioUnlock";
+import { getAudioContext, getMasterBus } from "../audio/audioEngine";
 import { previewChord, SampledInstrument } from "./sampler";
 import { SustainPedalState } from "./sustainPedal";
 
@@ -11,11 +11,19 @@ function midiToFrequency(note: number): number {
 
 interface Voice {
   oscillators: OscillatorNode[];
-  gain: GainNode;
-  filter: BiquadFilterNode;
+  /** Attack/decay envelope. */
+  envelope: GainNode;
+  /** Release stage, kept separate so a release can be scheduled ahead of time
+   *  without disturbing the decay curve that's still running. */
+  release: GainNode;
 }
 
 const INSTRUMENT_STORAGE_KEY = "keyboard-sensei-instrument-id";
+/** Decoded instruments kept in memory: the current one plus the two most recent. */
+export const MAX_CACHED_INSTRUMENTS = 3;
+const SYNTH_RELEASE_S = 0.25;
+const SYNTH_IMMEDIATE_RELEASE_S = 0.02;
+const SYNTH_MAX_RING_S = 7.2;
 
 function loadStoredInstrumentId(): string | null {
   try {
@@ -34,6 +42,9 @@ function saveStoredInstrumentId(id: string | null): void {
   }
 }
 
+/** Cancels a scheduled note: silences it quickly if sounding, drops it if not started yet. */
+export type CancelScheduledNote = () => void;
+
 /**
  * Dependency-free Web Audio piano voice. Not a sample library, but shaped to
  * behave like one: three layered partials (fundamental + soft octave + faint
@@ -42,22 +53,20 @@ function saveStoredInstrumentId(id: string | null): void {
  * two-stage decay (pianos keep decaying while held), and a shared compressor
  * so chords don't clip.
  *
- * This class is also the FACADE for the whole app's piano voice: every
- * existing caller (MidiContext, playalongEngine, accompanimentPlayer,
- * VirtualPiano) only ever calls playNote/stopNote on the `pianoSynth`
- * singleton below, and keeps working completely unchanged.
- * `useInstrument()` swaps in a real sampled voice
+ * This class is also the FACADE for the whole app's piano voice. Live playing
+ * (MidiContext, VirtualPiano) calls playNote/stopNote; anything with a known
+ * start and end (guide notes, accompaniment, previews) calls scheduleNote from
+ * the lookahead scheduler. `useInstrument()` swaps in a real sampled voice
  * (apps/web/src/utils/sampler.ts) underneath; when none is selected, or the
- * selected one is still loading its 88 samples, playback silently falls back
- * to this oscillator synth so the keyboard is never silent.
+ * selected one is still loading, playback falls back to this oscillator synth
+ * so the keyboard is never silent.
  */
 export class PianoSynth {
-  private ctx: AudioContext | null = null;
-  private master: DynamicsCompressorNode | null = null;
   private voices = new Map<number, Voice>();
 
-  /** Instruments already switched to, keyed by id — switching back to a
-   *  previously-loaded instrument is instant, samples aren't re-fetched. */
+  /** Loaded instruments, least recently selected first. Switching back to one of
+   *  these is instant; older ones are evicted (see MAX_CACHED_INSTRUMENTS), since
+   *  a decoded instrument is tens of megabytes. */
   private samplerCache = new Map<string, SampledInstrument>();
   private activeSampler: SampledInstrument | null = null;
   private activeInstrumentId: string | null = null;
@@ -76,6 +85,18 @@ export class PianoSynth {
     return this.activeInstrumentId;
   }
 
+  /** Instrument ids whose decoded samples are in memory, least recent first. */
+  get cachedInstrumentIds(): string[] {
+    return [...this.samplerCache.keys()];
+  }
+
+  /** Total decoded sample memory across cached instruments, in bytes. */
+  get cachedSampleBytes(): number {
+    let bytes = 0;
+    for (const sampler of this.samplerCache.values()) bytes += sampler.decodedBytes;
+    return bytes;
+  }
+
   /**
    * Switches the active voice. `null` reverts to the built-in oscillator
    * synth. Resolves once the instrument's samples have fully loaded — but
@@ -92,14 +113,26 @@ export class PianoSynth {
       return;
     }
 
-    const ctx = this.ensureContext();
     let sampler = this.samplerCache.get(instrumentId);
-    if (!sampler) {
-      sampler = new SampledInstrument(instrumentId, ctx, this.master!);
-      this.samplerCache.set(instrumentId, sampler);
+    if (sampler) {
+      // Most recently used goes to the end.
+      this.samplerCache.delete(instrumentId);
+    } else {
+      sampler = new SampledInstrument(instrumentId, getAudioContext(), getMasterBus());
     }
+    this.samplerCache.set(instrumentId, sampler);
     this.activeSampler = sampler;
+    this.evictOldInstruments();
     await sampler.load();
+  }
+
+  private evictOldInstruments(): void {
+    while (this.samplerCache.size > MAX_CACHED_INSTRUMENTS) {
+      const [oldestId, oldest] = this.samplerCache.entries().next().value as [string, SampledInstrument];
+      if (oldest === this.activeSampler) break;
+      this.samplerCache.delete(oldestId);
+      oldest.dispose();
+    }
   }
 
   /** For a picker UI to show load progress without reaching into internals. */
@@ -113,37 +146,20 @@ export class PianoSynth {
    *  three notes, not the full 88-sample pack), so a picker can preview a
    *  voice before committing to a full download. */
   async previewInstrument(instrumentId: string, midiNotes: number[] = [60, 64, 67]): Promise<void> {
-    const ctx = this.ensureContext();
-    await previewChord(instrumentId, midiNotes, ctx, this.master!);
+    await previewChord(instrumentId, midiNotes, getAudioContext(), getMasterBus());
   }
 
-  private ensureContext(): AudioContext {
-    if (!this.ctx) {
-      this.ctx = new AudioContext();
-      // A MIDI note-on is NOT a user gesture, so resume() here is ignored by the
-      // browser until the user actually clicks something. Register instead, and
-      // audioUnlock resumes us on the first real gesture. Without this, a MIDI
-      // keyboard lights up the on-screen keys but makes no sound until you click.
-      registerAudioContext(this.ctx);
-      this.master = this.ctx.createDynamicsCompressor();
-      this.master.threshold.value = -18;
-      this.master.knee.value = 12;
-      this.master.ratio.value = 4;
-      this.master.attack.value = 0.002;
-      this.master.release.value = 0.2;
-      this.master.connect(this.ctx.destination);
-    }
-    if (this.ctx.state === "suspended") {
-      void this.ctx.resume();
-    }
-    return this.ctx;
+  private samplerFor(note: number): SampledInstrument | null {
+    const sampler = this.activeSampler;
+    return sampler && sampler.isLoaded && sampler.hasSample(note) ? sampler : null;
   }
 
   playNote(note: number, velocity = 100): void {
     this.sustain.noteOn(note);
-    if (this.activeSampler && this.activeSampler.isLoaded && this.activeSampler.hasSample(note)) {
-      this.activeSampler.playNote(note, velocity);
-      this.noteEngine.set(note, this.activeSampler);
+    const sampler = this.samplerFor(note);
+    if (sampler) {
+      sampler.playNote(note, velocity);
+      this.noteEngine.set(note, sampler);
       return;
     }
     this.playSynthNote(note, velocity);
@@ -153,6 +169,41 @@ export class PianoSynth {
   stopNote(note: number, immediate = false): void {
     if (!immediate && !this.sustain.noteOff(note)) return;
     this.stopNoteNow(note, immediate);
+  }
+
+  /**
+   * Schedules a note at exact AudioContext times. Used by the lookahead scheduler
+   * for everything that isn't live playing. These voices are independent of the
+   * live ones (a guide note and the player's own press of the same key can sound
+   * together) and of the sustain pedal.
+   */
+  scheduleNote(note: number, velocity: number, startTime: number, endTime: number): CancelScheduledNote {
+    const sampled = this.samplerFor(note)?.scheduleNote(note, velocity, startTime, endTime);
+    if (sampled) return sampled;
+
+    const ctx = getAudioContext();
+    const voice = this.createSynthVoice(note, velocity, startTime);
+    const releaseAt = Math.max(startTime + 0.01, endTime);
+    voice.release.gain.setValueAtTime(1, releaseAt);
+    voice.release.gain.linearRampToValueAtTime(0, releaseAt + SYNTH_RELEASE_S);
+    const stopAt = Math.min(startTime + SYNTH_MAX_RING_S, releaseAt + SYNTH_RELEASE_S + 0.02);
+    for (const osc of voice.oscillators) osc.stop(stopAt);
+    return () => {
+      const now = ctx.currentTime;
+      if (now < startTime) {
+        for (const osc of voice.oscillators) {
+          osc.stop();
+          osc.disconnect();
+        }
+        voice.release.disconnect();
+        return;
+      }
+      if (now >= releaseAt) return; // already releasing
+      voice.release.gain.cancelScheduledValues(now);
+      voice.release.gain.setValueAtTime(1, now);
+      voice.release.gain.linearRampToValueAtTime(0, now + SYNTH_IMMEDIATE_RELEASE_S);
+      for (const osc of voice.oscillators) osc.stop(now + SYNTH_IMMEDIATE_RELEASE_S + 0.02);
+    };
   }
 
   setSustainPedal(down: boolean): void {
@@ -178,10 +229,15 @@ export class PianoSynth {
   }
 
   private playSynthNote(note: number, velocity: number): void {
-    const ctx = this.ensureContext();
+    const ctx = getAudioContext();
     this.stopSynthNote(note, true);
+    const voice = this.createSynthVoice(note, velocity, ctx.currentTime);
+    for (const osc of voice.oscillators) osc.stop(ctx.currentTime + SYNTH_MAX_RING_S);
+    this.voices.set(note, voice);
+  }
 
-    const now = ctx.currentTime;
+  private createSynthVoice(note: number, velocity: number, startTime: number): Voice {
+    const ctx = getAudioContext();
     const frequency = midiToFrequency(note);
     const strike = Math.pow(velocity / 127, 1.4);
 
@@ -191,16 +247,19 @@ export class PianoSynth {
     filter.Q.value = 0.6;
     const attackCutoff = Math.min(11_000, frequency * (4 + 7 * strike));
     const settledCutoff = Math.min(6_000, frequency * (2.5 + 2.5 * strike));
-    filter.frequency.setValueAtTime(attackCutoff, now);
-    filter.frequency.exponentialRampToValueAtTime(Math.max(settledCutoff, 200), now + 0.35);
+    filter.frequency.setValueAtTime(attackCutoff, startTime);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(settledCutoff, 200), startTime + 0.35);
 
-    const gain = ctx.createGain();
+    const envelope = ctx.createGain();
     const peak = 0.05 + strike * 0.22;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(peak, now + 0.004);
+    envelope.gain.setValueAtTime(0, startTime);
+    envelope.gain.linearRampToValueAtTime(peak, startTime + 0.004);
     // Two-stage decay: fast initial settle, then the long singing tail.
-    gain.gain.exponentialRampToValueAtTime(Math.max(peak * 0.35, 0.001), now + 1.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 7);
+    envelope.gain.exponentialRampToValueAtTime(Math.max(peak * 0.35, 0.001), startTime + 1.1);
+    envelope.gain.exponentialRampToValueAtTime(0.001, startTime + 7);
+
+    const release = ctx.createGain();
+    release.gain.value = 1;
 
     const partials: { type: OscillatorType; ratio: number; level: number }[] = [
       { type: "triangle", ratio: 1, level: 1 },
@@ -215,24 +274,26 @@ export class PianoSynth {
       partialGain.gain.value = level;
       osc.connect(partialGain);
       partialGain.connect(filter);
-      osc.start(now);
-      osc.stop(now + 7.2);
+      osc.start(startTime);
       return osc;
     });
+    oscillators[0]!.onended = () => release.disconnect();
 
-    filter.connect(gain);
-    gain.connect(this.master!);
-    this.voices.set(note, { oscillators, gain, filter });
+    filter.connect(envelope);
+    envelope.connect(release);
+    release.connect(getMasterBus());
+    return { oscillators, envelope, release };
   }
 
   private stopSynthNote(note: number, immediate = false): void {
     const voice = this.voices.get(note);
-    if (!voice || !this.ctx) return;
-    const releaseTime = immediate ? 0.02 : 0.25;
-    const now = this.ctx.currentTime;
-    voice.gain.gain.cancelScheduledValues(now);
-    voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
-    voice.gain.gain.linearRampToValueAtTime(0, now + releaseTime);
+    if (!voice) return;
+    const ctx = getAudioContext();
+    const releaseTime = immediate ? SYNTH_IMMEDIATE_RELEASE_S : SYNTH_RELEASE_S;
+    const now = ctx.currentTime;
+    voice.release.gain.cancelScheduledValues(now);
+    voice.release.gain.setValueAtTime(voice.release.gain.value, now);
+    voice.release.gain.linearRampToValueAtTime(0, now + releaseTime);
     for (const osc of voice.oscillators) osc.stop(now + releaseTime + 0.02);
     this.voices.delete(note);
   }

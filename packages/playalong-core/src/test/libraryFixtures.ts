@@ -17,7 +17,7 @@ import path from "node:path";
  *
  * So probe for a SPECIFIC seeded fixture that only the real library provides.
  */
-export const MIDI_LIBRARY_DIR = path.resolve(__dirname, "../../../api/data/midi-library");
+export const MIDI_LIBRARY_DIR = path.resolve(__dirname, "../../../../apps/api/data/midi-library");
 
 const PROBE = "abba-dancing-queen.mid";
 
