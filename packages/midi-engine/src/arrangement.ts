@@ -33,6 +33,9 @@
  * - `"beginner"`:
  *   - Right-hand melody only. Single notes (strictly monophonic: every note
  *     ends at or before the next one starts). Left hand dropped.
+ *   - A tune that spends 30%+ of its time in sixteenths first has its note values
+ *     doubled (see `result.timeScale`), so it keeps its notes instead of
+ *     losing every other one.
  *   - Rhythm quantized to an eighth-note grid, and every duration is one of
  *     `BEGINNER_DURATIONS` (eighth, quarter, dotted quarter, half, dotted half,
  *     whole). Notes that would collide on the grid are thinned.
@@ -105,6 +108,14 @@ export interface ArrangementResult {
   notes: ArrangementNote[];
   /** Semitones added to every pitch (beginner only; 0 otherwise). Includes octave placement. */
   transpose: number;
+  /**
+   * 1, or 2 when a beginner tune moves mostly in sixteenths: its note values
+   * are then doubled (sixteenths become eighths) so it fits the beginner
+   * rhythm set, and every beat in `notes` is an original beat × 2. To keep
+   * the sound identical, convert with `originalBeat = beat / timeScale` (or
+   * write the file with the tempo doubled and the meter's denominator halved).
+   */
+  timeScale: 1 | 2;
   /** The ORIGINAL key: as given in meta, or estimated. */
   key: ArrangementKey;
 }
@@ -148,7 +159,7 @@ export function simplifyArrangement(
   const key = meta.key ?? estimateKey(handed);
 
   if (level === "full") {
-    return { level, notes: handed.sort(byTime), transpose: 0, key };
+    return { level, notes: handed.sort(byTime), transpose: 0, key, timeScale: 1 };
   }
 
   const melody = melodyLine(handed, meta);
@@ -160,10 +171,12 @@ export function simplifyArrangement(
       handed.filter((note) => note.hand === "left"),
       meta.meters ?? [],
     );
-    return { level, notes: [...rh, ...lh].sort(byTime), transpose: 0, key };
+    return { level, notes: [...rh, ...lh].sort(byTime), transpose: 0, key, timeScale: 1 };
   }
 
-  const quantized = quantizeBeginner(melody);
+  const timeScale = shareFasterThan(melody, BEGINNER_GRID) >= 0.3 ? 2 : 1;
+  const scaled = timeScale === 1 ? melody : melody.map((note) => ({ ...note, startBeat: note.startBeat * 2, durationBeats: note.durationBeats * 2 }));
+  const quantized = quantizeBeginner(scaled);
   const keyShift = meta.transpose ?? beginnerKeyShift(key);
   const transpose = keyShift + octavePlacement(quantized, keyShift);
   const placed = foldIntoRange(
@@ -171,7 +184,7 @@ export function simplifyArrangement(
     BEGINNER_RANGE.min,
     BEGINNER_RANGE.max,
   );
-  return { level, notes: placed, transpose, key };
+  return { level, notes: placed, transpose, key, timeScale };
 }
 
 /**
@@ -228,6 +241,21 @@ export function extractMelody(notes: readonly ArrangementNote[]): ArrangementNot
   }
 
   return clipToMonophonic(picked.map(({ note }) => ({ ...note })));
+}
+
+/** Share of the tune's time spent in notes closer together than `beats`. */
+function shareFasterThan(melody: ArrangementNote[], beats: number): number {
+  // Measured in time, not note count: a few quick passing notes between long
+  // ones don't make a tune "fast".
+  let fast = 0;
+  let total = 0;
+  for (let i = 0; i + 1 < melody.length; i++) {
+    // Cap at one beat so rests between phrases don't dilute the measure.
+    const gap = Math.min(1, melody[i + 1].startBeat - melody[i].startBeat);
+    total += gap;
+    if (gap < beats - EPS) fast += gap;
+  }
+  return total === 0 ? 0 : fast / total;
 }
 
 /** Clip each note so it ends no later than the next one starts. Input must be sorted, one note per onset. */
@@ -359,18 +387,32 @@ function beginnerKeyShift(key: ArrangementKey): number {
   return best;
 }
 
-/** Whole-octave shift that puts the most melody notes inside BEGINNER_RANGE, centred near A4. */
+/**
+ * Whole-octave shift that keeps the most of the tune inside BEGINNER_RANGE,
+ * centred near A4. Weighted by note length, so the held notes of the tune
+ * count for more than passing figures between them.
+ */
 function octavePlacement(melody: ArrangementNote[], keyShift: number): number {
   if (melody.length === 0) return 0;
-  const pitches = melody.map((note) => note.midi + keyShift).sort((a, b) => a - b);
-  const median = pitches[Math.floor(pitches.length / 2)];
+  const weighted = melody.map((note) => ({ pitch: note.midi + keyShift, weight: note.durationBeats })).sort((a, b) => a.pitch - b.pitch);
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let median = weighted[weighted.length - 1].pitch;
+  for (let acc = 0, i = 0; i < weighted.length; i++) {
+    acc += weighted[i].weight;
+    if (acc >= total / 2) {
+      median = weighted[i].pitch;
+      break;
+    }
+  }
   let best = 0;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let octave = -3; octave <= 3; octave++) {
     const shift = octave * 12;
-    const inside = pitches.filter((p) => p + shift >= BEGINNER_RANGE.min && p + shift <= BEGINNER_RANGE.max).length;
-    // Most notes inside first; then move as few octaves as possible; then centre near A4.
-    const score = inside * 1000 - Math.abs(octave) * 100 - Math.abs(median + shift - 69);
+    const inside = weighted
+      .filter((item) => item.pitch + shift >= BEGINNER_RANGE.min && item.pitch + shift <= BEGINNER_RANGE.max)
+      .reduce((sum, item) => sum + item.weight, 0);
+    // Most of the tune inside first; then move as few octaves as possible; then centre near A4.
+    const score = (inside / total) * 1000 - Math.abs(octave) * 20 - Math.abs(median + shift - 69);
     if (score > bestScore) {
       best = shift;
       bestScore = score;

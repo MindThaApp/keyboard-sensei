@@ -143,6 +143,15 @@ describe("simplifyArrangement: beginner", () => {
     expect(out.map((note) => note.startBeat)).toEqual([0, 0.5, 1, 2]);
   });
 
+  it("doubles the note values of a sixteenth-note tune instead of dropping every other note", () => {
+    const tune = [76, 75, 76, 75, 76, 71, 74, 72].map((midi, i) => n(midi, i * 0.25, 0.25)).concat(n(69, 2, 1));
+    const result = simplifyArrangement(tune, { key: { tonic: 9, mode: "minor" } }, "beginner");
+    expect(result.timeScale).toBe(2);
+    expect(pitches(result.notes)).toEqual([76, 75, 76, 75, 76, 71, 74, 72, 69]);
+    expect(result.notes.map((note) => note.startBeat)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
+    expect(simplifyArrangement(albertiPiece(), {}, "beginner").timeScale).toBe(1);
+  });
+
   it("preserves the piece's length to within one beat", () => {
     const notes = albertiPiece();
     const { notes: out } = simplifyArrangement(notes, {}, "beginner");
