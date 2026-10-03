@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { calculateAssessmentPlacement } from "./index.js";
+import { calculateAssessmentPlacement, validateMidiExercise } from "./index.js";
+
+describe("validateMidiExercise", () => {
+  it("keeps an exercise's dynamics opt-in (stripping it would silently turn velocity scoring off)", () => {
+    const exercise = {
+      exerciseId: "x",
+      tempoBpm: 80,
+      difficulty: "beginner",
+      simultaneityWindowMs: 80,
+      timingToleranceMs: 150,
+      durationTolerancePercent: 30,
+      dynamics: { evenVolume: true },
+      expected: [{ id: "a", note: 60, startBeat: 0, durationBeats: 1, hand: "right", finger: 1, chordGroupId: null, voice: "melody" }],
+    };
+    expect(validateMidiExercise(exercise).dynamics).toEqual({ evenVolume: true });
+  });
+});
 
 describe("assessment placement", () => {
   it("places only consistently strong players beyond lesson one", () => {
