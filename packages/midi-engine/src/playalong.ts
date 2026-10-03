@@ -158,8 +158,60 @@ export function lookaheadMultiplier(lookaheadS: number): number {
   return clamp(1 + 0.21 * Math.log(4 / lookaheadS), 0.85, 1.3);
 }
 
-/** Final score can exceed 100 on hard settings by design. */
-export function finalScore(result: PlayAlongResult, rate: number, lookaheadS: number): number {
-  const multiplier = Math.min(1.5, tempoMultiplier(rate) * lookaheadMultiplier(lookaheadS));
-  return round1(result.baseScore * multiplier);
+/** The four "Make it easier" steps of song practice, hardest first. */
+export type PracticeLevel = "full" | "simplified" | "easy" | "melody";
+export type PracticeHands = "both" | "right" | "left";
+
+export const PRACTICE_LEVELS: readonly PracticeLevel[] = ["full", "simplified", "easy", "melody"];
+
+/** An easier arrangement is worth less: you are playing fewer, simpler notes. */
+export const DIFFICULTY_MULTIPLIERS: Record<PracticeLevel, number> = {
+  full: 1,
+  simplified: 0.8,
+  easy: 0.6,
+  melody: 0.4,
+};
+
+/** Playing one hand (the other accompanies you) is worth less than both. */
+export const ONE_HAND_MULTIPLIER = 0.6;
+
+/** Every multiplier is capped here, which keeps a score within the API's ceiling of 160. */
+export const MAX_SCORE_MULTIPLIER = 1.5;
+
+export function difficultyMultiplier(level: PracticeLevel): number {
+  return DIFFICULTY_MULTIPLIERS[level];
+}
+
+export function handsMultiplier(hands: PracticeHands): number {
+  return hands === "both" ? 1 : ONE_HAND_MULTIPLIER;
+}
+
+export interface PracticeMultiplierInput {
+  rate: number;
+  lookaheadS: number;
+  level?: PracticeLevel;
+  hands?: PracticeHands;
+}
+
+/**
+ * The full score multiplier for a run: speed × look-ahead × difficulty × hands,
+ * capped at MAX_SCORE_MULTIPLIER. Level and hands default to Full / Both, so a
+ * caller that doesn't know about them gets exactly the old speed × look-ahead.
+ */
+export function practiceMultiplier({ rate, lookaheadS, level = "full", hands = "both" }: PracticeMultiplierInput): number {
+  const raw = tempoMultiplier(rate) * lookaheadMultiplier(lookaheadS) * difficultyMultiplier(level) * handsMultiplier(hands);
+  return Math.min(MAX_SCORE_MULTIPLIER, raw);
+}
+
+/**
+ * Final score can exceed 100 on hard settings by design. `practice` adds the
+ * difficulty and hands factors; leaving it out scores a full, two-handed run.
+ */
+export function finalScore(
+  result: Pick<PlayAlongResult, "baseScore">,
+  rate: number,
+  lookaheadS: number,
+  practice: Pick<PracticeMultiplierInput, "level" | "hands"> = {},
+): number {
+  return round1(result.baseScore * practiceMultiplier({ rate, lookaheadS, ...practice }));
 }

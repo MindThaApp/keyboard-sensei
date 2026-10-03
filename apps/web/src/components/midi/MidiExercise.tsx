@@ -447,7 +447,16 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
             {!untimed && <SubmetricBar label="Timing" value={result.timingAccuracy} />}
             {!untimed && <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />}
             {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
+            {result.dynamics && <SubmetricBar label="Dynamics" value={result.dynamics.score} />}
           </div>
+          {result.dynamics && (
+            <p className="mt-2 text-xs tabular-nums text-slate-500" aria-label="Dynamics">
+              {result.dynamics.evenness !== null && `Volume spread ±${result.dynamics.velocitySpread} (evenness ${result.dynamics.evenness}%)`}
+              {result.dynamics.evenness !== null && result.dynamics.chordBalance !== null && " · "}
+              {result.dynamics.chordBalance !== null &&
+                `Chord tones within ${result.dynamics.chordVelocityRange} of each other (balance ${result.dynamics.chordBalance}%)`}
+            </p>
+          )}
           {result.feedback.length > 0 && (
             <ul className="mt-3 space-y-1 text-sm text-slate-700 dark:text-slate-200">
               {result.feedback.map((line, i) => (

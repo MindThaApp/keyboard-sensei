@@ -21,6 +21,33 @@ interface Voice {
 const INSTRUMENT_STORAGE_KEY = "keyboard-sensei-instrument-id";
 /** Decoded instruments kept in memory: the current one plus the two most recent. */
 export const MAX_CACHED_INSTRUMENTS = 3;
+/** On a low-memory device: the current one plus the most recent. */
+export const LOW_MEMORY_CACHED_INSTRUMENTS = 2;
+
+interface DeviceHints {
+  deviceMemory?: number;
+  userAgent: string;
+  platform?: string;
+  maxTouchPoints?: number;
+}
+
+/**
+ * How many decoded instruments to keep. A decoded instrument is about 97 MB, so
+ * three of them is close to 300 MB: fine on a laptop, enough for a 4 GB tablet
+ * to reload the tab. `navigator.deviceMemory` (Chrome, Edge, Android) reports
+ * the device's RAM in GB, rounded down. Safari doesn't expose it at all, and an
+ * iPad then has to be assumed small: iPadOS reports itself as a Mac, so it is
+ * recognised as a "Mac" with a touch screen.
+ */
+export function maxCachedInstruments(hints: DeviceHints | undefined = typeof navigator === "undefined" ? undefined : navigator): number {
+  if (!hints) return MAX_CACHED_INSTRUMENTS;
+  if (typeof hints.deviceMemory === "number") {
+    return hints.deviceMemory <= 4 ? LOW_MEMORY_CACHED_INSTRUMENTS : MAX_CACHED_INSTRUMENTS;
+  }
+  const iPad = /iPad/.test(hints.userAgent) || (/Macintosh/.test(hints.userAgent) && (hints.maxTouchPoints ?? 0) > 1);
+  const iPhone = /iPhone|iPod/.test(hints.userAgent);
+  return iPad || iPhone ? LOW_MEMORY_CACHED_INSTRUMENTS : MAX_CACHED_INSTRUMENTS;
+}
 const SYNTH_RELEASE_S = 0.25;
 const SYNTH_IMMEDIATE_RELEASE_S = 0.02;
 const SYNTH_MAX_RING_S = 7.2;
@@ -65,12 +92,13 @@ export class PianoSynth {
   private voices = new Map<number, Voice>();
 
   /** Loaded instruments, least recently selected first. Switching back to one of
-   *  these is instant; older ones are evicted (see MAX_CACHED_INSTRUMENTS), since
+   *  these is instant; older ones are evicted (see maxCachedInstruments), since
    *  a decoded instrument is tens of megabytes. */
   private samplerCache = new Map<string, SampledInstrument>();
   private activeSampler: SampledInstrument | null = null;
   private activeInstrumentId: string | null = null;
   private readonly sustain = new SustainPedalState();
+  private readonly cacheLimit = maxCachedInstruments();
   /** Which engine actually produced the currently-sounding voice for a note, so
    *  stopNote() releases the right one even if the selected instrument changed
    *  between the note-on and note-off (e.g. the user switched voices mid-note). */
@@ -127,7 +155,7 @@ export class PianoSynth {
   }
 
   private evictOldInstruments(): void {
-    while (this.samplerCache.size > MAX_CACHED_INSTRUMENTS) {
+    while (this.samplerCache.size > this.cacheLimit) {
       const [oldestId, oldest] = this.samplerCache.entries().next().value as [string, SampledInstrument];
       if (oldest === this.activeSampler) break;
       this.samplerCache.delete(oldestId);

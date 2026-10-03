@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
+  difficultyMultiplier,
   finalScore,
+  handsMultiplier,
   lookaheadMultiplier,
+  MAX_SCORE_MULTIPLIER,
+  practiceMultiplier,
+  PRACTICE_LEVELS,
   tempoMultiplier,
   type PlayAlongResult,
+  type PracticeHands,
+  type PracticeLevel,
 } from "@keyboard-sensei/midi-engine";
-import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
-import { parsePlayAlongSong, type ParsedPlayAlongSong, type PlayAlongEngine } from "@keyboard-sensei/playalong-core";
+import { getMyPlayAlongAttempts, getSongNotationFile, submitPlayAlongAttempt, type PlayAlongBest } from "../../services/api";
+import { arrangeForPractice, buildPracticeRun, type AccompanimentMute, type LoopRange, type PlayAlongEngine, type PracticeRun } from "@keyboard-sensei/playalong-core";
 import { CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
 import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
 import { useMidiContext } from "../midi/MidiContext";
@@ -26,6 +33,18 @@ import { stageLayout, type VisibilityMode } from "./stageLayout";
 import { formatDuration } from "../../utils/songLibrary";
 import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano } from "./PlayAlongLive";
 import { usePlayAlongRun } from "./usePlayAlongRun";
+import { usePracticeSong } from "./usePracticeSong";
+import LoopBarStrip from "./LoopBarStrip";
+import {
+  afterLoop,
+  HANDS_LABELS,
+  LEVEL_DESCRIPTIONS,
+  LEVEL_LABELS,
+  parsePracticePreset,
+  practiceSummary,
+  stepLevel,
+  type LoopOptions,
+} from "./practiceSession";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -36,6 +55,11 @@ const TEMPO_MAX_PCT = 200;
 const LOOKAHEAD_MIN_S = 1;
 const LOOKAHEAD_MAX_S = 8;
 const SETTINGS_KEY = "ks-playalong-settings";
+/** Choices for where auto speed-up starts, and what accuracy counts as clean. */
+const SPEED_UP_START_OPTIONS = [25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
+const CLEAN_ACCURACY_OPTIONS = [50, 60, 70, 75, 80, 85, 90, 95, 100];
+/** A loop starts out this long when switched on with no preset. */
+const DEFAULT_LOOP_BARS = 4;
 
 // "Sheet music" IS the scrolling ribbon. There used to be a separate "Scrolling
 // score" mode alongside a static rolling-window "Sheet music", but they were two
@@ -46,7 +70,7 @@ const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
 
 const VISIBILITY_MODES: VisibilityMode[] = ["note-size", "window-size"];
 
-interface Settings {
+interface Settings extends LoopOptions {
   tempoPct: number;
   lookaheadS: number;
   waitMode: boolean;
@@ -57,9 +81,26 @@ interface Settings {
   clickLevel: ClickLevel;
   metronomeVolume: number;
   visibilityMode: VisibilityMode;
+  accompanimentMute: AccompanimentMute;
 }
 
-const DEFAULT_SETTINGS: Settings = { tempoPct: 100, lookaheadS: 4, waitMode: false, guideAudio: true, viewMode: "both", metronome: false, metronomeSound: "click", clickLevel: "beat", metronomeVolume: 0.7, visibilityMode: "note-size" };
+const DEFAULT_SETTINGS: Settings = {
+  tempoPct: 100,
+  lookaheadS: 4,
+  waitMode: false,
+  guideAudio: true,
+  viewMode: "both",
+  metronome: false,
+  metronomeSound: "click",
+  clickLevel: "beat",
+  metronomeVolume: 0.7,
+  visibilityMode: "note-size",
+  accompanimentMute: { otherHand: false, removed: false },
+  untilClean: false,
+  autoSpeedUp: false,
+  speedUpStartPct: 60,
+  cleanAccuracyPct: 90,
+};
 
 const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
@@ -80,6 +121,14 @@ function loadSettings(): Settings {
       clickLevel: CLICK_LEVELS.some((c) => c.value === parsed.clickLevel) ? (parsed.clickLevel as ClickLevel) : "beat",
       metronomeVolume: typeof parsed.metronomeVolume === "number" ? parsed.metronomeVolume : 0.7,
       visibilityMode: VISIBILITY_MODES.includes(parsed.visibilityMode as VisibilityMode) ? (parsed.visibilityMode as VisibilityMode) : "note-size",
+      accompanimentMute: {
+        otherHand: Boolean(parsed.accompanimentMute?.otherHand),
+        removed: Boolean(parsed.accompanimentMute?.removed),
+      },
+      untilClean: Boolean(parsed.untilClean),
+      autoSpeedUp: Boolean(parsed.autoSpeedUp),
+      speedUpStartPct: clampNum(parsed.speedUpStartPct, TEMPO_MIN_PCT, 95, 60),
+      cleanAccuracyPct: clampNum(parsed.cleanAccuracyPct, 50, 100, 90),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -88,22 +137,77 @@ function loadSettings(): Settings {
 
 const gradeFor = (score: number): string => (score >= 110 ? "S" : score >= 90 ? "A" : score >= 70 ? "B" : score >= 50 ? "C" : "D");
 
-type Phase = "loading" | "error" | "ready" | "playing" | "done";
+type Phase = "ready" | "playing" | "done";
+
+/** What a run was started with; the page's controls may move on while it plays. */
+interface RunContext {
+  level: PracticeLevel;
+  hands: PracticeHands;
+  /** The song file played: an authored easier version, or the full one. */
+  attemptSongId: string;
+}
+
+interface LoopStatus {
+  round: number;
+  lastAccuracyPct: number | null;
+  lastClean: boolean;
+}
+
+const HANDS_OPTIONS: { value: PracticeHands; short: string }[] = [
+  { value: "both", short: "Both" },
+  { value: "right", short: "Right" },
+  { value: "left", short: "Left" },
+];
 
 export default function PlayAlongPage() {
   const { songId } = useParams<{ songId: string }>();
+  const { data: practiceSong, error } = usePracticeSong(songId);
+
+  if (error) {
+    return (
+      <div className="card mx-auto w-full max-w-2xl space-y-3 p-6">
+        <h1 className="font-display text-xl font-semibold">Couldn't load this song</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{error}</p>
+        <p className="text-sm text-slate-500">If this keeps happening, tell us with the Feedback button.</p>
+        <Link to="/play" className="secondary-button inline-block text-sm">Back to library</Link>
+      </div>
+    );
+  }
+  if (!practiceSong || !songId) return <p className="text-sm text-slate-500">Loading song…</p>;
+  // Keyed by song, so every piece of practice state starts fresh with the song.
+  return <SongPractice key={songId} songId={songId} practiceSong={practiceSong} />;
+}
+
+function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: NonNullable<ReturnType<typeof usePracticeSong>["data"]> }) {
+  const { song, sources, base: parsed, authored } = practiceSong;
   const { subscribe, devices, deviceRange, calibration } = useMidiContext();
   const { theme } = useTheme();
+  const location = useLocation();
+  const preset = useMemo(() => parsePracticePreset(location.search), [location.search]);
+  const barCount = Math.max(1, parsed.grid.bars.length);
 
-  const [song, setSong] = useState<Song | null>(null);
-  const [parsed, setParsed] = useState<ParsedPlayAlongSong | null>(null);
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("ready");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [result, setResult] = useState<PlayAlongResult | null>(null);
+  const [resultContext, setResultContext] = useState<{ tempoPct: number; lookaheadS: number; level: PracticeLevel; hands: PracticeHands } | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bestsByLevel, setBestsByLevel] = useState<Partial<Record<PracticeLevel, PlayAlongBest>>>({});
+
+  const [hands, setHands] = useState<PracticeHands>(preset.hands ?? "both");
+  const [level, setLevel] = useState<PracticeLevel>(() => {
+    const opened = preset.level ?? sources.openedLevel;
+    // Melody only has no left hand: a left-hand preset (from the Gym) gets the easiest level that has one.
+    return opened === "melody" && preset.hands === "left" ? "easy" : opened;
+  });
+  const [loopOn, setLoopOn] = useState(preset.loop !== undefined);
+  const [loopRange, setLoopRange] = useState<LoopRange>(() => {
+    const start = Math.min(preset.loop?.startBar ?? 0, barCount - 1);
+    const end = Math.min(preset.loop?.endBar ?? start + DEFAULT_LOOP_BARS - 1, barCount - 1);
+    return { startBar: start, endBar: Math.max(start, end) };
+  });
+  const [loopStatus, setLoopStatus] = useState<LoopStatus | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollingScoreRef = useRef<ScrollingScoreHandle | null>(null);
@@ -115,28 +219,23 @@ export default function PlayAlongPage() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
-  // Load song metadata + file.
-  useEffect(() => {
-    if (!songId) return;
-    let cancelled = false;
-    setPhase("loading");
-    Promise.all([getSongs(), getSongFile(songId)])
-      .then(([list, bytes]) => {
-        if (cancelled) return;
-        const meta = list.songs.find((item) => item.id === songId) ?? null;
-        setSong(meta);
-        setParsed(parsePlayAlongSong(bytes));
-        setPhase("ready");
+  // Personal bests for this piece, per level (every version of a graded piece counts).
+  const groupIdsKey = sources.groupIds.join(",");
+  const refreshBests = useCallback(() => {
+    const ids = groupIdsKey.split(",");
+    getMyPlayAlongAttempts()
+      .then((response) => {
+        const merged: Partial<Record<PracticeLevel, PlayAlongBest>> = {};
+        for (const id of ids) {
+          for (const [lvl, best] of Object.entries(response.bests_by_level?.[id] ?? {}) as [PracticeLevel, PlayAlongBest][]) {
+            if (!merged[lvl] || best.score > merged[lvl]!.score) merged[lvl] = best;
+          }
+        }
+        setBestsByLevel(merged);
       })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Could not load this song");
-        setPhase("error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [songId]);
+      .catch(() => undefined);
+  }, [groupIdsKey]);
+  useEffect(refreshBests, [refreshBests]);
 
   // Fetch real MusicXML/.mxl notation for archive-imported songs, when
   // available (song.notation_path is a presence indicator, not a real path
@@ -144,7 +243,7 @@ export default function PlayAlongPage() {
   // (below) for direct uploads/URL imports, which never have notation.
   useEffect(() => {
     setNotationBytes(null);
-    if (!songId || !song?.notation_path) return;
+    if (!song?.notation_path) return;
     let cancelled = false;
     getSongNotationFile(songId)
       .then((bytes) => {
@@ -171,24 +270,34 @@ export default function PlayAlongPage() {
     setStageWidth(node.clientWidth);
     setStageHeight(node.clientHeight);
     return () => observer.disconnect();
-  }, [phase]);
+  }, []);
 
-  const notationVerticalRange = useMemo(
-    () => (parsed ? { lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax } : undefined),
-    [parsed],
+  // The notes to play at this level. Only a level change re-arranges (and so
+  // re-engraves the notation); hands and loops only slice the result below.
+  const arrangement = useMemo(() => arrangeForPractice(parsed, level, authored[level] ?? null), [parsed, level, authored]);
+  const run = useMemo(
+    () => buildPracticeRun(parsed, arrangement, { hands, loop: loopOn ? loopRange : null }),
+    [parsed, arrangement, hands, loopOn, loopRange],
   );
-  // The song's octave-padded range (unchanged from before) is the "default" step; its
-  // exact pitchMin–pitchMax, snapped to white-key edges, is the "tight fit" step. Falls
-  // back to a placeholder before the song has loaded — the hook must run unconditionally
-  // (hooks can't be conditional), and the page returns early below while !parsed anyway.
-  const defaultRange = useMemo(
-    () => (parsed ? pianoRangeFor(parsed.pitchMin, parsed.pitchMax) : { lowestNote: 48, highestNote: 72 }),
-    [parsed],
-  );
-  const tightRange = useMemo(
-    () => (parsed ? snapRangeToWhiteKeys({ lowestNote: parsed.pitchMin, highestNote: parsed.pitchMax }) : undefined),
-    [parsed],
-  );
+  const runRef = useRef<PracticeRun>(run);
+  runRef.current = run;
+
+  // Every note that can appear (an easier level can move notes by octaves).
+  const pitchSpan = useMemo(() => {
+    let min = parsed.pitchMin;
+    let max = parsed.pitchMax;
+    for (const note of arrangement.notes) {
+      if (note.midi < min) min = note.midi;
+      if (note.midi > max) max = note.midi;
+    }
+    return { min, max };
+  }, [parsed, arrangement]);
+
+  const notationVerticalRange = useMemo(() => ({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
+  // The song's octave-padded range is the "default" step; its exact range, snapped to
+  // white-key edges, is the "tight fit" step.
+  const defaultRange = useMemo(() => pianoRangeFor(pitchSpan.min, pitchSpan.max), [pitchSpan]);
+  const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
   // Single source of truth for both the piano and the falling-note canvas below — they
   // read the exact same geometry, so resizing one resizes the other in lock-step and
   // they can never drift apart (see docs/superpowers/specs/2026-08-19-keyboard-sizing-
@@ -215,27 +324,18 @@ export default function PlayAlongPage() {
   const layoutRef = useRef({ geometry, heightPx, colors });
   layoutRef.current = { geometry, heightPx, colors };
 
-  // Static preview frame: drawWaterfall is otherwise only called from inside the
-  // rAF loop, which only runs once playing — so before pressing Play the canvas
-  // was blank and Visibility had no visible effect. Render one frame at
-  // songTimeS = 0 whenever the song is parsed and we're not mid-run, and re-run
-  // whenever anything that changes the frame's appearance changes (lookahead,
-  // visibility mode's derived height, view mode, theme colors, or the keyboard
-  // geometry a resize/zoom recomputes). Purely a paint — never touches
-  // engine/scoring state, so it can't introduce any offset into the real run.
+  // Static preview frame before Play: the run's first notes at run time 0. Purely a
+  // paint — never touches engine/scoring state.
   useEffect(() => {
     if (phase === "playing") return;
-    if (!parsed) return;
     if (settings.viewMode === "notation") return; // canvas isn't rendered in this view mode
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    // Same integer-rounding fix as the rAF loop: canvas.width/height are integer
-    // setters, so an unrounded comparison against a fractional target is never
-    // equal and reallocates the canvas (and resets its context) every time this
-    // effect re-runs, e.g. on every keystroke of a settings change.
+    // canvas.width/height are integer setters, so an unrounded comparison against a
+    // fractional target is never equal and reallocates the canvas every time.
     const targetWidth = Math.round(geometry.widthPx * dpr);
     const targetHeight = Math.round(heightPx * dpr);
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -244,83 +344,112 @@ export default function PlayAlongPage() {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawWaterfall(ctx, {
-      notes: parsed.notes,
+      notes: run.notes,
       judgments: [],
       songTimeS: 0,
       lookaheadS: settings.lookaheadS,
       geometry,
       heightPx,
       colors,
-      bars: parsed.grid.bars,
+      bars: run.bars,
     });
-  }, [phase, parsed, geometry, settings.viewMode, settings.lookaheadS, heightPx, colors]);
+  }, [phase, run, geometry, settings.viewMode, settings.lookaheadS, heightPx, colors]);
 
-  // Static preview for the scrolling score, mirroring the canvas preview
-  // above: before Play is pressed there's no rAF loop driving setSongTime,
-  // so without this the ribbon would sit at its default (cursor at x=0)
-  // rather than showing songTimeS = 0's real cursor position.
+  // Static preview for the scrolling score: the cursor at the start of the run.
   useEffect(() => {
     if (phase === "playing") return;
     if (settings.viewMode === "falling") return;
-    scrollingScoreRef.current?.setSongTime(0);
-  }, [phase, settings.viewMode, parsed]);
+    scrollingScoreRef.current?.setSongTime(run.offsetS);
+  }, [phase, settings.viewMode, run.offsetS, arrangement]);
 
-  const onFrame = useCallback(
-    (engine: PlayAlongEngine, songTime: number, live: Settings) => {
-      if (!parsed) return;
-      // Runs every frame and mutates the ribbon's DOM transform directly via refs
-      // inside ScrollingScore — never a setState, so this can't cause a 60fps React
-      // re-render (see docs/agent-briefing.md). No-op when the scrolling score isn't
-      // mounted (ref is null in any other view mode).
-      scrollingScoreRef.current?.setSongTime(songTime);
+  const onFrame = useCallback((engine: PlayAlongEngine, runTime: number, live: Settings) => {
+    const current = runRef.current;
+    // Runs every frame and mutates the ribbon's DOM transform directly via refs
+    // inside ScrollingScore — never a setState, so this can't cause a 60fps React
+    // re-render (see docs/agent-briefing.md). The score is in song time.
+    scrollingScoreRef.current?.setSongTime(runTime + current.offsetS);
 
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
-      const { geometry, heightPx, colors } = layoutRef.current;
-      const dpr = window.devicePixelRatio || 1;
-      // Round before comparing: canvas.width is an integer setter, so once
-      // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
-      // unrounded comparison is NEVER equal — the canvas would be reallocated
-      // and its context reset on every single frame, at 60fps.
-      const targetWidth = Math.round(geometry.widthPx * dpr);
-      const targetHeight = Math.round(heightPx * dpr);
-      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-      }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawWaterfall(ctx, {
-        notes: parsed.notes,
-        judgments: engine.judgments,
-        songTimeS: songTime,
-        lookaheadS: live.lookaheadS,
-        geometry,
-        heightPx,
-        colors,
-        bars: parsed.grid.bars,
-      });
-    },
-    [parsed],
-  );
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const { geometry, heightPx, colors } = layoutRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    // Round before comparing: canvas.width is an integer setter, so once
+    // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
+    // unrounded comparison is NEVER equal — the canvas would be reallocated
+    // and its context reset on every single frame, at 60fps.
+    const targetWidth = Math.round(geometry.widthPx * dpr);
+    const targetHeight = Math.round(heightPx * dpr);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawWaterfall(ctx, {
+      notes: current.notes,
+      judgments: engine.judgments,
+      songTimeS: runTime,
+      lookaheadS: live.lookaheadS,
+      geometry,
+      heightPx,
+      colors,
+      bars: current.bars,
+    });
+  }, []);
+
+  const runContextRef = useRef<RunContext>({ level, hands, attemptSongId: sources.baseId });
+  const startRunRef = useRef<(tempoPct?: number) => void>(() => undefined);
 
   const onFinish = useCallback(
-    (finished: PlayAlongResult, ran: Settings) => {
+    (finished: PlayAlongResult, ran: Settings, ranRun: PracticeRun) => {
+      const context = runContextRef.current;
+      const rate = ran.tempoPct / 100;
+      const practice = { level: context.level, hands: context.hands };
+      const multiplier = practiceMultiplier({ rate, lookaheadS: ran.lookaheadS, ...practice });
+
+      // Wait mode is unscored practice, so it is never saved (as before).
+      if (!ran.waitMode) {
+        setSubmitState("saving");
+        submitPlayAlongAttempt(context.attemptSongId, {
+          score: finalScore(finished, rate, ran.lookaheadS, practice),
+          accuracy: finished.accuracyPct,
+          tempo_pct: ran.tempoPct,
+          lookahead_s: ran.lookaheadS,
+          wait_mode: false,
+          arrangement_level: context.level,
+          hands: context.hands,
+          loop_start_bar: ranRun.loop ? ranRun.loop.startBar + 1 : null,
+          loop_end_bar: ranRun.loop ? ranRun.loop.endBar + 1 : null,
+          multiplier: Math.round(multiplier * 1000) / 1000,
+          is_loop: ranRun.loop !== null,
+        })
+          .then(() => {
+            setSubmitState("saved");
+            if (!ranRun.loop) refreshBests();
+          })
+          .catch(() => setSubmitState("failed"));
+      }
+
       setResult(finished);
+      setResultContext({ tempoPct: ran.tempoPct, lookaheadS: ran.lookaheadS, ...practice });
+
+      if (ranRun.loop) {
+        const outcome = afterLoop(finished.accuracyPct, ran.tempoPct, ran, ran.waitMode);
+        setLoopStatus((status) => ({
+          round: (status?.round ?? 1) + (outcome.again ? 1 : 0),
+          lastAccuracyPct: ran.waitMode ? null : finished.accuracyPct,
+          lastClean: outcome.clean,
+        }));
+        if (outcome.nextTempoPct !== ran.tempoPct) setSettings((s) => ({ ...s, tempoPct: outcome.nextTempoPct }));
+        if (outcome.again) {
+          // Straight into the next time round, count-in first.
+          startRunRef.current(outcome.nextTempoPct);
+          return;
+        }
+      }
       setPhase("done");
-      if (ran.waitMode || !songId) return;
-      setSubmitState("saving");
-      submitPlayAlongAttempt(songId, {
-        score: finalScore(finished, ran.tempoPct / 100, ran.lookaheadS),
-        accuracy: finished.accuracyPct,
-        tempo_pct: ran.tempoPct,
-        lookahead_s: ran.lookaheadS,
-        wait_mode: false,
-      })
-        .then(() => setSubmitState("saved"))
-        .catch(() => setSubmitState("failed"));
     },
-    [songId],
+    [refreshBests],
   );
 
   const {
@@ -328,15 +457,27 @@ export default function PlayAlongPage() {
     togglePause,
     start: startRun,
     cancel: cancelRunState,
-  } = usePlayAlongRun({ parsed, settings, subscribe, onFrame, onFinish });
+  } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings, subscribe, onFrame, onFinish });
+  startRunRef.current = startRun;
 
   const start = useCallback(() => {
-    if (!parsed) return;
+    if (run.notes.length === 0) return;
     setResult(null);
     setSubmitState("idle");
-    startRun();
+    runContextRef.current = { level, hands, attemptSongId: authored[level] ? sources.authoredId[level]! : sources.baseId };
+    let tempoPct: number | undefined;
+    if (run.loop) {
+      setLoopStatus({ round: 1, lastAccuracyPct: null, lastClean: false });
+      if (settings.autoSpeedUp) {
+        tempoPct = settings.speedUpStartPct;
+        setSettings((s) => ({ ...s, tempoPct: s.speedUpStartPct }));
+      }
+    } else {
+      setLoopStatus(null);
+    }
+    startRun(tempoPct);
     setPhase("playing");
-  }, [parsed, startRun]);
+  }, [run, level, hands, authored, sources, settings.autoSpeedUp, settings.speedUpStartPct, startRun]);
 
   // A calibration prompt lives in the MIDI status bar inside the settings panel; never
   // let it wait unseen behind a closed panel.
@@ -345,29 +486,36 @@ export default function PlayAlongPage() {
 
   const cancelRun = useCallback(() => {
     cancelRunState();
-    setPhase("ready");
-  }, [cancelRunState]);
+    setPhase(result ? "done" : "ready");
+  }, [cancelRunState, result]);
 
-  if (phase === "loading") return <p className="text-sm text-slate-500">Loading song…</p>;
-  if (phase === "error" || !parsed) {
-    return (
-      <div className="card mx-auto w-full max-w-2xl space-y-3 p-6">
-        <h1 className="font-display text-xl font-semibold">Couldn't load this song</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{error ?? "Unknown error"}</p>
-        <p className="text-sm text-slate-500">If this keeps happening, tell us with the Feedback button.</p>
-        <Link to="/play" className="secondary-button inline-block text-sm">Back to library</Link>
-      </div>
-    );
-  }
-
-  const scoreBonus = Math.min(1.5, tempoMultiplier(settings.tempoPct / 100) * lookaheadMultiplier(settings.lookaheadS));
   const settingsLocked = phase === "playing" && !paused;
+  // Level, hands and the loop shape the run itself, so they can't change mid-run.
+  const practiceLocked = phase === "playing";
+  const rate = settings.tempoPct / 100;
+  const scoreBonus = practiceMultiplier({ rate, lookaheadS: settings.lookaheadS, level, hands });
+  const uncappedBonus = tempoMultiplier(rate) * lookaheadMultiplier(settings.lookaheadS) * difficultyMultiplier(level) * handsMultiplier(hands);
+  const summary = practiceSummary({ hands, loop: loopOn ? run.loop : null, tempoPct: settings.tempoPct, level, waitMode: settings.waitMode });
+  const nothingToPlay = run.notes.length === 0;
+  const resultScore = result && resultContext ? finalScore(result, resultContext.tempoPct / 100, resultContext.lookaheadS, resultContext) : 0;
+  const loopLabel =
+    phase === "playing" && loopStatus
+      ? `Loop ${loopStatus.round}${loopStatus.lastAccuracyPct !== null ? ` · last time ${Math.round(loopStatus.lastAccuracyPct)}%${loopStatus.lastClean ? " ✓" : ""}` : ""}`
+      : null;
+  const bestEntries = PRACTICE_LEVELS.filter((lvl) => bestsByLevel[lvl]);
+
   const segmentClasses = (selected: boolean) =>
     `rounded-md px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
       selected
         ? "bg-felt-600 font-medium text-white"
         : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
     }`;
+  const smallButton =
+    "rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
+
+  const toggleLoop = () => {
+    setLoopOn((on) => !on);
+  };
 
   return (
     // The performance view: the app shell gives this page the full width and exactly the
@@ -379,12 +527,57 @@ export default function PlayAlongPage() {
         <div className="min-w-0 flex-1 basis-48">
           <h1 className="truncate font-display text-xl font-semibold">{song?.title ?? "Play along"}</h1>
           <p className="truncate text-xs text-slate-500">
-            {song?.artist} · {formatDuration(parsed.durationS)} · {parsed.notes.length} notes
+            {song?.artist} · {formatDuration(parsed.durationS)} · {run.notes.length} notes to play
+          </p>
+          <p className="truncate text-xs font-medium text-brass-700 dark:text-brass-300" aria-label="Practice mode">
+            {summary}
           </p>
         </div>
 
+        {/* The most-used practice controls, next to Start. */}
+        <div className="flex flex-wrap items-center gap-2" aria-label="Quick practice controls">
+          <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Hands">
+            {HANDS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={hands === option.value}
+                disabled={practiceLocked}
+                onClick={() => setHands(option.value)}
+                className={segmentClasses(hands === option.value)}
+              >
+                {option.short}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-0.5" aria-label="Make it easier">
+            <button type="button" className={smallButton} disabled={practiceLocked || level === "full"} onClick={() => setLevel((l) => stepLevel(l, -1))} aria-label="Harder">
+              −
+            </button>
+            <span className="min-w-[5.5rem] text-center text-xs font-medium" title={LEVEL_DESCRIPTIONS[level]}>
+              {LEVEL_LABELS[level]}
+            </span>
+            <button type="button" className={smallButton} disabled={practiceLocked || level === "melody"} onClick={() => setLevel((l) => stepLevel(l, 1))} aria-label="Make it easier">
+              +
+            </button>
+          </div>
+          <button type="button" className={segmentClasses(loopOn)} aria-pressed={loopOn} disabled={practiceLocked} onClick={toggleLoop}>
+            ⟲ Loop
+          </button>
+          <button
+            type="button"
+            className={segmentClasses(settings.waitMode)}
+            aria-pressed={settings.waitMode}
+            disabled={settingsLocked}
+            onClick={() => setSettings((s) => ({ ...s, waitMode: !s.waitMode }))}
+          >
+            Wait
+          </button>
+        </div>
+
         {(phase === "ready" || phase === "done") && (
-          <button className="primary-button px-5" onClick={start}>
+          <button className="primary-button px-5 disabled:opacity-50" onClick={start} disabled={nothingToPlay}>
             {phase === "done" ? "▶ Play again" : "▶ Start"}
           </button>
         )}
@@ -406,8 +599,24 @@ export default function PlayAlongPage() {
         <Link to="/play" className="secondary-button">← Library</Link>
       </div>
 
+      {nothingToPlay && (
+        <p className="text-xs text-rose-700 dark:text-rose-300" role="alert">
+          {level === "melody" && hands === "left"
+            ? "Melody only has no left-hand part: pick Right or Both, or a harder level."
+            : `There are no ${hands === "both" ? "" : `${hands}-hand `}notes to play here: pick other bars or hands.`}
+        </p>
+      )}
+
       {phase === "playing" && (
-        <PlayAlongHud waitMode={settings.waitMode} tempoPct={settings.tempoPct} lookaheadS={settings.lookaheadS} paused={paused} />
+        <PlayAlongHud
+          waitMode={settings.waitMode}
+          tempoPct={settings.tempoPct}
+          lookaheadS={settings.lookaheadS}
+          level={level}
+          hands={hands}
+          paused={paused}
+          loopLabel={loopLabel}
+        />
       )}
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-2">
@@ -422,7 +631,122 @@ export default function PlayAlongPage() {
         >
           <MidiStatusBar />
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {/* Practice: hands, level, loop. */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <fieldset className="space-y-1.5" disabled={practiceLocked}>
+              <legend className="text-xs font-semibold text-slate-700 dark:text-slate-200">Hands</legend>
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Hands to play">
+                {HANDS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={hands === option.value}
+                    onClick={() => setHands(option.value)}
+                    className={segmentClasses(hands === option.value)}
+                  >
+                    {HANDS_LABELS[option.value]}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={!settings.accompanimentMute.otherHand}
+                  disabled={hands === "both"}
+                  onChange={(e) => setSettings((s) => ({ ...s, accompanimentMute: { ...s.accompanimentMute, otherHand: !e.target.checked } }))}
+                />
+                Play the other hand for me
+              </label>
+            </fieldset>
+
+            <fieldset className="space-y-1.5" disabled={practiceLocked}>
+              <legend className="text-xs font-semibold text-slate-700 dark:text-slate-200">Make it easier</legend>
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Arrangement level">
+                {PRACTICE_LEVELS.map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    role="radio"
+                    aria-checked={level === lvl}
+                    onClick={() => setLevel(lvl)}
+                    className={segmentClasses(level === lvl)}
+                  >
+                    {LEVEL_LABELS[lvl]}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                {LEVEL_DESCRIPTIONS[level]}
+                {arrangement.source === "authored" && " This piece has a hand-checked version for this level."}
+              </p>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={!settings.accompanimentMute.removed}
+                  disabled={level === "full"}
+                  onChange={(e) => setSettings((s) => ({ ...s, accompanimentMute: { ...s.accompanimentMute, removed: !e.target.checked } }))}
+                />
+                Play the left-out notes quietly, so the song still sounds full
+              </label>
+            </fieldset>
+          </div>
+
+          <fieldset className="space-y-1.5" disabled={practiceLocked}>
+            <legend className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={loopOn} onChange={toggleLoop} />
+                Loop a section
+              </label>
+              <span className="font-normal text-slate-500">(counts you in each time round)</span>
+            </legend>
+            {loopOn && (
+              <>
+                <LoopBarStrip barCount={barCount} range={loopRange} onChange={setLoopRange} disabled={practiceLocked} />
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-700 dark:text-slate-200">
+                  <label className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={settings.untilClean} onChange={(e) => setSettings((s) => ({ ...s, untilClean: e.target.checked }))} />
+                    Loop until clean
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={settings.autoSpeedUp} onChange={(e) => setSettings((s) => ({ ...s, autoSpeedUp: e.target.checked }))} />
+                    Auto speed-up: start at
+                    <select
+                      value={settings.speedUpStartPct}
+                      disabled={!settings.autoSpeedUp}
+                      onChange={(e) => setSettings((s) => ({ ...s, speedUpStartPct: Number(e.target.value) }))}
+                      className="rounded-md border border-slate-300 bg-white px-1 py-0.5 tabular-nums disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
+                      aria-label="Auto speed-up starting speed, percent"
+                    >
+                      {SPEED_UP_START_OPTIONS.map((pct) => (
+                        <option key={pct} value={pct}>{pct}</option>
+                      ))}
+                    </select>
+                    %, +5% after each clean time round, up to 100%
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    Clean means at least
+                    <select
+                      value={settings.cleanAccuracyPct}
+                      onChange={(e) => setSettings((s) => ({ ...s, cleanAccuracyPct: Number(e.target.value) }))}
+                      className="rounded-md border border-slate-300 bg-white px-1 py-0.5 tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                      aria-label="Accuracy that counts as clean, percent"
+                    >
+                      {CLEAN_ACCURACY_OPTIONS.map((pct) => (
+                        <option key={pct} value={pct}>{pct}</option>
+                      ))}
+                    </select>
+                    % accuracy
+                  </label>
+                </div>
+                {settings.waitMode && (settings.untilClean || settings.autoSpeedUp) && (
+                  <p className="text-xs text-slate-500">Wait mode has no accuracy, so a loop just repeats: turn it off for clean runs and speed-ups.</p>
+                )}
+              </>
+            )}
+          </fieldset>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
             {/* Speed is a PERCENTAGE here, not BPM: Song has no bpm column, and BPM is
                 derived from the MIDI's first tempo event — a fiction for the rubato
                 performance recordings in the library. Show a real BPM only when the
@@ -527,7 +851,7 @@ export default function PlayAlongPage() {
                 disabled={settingsLocked}
                 onChange={(e) => setSettings((s) => ({ ...s, guideAudio: e.target.checked }))}
               />
-              Play the song along with me
+              Play my part along with me
             </label>
 
             {/* Metronome. The click follows the song's own beat grid (from its tempo
@@ -582,10 +906,20 @@ export default function PlayAlongPage() {
             )}
           </div>
 
-          <p className="text-xs text-slate-600 dark:text-slate-300">
-            Score bonus with these settings: <strong className="tabular-nums">×{scoreBonus.toFixed(2)}</strong>
-            <span className="text-slate-500"> — a faster speed and a shorter look-ahead earn more.</span>
-          </p>
+          <div className="space-y-0.5 text-xs text-slate-600 dark:text-slate-300" aria-label="Score bonus">
+            <p>
+              Score bonus with these settings: <strong className="tabular-nums">×{scoreBonus.toFixed(2)}</strong>
+              {settings.waitMode && <span className="text-slate-500"> (wait mode isn't scored)</span>}
+            </p>
+            <p className="tabular-nums text-slate-500">
+              speed ×{tempoMultiplier(rate).toFixed(2)} · look-ahead ×{lookaheadMultiplier(settings.lookaheadS).toFixed(2)} · {LEVEL_LABELS[level]} ×
+              {difficultyMultiplier(level).toFixed(1)} · {hands === "both" ? "both hands" : "one hand"} ×{handsMultiplier(hands).toFixed(1)}
+              {uncappedBonus > MAX_SCORE_MULTIPLIER && ` (capped at ×${MAX_SCORE_MULTIPLIER})`}
+            </p>
+            <p className="text-slate-500">
+              Faster and a shorter look-ahead earn more; easier settings (a simpler level, one hand) earn a smaller bonus. Looped sections are saved as practice, not as your best for the song.
+            </p>
+          </div>
 
           <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
             <KeyboardSizingControls sizing={sizing} />
@@ -593,24 +927,28 @@ export default function PlayAlongPage() {
         </section>
 
         {/* End screen */}
-        {phase === "done" && result && (
+        {phase === "done" && result && resultContext && (
           <section aria-label="Result" className="card shrink-0 p-4">
             <div className="flex flex-wrap items-center gap-4">
-              <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">
-                {gradeFor(finalScore(result, settings.tempoPct / 100, settings.lookaheadS))}
-              </span>
+              <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">{gradeFor(resultScore)}</span>
               <div>
-                <p className="text-2xl font-semibold tabular-nums">{finalScore(result, settings.tempoPct / 100, settings.lookaheadS)}</p>
+                <p className="text-2xl font-semibold tabular-nums">{resultScore}</p>
                 <p className="text-xs text-slate-500">
-                  {result.baseScore} × speed bonus {tempoMultiplier(settings.tempoPct / 100).toFixed(2)} × look-ahead bonus {lookaheadMultiplier(settings.lookaheadS).toFixed(2)}
+                  {result.baseScore} × bonus {practiceMultiplier({ rate: resultContext.tempoPct / 100, ...resultContext }).toFixed(2)} ({LEVEL_LABELS[resultContext.level]},{" "}
+                  {HANDS_LABELS[resultContext.hands].toLowerCase()}, {resultContext.tempoPct}%)
                 </p>
+                {loopStatus?.lastClean && (
+                  <p className="text-xs text-brass-700 dark:text-brass-300">
+                    Clean after {loopStatus.round} {loopStatus.round === 1 ? "go" : "goes"} ✓
+                  </p>
+                )}
               </div>
               <div className="ml-auto text-right text-xs text-slate-500">
                 <p>Accuracy {result.accuracyPct}%</p>
                 <p>Best combo {result.maxCombo}</p>
                 <p>{result.wrongPressCount} stray notes</p>
                 <p>
-                  {submitState === "saved" && "Saved to history ✓"}
+                  {submitState === "saved" && (loopStatus ? "Saved as practice ✓" : "Saved to history ✓")}
                   {submitState === "saving" && "Saving…"}
                   {submitState === "failed" && "Could not save attempt"}
                 </p>
@@ -619,19 +957,31 @@ export default function PlayAlongPage() {
           </section>
         )}
 
+        {bestEntries.length > 0 && phase !== "playing" && (
+          <p className="shrink-0 text-xs text-slate-500" aria-label="Your bests per level">
+            Your bests:{" "}
+            {bestEntries.map((lvl, i) => (
+              <span key={lvl} className={lvl === level ? "font-semibold text-slate-700 dark:text-slate-200" : undefined}>
+                {i > 0 && " · "}
+                {LEVEL_LABELS[lvl]} {Math.round(bestsByLevel[lvl]!.score)}
+              </span>
+            ))}
+          </p>
+        )}
+
         {settings.viewMode !== "falling" && (
           <div className="shrink-0">
-            {notationBytes ? (
+            {notationBytes && level === "full" ? (
               // Archive-imported songs ship real MusicXML — render that rather than a
-              // reconstruction from the MIDI. Capped so it can't squeeze the stage away.
+              // reconstruction from the MIDI, as long as the full piece is being played.
               <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`} className="max-h-[35vh] overflow-y-auto">
                 <LiveOsmdNotation notationBytes={notationBytes} />
               </div>
             ) : (
-              <div role="img" aria-label={`Scrolling sheet music: ${song?.title ?? "this song"}`}>
+              <div role="img" aria-label={`Scrolling sheet music: ${song?.title ?? "this song"} (${LEVEL_LABELS[level]})`}>
                 <ScrollingScore
                   ref={scrollingScoreRef}
-                  notes={parsed.notes}
+                  notes={arrangement.notes}
                   grid={parsed.grid}
                   timeSignatureSegments={parsed.timeSignatureSegments}
                   keys={parsed.keys}

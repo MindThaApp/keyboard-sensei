@@ -36,22 +36,31 @@ export interface ClickSettings {
  */
 export class PlayAlongMetronome {
   private readonly cursor: BeatCursor;
+  private readonly countInCursor: BeatCursor;
 
-  constructor(beats: readonly BeatGridEntry[]) {
+  /**
+   * `countIn` are beats before the song (negative song times) that click on every
+   * main beat whether or not the metronome is switched on: a looped section
+   * counts you in each time round.
+   */
+  constructor(beats: readonly BeatGridEntry[], countIn: readonly BeatGridEntry[] = []) {
     this.cursor = new BeatCursor(beats);
+    this.countInCursor = new BeatCursor(countIn);
   }
 
   /** Start following `clock`. `settings` is re-read every tick. Returns the stop function. */
   follow(clock: SongClock, settings: () => ClickSettings): () => void {
     this.cursor.reset();
+    this.countInCursor.reset();
     return addScheduleSource((nowMs, horizonMs) => {
       if (clock.isFinished || clock.isPaused || clock.isWaiting) return;
       const live = settings();
       const fromS = clock.songTime(nowMs);
       const toS = clock.songTime(nowMs + horizonMs);
+      const countIn = this.countInCursor.take(fromS, toS, "beat");
       const due = this.cursor.take(fromS, toS, live.level);
-      if (!live.enabled) return;
-      for (const beat of due) {
+      const clicks = live.enabled ? [...countIn, ...due] : countIn;
+      for (const beat of clicks) {
         const atMs = clock.clockTimeAt(beat.timeS);
         const when = contextTimeAt(atMs);
         traceScheduled("click", atMs, when);

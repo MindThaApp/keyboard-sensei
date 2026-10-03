@@ -50,6 +50,25 @@ export interface ParsedPlayAlongSong {
   grid: SongBeatGrid;
   /** The key(s) to notate the piece in, in time order; always at least one entry (see resolveSongKeys). */
   keys: SongKeyChange[];
+  /**
+   * Each note's position in QUARTER-NOTE beats from the start of the file
+   * (ticks / ppq), parallel to `notes`. This is the unit simplifyArrangement
+   * works in; convert its output back with `secondsAtBeat`.
+   */
+  noteBeats: NoteBeats[];
+  /**
+   * Seconds at a quarter-note beat, through the file's own tempo map: the same
+   * ticksToSeconds that placed every note, so anything converted with it lands
+   * in the notes' coordinate system by construction.
+   */
+  secondsAtBeat: (beat: number) => number;
+}
+
+export interface NoteBeats {
+  startBeat: number;
+  durationBeats: number;
+  /** MIDI velocity, 0-1. */
+  velocity: number;
 }
 
 export interface SongKeyChange {
@@ -299,20 +318,23 @@ export function parsePlayAlongSong(bytes: ArrayBuffer): ParsedPlayAlongSong {
     });
   }
 
-  const notes: PlayAlongNote[] = noteTracks
+  const ppq = midi.header.ppq;
+  const placed = noteTracks
     .flatMap((track, index) =>
       track.notes
         .filter((note) => note.midi >= PIANO_MIN && note.midi <= PIANO_MAX)
-        .map((note) => ({
-          midi: note.midi,
-          startS: note.time,
-          durationS: note.duration,
-          hand: (noteTracks.length >= 2 ? (index === leftTrackIndex ? "left" : "right") : note.midi < 60 ? "left" : "right") as
-            | "left"
-            | "right",
-        })),
+        .map((note) => {
+          const hand: PlayAlongNote["hand"] =
+            noteTracks.length >= 2 ? (index === leftTrackIndex ? "left" : "right") : note.midi < 60 ? "left" : "right";
+          return {
+            note: { midi: note.midi, startS: note.time, durationS: note.duration, hand },
+            beats: { startBeat: note.ticks / ppq, durationBeats: note.durationTicks / ppq, velocity: note.velocity },
+          };
+        }),
     )
-    .sort((a, b) => a.startS - b.startS || a.midi - b.midi);
+    .sort((a, b) => a.note.startS - b.note.startS || a.note.midi - b.note.midi);
+  const notes: PlayAlongNote[] = placed.map((item) => item.note);
+  const noteBeats: NoteBeats[] = placed.map((item) => item.beats);
 
   if (notes.length === 0) throw new Error("No playable piano notes in this MIDI file");
 
@@ -330,5 +352,7 @@ export function parsePlayAlongSong(bytes: ArrayBuffer): ParsedPlayAlongSong {
 
   const keys = resolveSongKeys(midi);
 
-  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments, grid, keys };
+  const secondsAtBeat = (beat: number): number => midi.header.ticksToSeconds(beat * ppq);
+
+  return { notes, durationS: midi.duration, pitchMin, pitchMax, bpm, beatsPerBar, timeSignatureSegments, grid, keys, noteBeats, secondsAtBeat };
 }
