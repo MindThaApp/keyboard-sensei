@@ -221,8 +221,10 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
     const userId = uid(req);
     const songId = z.string().parse(req.params.id);
     const input = attemptSchema.parse(req.body);
-    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true } });
-    if (!song) {
+    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true, uploader_id: true } });
+    // Same visibility rule as GET /songs/:id/file: another user's private upload is
+    // indistinguishable from a missing song, so its id can't be probed or polluted.
+    if (!song || (song.uploader_id && song.uploader_id !== userId && !(await isAdminUser(userId)))) {
       res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
       return;
     }
