@@ -196,7 +196,11 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
   const [bestsByLevel, setBestsByLevel] = useState<Partial<Record<PracticeLevel, PlayAlongBest>>>({});
 
   const [hands, setHands] = useState<PracticeHands>(preset.hands ?? "both");
-  const [level, setLevel] = useState<PracticeLevel>(preset.level ?? sources.openedLevel);
+  const [level, setLevel] = useState<PracticeLevel>(() => {
+    const opened = preset.level ?? sources.openedLevel;
+    // Melody only has no left hand: a left-hand preset (from the Gym) gets the easiest level that has one.
+    return opened === "melody" && preset.hands === "left" ? "easy" : opened;
+  });
   const [loopOn, setLoopOn] = useState(preset.loop !== undefined);
   const [loopRange, setLoopRange] = useState<LoopRange>(() => {
     const start = Math.min(preset.loop?.startBar ?? 0, barCount - 1);
