@@ -1,4 +1,4 @@
-import type { ExpectedNoteEvent, MidiExercise, PerformedNote, ScoringMistake, ScoringResult } from "@keyboard-sensei/shared-types";
+import type { DynamicsResult, ExerciseDynamics, ExpectedNoteEvent, MidiExercise, PerformedNote, ScoringMistake, ScoringResult } from "@keyboard-sensei/shared-types";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { resolveScoreWeights } from "./config.js";
 
@@ -23,6 +23,9 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
   const feedback = new Set<string>();
   const used = new Set<number>();
   let pitchHits = 0, timingHits = 0, durationKnown = 0, durationHits = 0;
+  // Velocities of correctly played notes, for opt-in dynamics scoring.
+  const matchedVelocities: number[] = [];
+  const chordVelocities: number[][] = [];
 
   const groups = new Map<string, ExpectedNoteEvent[]>();
   const singles: ExpectedNoteEvent[] = [];
@@ -51,7 +54,7 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
     if (index < 0 && !untimed) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= timingTolerance);
     if (index < 0) { add(exp, null, "missed"); feedback.add(`You missed ${midiNoteToName(exp.note)}.`); continue }
     used.add(index); const got = performed[index]!;
-    if (got.note === exp.note) pitchHits++; else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
+    if (got.note === exp.note) { pitchHits++; matchedVelocities.push(got.velocity) } else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
     if (!untimed) { scoreTiming(exp, got); scoreDuration(exp, got) }
   }
 
@@ -64,6 +67,8 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
       if (match) { selected.push(match); used.add(match.index); pitchHits++; if (!untimed) scoreDuration(exp, match.note) }
       else { add(exp, null, "missing-chord-tone", groupId); feedback.add(`The chord was missing ${midiNoteToName(exp.note)}.`) }
     }
+    chordVelocities.push(selected.map(({ note }) => note.velocity));
+    matchedVelocities.push(...selected.map(({ note }) => note.velocity));
     const extras = untimed ? [] : candidates.filter(({ index }) => !selected.some((item) => item.index === index));
     for (const extra of extras) { used.add(extra.index); add(null, extra.note, "extra-chord-tone", groupId); feedback.add(`The chord contained extra ${midiNoteToName(extra.note.note)}.`) }
     const attacks = selected.map(({ note }) => note.startTimestampMs);
@@ -88,6 +93,46 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
   const score = untimed
     ? round(noteAccuracy * (hasChordGroups ? 0.7 : 1) + chordAccuracy * (hasChordGroups ? 0.3 : 0))
     : round(noteAccuracy * weights.noteAccuracy + timingAccuracy * weights.timingAccuracy + rhythmAccuracy * weights.rhythmAccuracy + chordAccuracy * weights.chordAccuracy);
+  const dynamics = exercise.dynamics ? scoreDynamics(exercise.dynamics, matchedVelocities, chordVelocities) : null;
+  if (dynamics?.evenness != null && dynamics.evenness < 70) {
+    feedback.add(`Your volume varied (velocities spread ±${Math.round(dynamics.velocitySpread)}): aim for the same weight on every key.`);
+  }
+  if (dynamics?.chordBalance != null && dynamics.chordBalance < 70) {
+    feedback.add("Some chord tones were louder than others: balance them at one volume.");
+  }
+  const finalScore = dynamics ? round(score * (1 - DYNAMICS_WEIGHT) + dynamics.score * DYNAMICS_WEIGHT) : score;
   if (!feedback.size && expected.length) feedback.add(untimed ? "Every note found — well done." : "Excellent accuracy and timing.");
-  return { score, noteAccuracy, timingAccuracy, rhythmAccuracy, chordAccuracy, feedback: [...feedback], mistakes };
+  return { score: finalScore, noteAccuracy, timingAccuracy, rhythmAccuracy, chordAccuracy, feedback: [...feedback], mistakes, ...(dynamics ? { dynamics } : {}) };
+}
+
+/** Share of an opted-in exercise's score that comes from dynamics. */
+export const DYNAMICS_WEIGHT = 0.15;
+/** Velocity standard deviation at or below which playing counts as perfectly even, and at or above which it scores 0. */
+export const EVEN_SPREAD = { full: 4, zero: 20 } as const;
+/** Loudest-minus-softest velocity within a chord, the same way. */
+export const CHORD_RANGE = { full: 6, zero: 30 } as const;
+
+const linearScore = (value: number, full: number, zero: number): number => round(100 * (1 - (value - full) / (zero - full)));
+
+/**
+ * Evenness of the correctly played notes' velocities, and the balance of each
+ * chord's tones. Wrong and missed notes are already scored elsewhere and don't
+ * count here. A virtual keyboard sends one fixed velocity, which is perfectly even.
+ */
+export function scoreDynamics(options: ExerciseDynamics, velocities: readonly number[], chords: readonly (readonly number[])[]): DynamicsResult {
+  const mean = velocities.length ? velocities.reduce((sum, v) => sum + v, 0) / velocities.length : 0;
+  const spread = velocities.length ? Math.sqrt(velocities.reduce((sum, v) => sum + (v - mean) ** 2, 0) / velocities.length) : 0;
+  const evenness = options.evenVolume && velocities.length >= 2 ? linearScore(spread, EVEN_SPREAD.full, EVEN_SPREAD.zero) : null;
+  const ranges = chords.filter((tones) => tones.length >= 2).map((tones) => Math.max(...tones) - Math.min(...tones));
+  const chordRange = ranges.length ? ranges.reduce((sum, r) => sum + r, 0) / ranges.length : null;
+  const chordBalance = options.balancedChords && chordRange !== null ? linearScore(chordRange, CHORD_RANGE.full, CHORD_RANGE.zero) : null;
+  const parts = [evenness, chordBalance].filter((part): part is number => part !== null);
+  return {
+    velocitySpread: Math.round(spread * 10) / 10,
+    meanVelocity: Math.round(mean),
+    evenness,
+    chordVelocityRange: chordRange === null ? null : Math.round(chordRange * 10) / 10,
+    chordBalance,
+    score: parts.length ? round(parts.reduce((sum, part) => sum + part, 0) / parts.length) : 100,
+  };
 }
