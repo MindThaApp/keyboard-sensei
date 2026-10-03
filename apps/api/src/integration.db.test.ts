@@ -608,33 +608,6 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
   });
 
   describe("progression", () => {
-    // The Song Practice screen adds these columns to PlayAlongAttempt in its own
-    // migration. Create whichever are missing for this suite, and drop only those.
-    const EXTRA_COLUMNS: [string, string][] = [
-      ["arrangement_level", "TEXT"],
-      ["hands", "TEXT"],
-      ["loop_start_bar", "INTEGER"],
-      ["loop_end_bar", "INTEGER"],
-      ["is_loop", "BOOLEAN"],
-      ["multiplier", "DOUBLE PRECISION"],
-    ];
-    const added: string[] = [];
-
-    beforeAll(async () => {
-      const existing = await m.prisma.$queryRaw<{ column_name: string }[]>`
-        SELECT column_name FROM information_schema.columns WHERE table_name = 'PlayAlongAttempt'`;
-      const have = new Set(existing.map((row) => row.column_name));
-      for (const [name, type] of EXTRA_COLUMNS) {
-        if (have.has(name)) continue;
-        await m.prisma.$executeRawUnsafe(`ALTER TABLE "PlayAlongAttempt" ADD COLUMN "${name}" ${type}`);
-        added.push(name);
-      }
-    });
-
-    afterAll(async () => {
-      for (const name of added) await m.prisma.$executeRawUnsafe(`ALTER TABLE "PlayAlongAttempt" DROP COLUMN "${name}"`);
-    });
-
     const ledgerTotal = async (userId: string) =>
       (await m.prisma.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }))._sum.amount ?? 0;
 
@@ -658,22 +631,22 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     /** A play-along attempt with the practice-screen fields set, rewarded the way the route does it. */
     async function playWith(userId: string, songId: string, accuracy: number, extras: Record<string, unknown>) {
-      const id = `pa-${Math.random().toString(36).slice(2)}`;
-      await m.prisma.$executeRawUnsafe(
-        `INSERT INTO "PlayAlongAttempt" (id, user_id, song_id, score, accuracy, tempo_pct, lookahead_s, wait_mode, arrangement_level, hands, loop_start_bar, loop_end_bar, is_loop, multiplier)
-         VALUES ($1, $2, $3, $4, $5, 100, 3, false, $6, $7, $8, $9, $10, $11)`,
-        id,
-        userId,
-        songId,
-        accuracy,
-        accuracy,
-        extras.arrangement_level ?? null,
-        extras.hands ?? null,
-        extras.loop_start_bar ?? null,
-        extras.loop_end_bar ?? null,
-        extras.is_loop ?? null,
-        extras.multiplier ?? null,
-      );
+      const { id } = await m.prisma.playAlongAttempt.create({
+        data: {
+          user_id: userId,
+          song_id: songId,
+          score: accuracy,
+          accuracy,
+          tempo_pct: 100,
+          lookahead_s: 3,
+          wait_mode: false,
+          arrangement_level: (extras.arrangement_level as string | undefined) ?? null,
+          hands: (extras.hands as string | undefined) ?? null,
+          loop_start_bar: (extras.loop_start_bar as number | undefined) ?? null,
+          loop_end_bar: (extras.loop_end_bar as number | undefined) ?? null,
+          is_loop: (extras.is_loop as boolean | undefined) ?? false,
+        },
+      });
       const { rewardPlayAlongAttempt } = await import("./progression/rewards.js");
       return rewardPlayAlongAttempt(m.prisma, { userId, attemptId: id });
     }
@@ -852,4 +825,49 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(today.body.readyForYou.map((song: { songId: string }) => song.songId)).toEqual(["essentials-ode-to-joy-beginner"]);
       expect(today.body.song).toMatchObject({ songId: "essentials-ode-to-joy-beginner", hands: "right", level: "full" });
     });
-  });});
+  });
+
+  describe("song practice attempts", () => {
+    it("stores the practice fields, keeps loop runs out of bests, and tracks bests per level", async () => {
+      const user = await createUser();
+      await m.prisma.song.create({
+        data: { id: "practice-song", title: "Practice", artist: "x", genre: "classical", difficulty: 2, duration_sec: 60, note_count: 100, content_rights: "public-domain", file_path: "/lib/practice.mid" },
+      });
+      const base = { accuracy: 90, tempo_pct: 70, lookahead_s: 4, wait_mode: false };
+      const post = (body: Record<string, unknown>) => api("POST", "/songs/practice-song/attempts", { token: user.token, body: { ...base, ...body } });
+
+      // An old client: no practice fields at all.
+      expect((await post({ score: 50 })).status).toBe(201);
+      const easy = await post({ score: 30, arrangement_level: "easy", hands: "right", multiplier: 0.3, is_loop: false });
+      expect(easy.status).toBe(201);
+      const loop = await post({ score: 99, arrangement_level: "easy", hands: "right", loop_start_bar: 5, loop_end_bar: 8, multiplier: 0.3, is_loop: true });
+      expect(loop.status).toBe(201);
+
+      const stored = await m.prisma.playAlongAttempt.findUniqueOrThrow({ where: { id: loop.body.id } });
+      expect(stored).toMatchObject({ arrangement_level: "easy", hands: "right", loop_start_bar: 5, loop_end_bar: 8, multiplier: 0.3, is_loop: true });
+
+      // Validation.
+      expect((await post({ score: 10, arrangement_level: "impossible" })).status).toBe(400);
+      expect((await post({ score: 10, loop_start_bar: 8, loop_end_bar: 5 })).status).toBe(400);
+      expect((await post({ score: 10, loop_start_bar: 5 })).status).toBe(400);
+      expect((await post({ score: 10, is_loop: true })).status).toBe(400);
+      expect((await post({ score: 10, multiplier: 2 })).status).toBe(400);
+
+      const history = await api("GET", "/songs/attempts/me", { token: user.token });
+      expect(history.status).toBe(200);
+      // The loop's 99 is practice: the best stays 50.
+      expect(history.body.bests["practice-song"].score).toBe(50);
+      expect(history.body.bests_by_level["practice-song"]).toEqual({
+        full: { score: 50, accuracy: 90 },
+        easy: { score: 30, accuracy: 90 },
+      });
+      const recentLoop = history.body.recent.find((row: { id: string }) => row.id === loop.body.id);
+      expect(recentLoop).toMatchObject({ arrangement_level: "easy", hands: "right", loop_start_bar: 5, loop_end_bar: 8, is_loop: true });
+      const recentOld = history.body.recent.find((row: { score: number }) => row.score === 50);
+      expect(recentOld).toMatchObject({ arrangement_level: "full", hands: "both", is_loop: false, multiplier: null });
+
+      await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.song.delete({ where: { id: "practice-song" } });
+    });
+  });
+});

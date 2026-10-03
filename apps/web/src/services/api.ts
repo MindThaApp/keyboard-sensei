@@ -1,3 +1,4 @@
+import type { PracticeHands, PracticeLevel } from "@keyboard-sensei/midi-engine";
 import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
 import { publishRewards } from "../state/rewards";
@@ -163,6 +164,10 @@ export interface Song {
   mine: boolean;
   /** Curated collection for the /play shelves; null for everything else. */
   collection: "beginner" | "essentials" | null;
+  /** Versions of one piece at different difficulty levels share a group (the Essentials pack). */
+  arrangement_group?: string | null;
+  /** "beginner" | "intermediate" | "full" for an Essentials version; null otherwise. */
+  arrangement_level?: string | null;
 }
 export interface ArchiveEntryResult {
   id: string;
@@ -183,7 +188,32 @@ export interface PlayAlongAttemptSummary {
   tempo_bpm: number | null;
   lookahead_s: number;
   wait_mode: boolean;
+  arrangement_level: PracticeLevel;
+  hands: PracticeHands;
+  loop_start_bar: number | null;
+  loop_end_bar: number | null;
+  multiplier: number | null;
+  is_loop: boolean;
   created_at: string;
+}
+export interface PlayAlongBest {
+  score: number;
+  accuracy: number;
+}
+/** What a play-along run reports. Bars are 1-based and inclusive. */
+export interface PlayAlongAttemptPayload {
+  score: number;
+  accuracy: number;
+  tempo_pct: number;
+  tempo_bpm?: number | null;
+  lookahead_s: number;
+  wait_mode: boolean;
+  arrangement_level: PracticeLevel;
+  hands: PracticeHands;
+  loop_start_bar: number | null;
+  loop_end_bar: number | null;
+  multiplier: number;
+  is_loop: boolean;
 }
 export const getSongs = () => request<{ songs: Song[] }>("/songs");
 export const searchArchive = (q: string, offset = 0, limit = 30) =>
@@ -198,16 +228,21 @@ export const adminUpdateSong = (id: string, fields: Partial<{ title: string; art
   request<Song>(`/admin/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
 export const adminDeleteSong = (id: string) => request<{ ok: true }>(`/admin/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getMyPlayAlongAttempts = () =>
-  request<{ bests: Record<string, { score: number; accuracy: number }>; recent: PlayAlongAttemptSummary[] }>("/songs/attempts/me");
-export const submitPlayAlongAttempt = async (songId: string, payload: { score: number; accuracy: number; tempo_pct: number; tempo_bpm?: number | null; lookahead_s: number; wait_mode: boolean }) => {
+  request<{
+    /** Best scored whole-song run per song, any level. Loop runs never count. */
+    bests: Record<string, PlayAlongBest>;
+    bests_by_level: Record<string, Partial<Record<PracticeLevel, PlayAlongBest>>>;
+    recent: PlayAlongAttemptSummary[];
+  }>("/songs/attempts/me");
+export const submitPlayAlongAttempt = async (songId: string, payload: PlayAlongAttemptPayload) => {
   const result = await request<{ id: string; score: number; accuracy: number; rewards?: Rewards | null }>(`/songs/${encodeURIComponent(songId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
   publishRewards(result.rewards);
   return result;
 };
 
 // --- Progression: XP, stars, daily goal, achievements, Today ---
-export type PracticeLevel = "full" | "simplified" | "easy" | "melody";
-export type Hands = "both" | "right" | "left";
+export type { PracticeLevel };
+export type Hands = PracticeHands;
 export interface LevelInfo {
   totalXp: number;
   level: number;

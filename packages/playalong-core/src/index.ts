@@ -7,5 +7,6 @@ export * from "./engine";
 export * from "./keyboardRange";
 export * from "./keySignature";
 export * from "./midiRecorder";
+export * from "./practice";
 export * from "./song";
 export * from "./songExcerpt";
