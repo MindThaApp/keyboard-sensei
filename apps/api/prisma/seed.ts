@@ -12,6 +12,7 @@ import { DUPLICATE_OF, prepareLibraryManifest } from "../src/library-titles.js";
 import { extractSongMetadata, type SongMetadata } from "../src/midi-metadata.js";
 import { readEssentialsIndex, supersededLibraryIds } from "../src/essentials/replacements.js";
 import { seedEssentials } from "../src/essentials/seed.js";
+import { backfillAll } from "../src/progression/backfill.js";
 const prisma=new PrismaClient();
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 
@@ -157,6 +158,10 @@ async function main(){
   for(const label of essentials.replacements.restored)console.log(`Essentials: restored ${label} (its replacement is missing)`);
   await remeasurePublicSongs();
   await seedInstruments();
+  // XP, practice days and achievements for history saved before progression existed.
+  // Re-running adds only what is missing (see src/progression/backfill.ts).
+  const progression=await backfillAll(prisma);
+  console.log(`Progression backfill: ${progression.xpAwarded} XP and ${progression.achievements} achievements across ${progression.users} users`);
   console.log(`Seeded ${lessons.length} lessons, ${exercises.length} exercises, demo user ${demo.email}, and admin ${admin.email}`);
 }
 main().finally(()=>prisma.$disconnect());

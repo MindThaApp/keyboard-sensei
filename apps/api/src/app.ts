@@ -30,7 +30,10 @@ import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
 import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
-import { dashboardRouter } from "./dashboard.js";
+import { progressionRouter } from "./progression/router.js";
+import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
+import { exerciseSeconds } from "./progression/practice-time.js";
+import { dayKey, isValidTimeZone } from "./progression/days.js";
 import { exerciseBestsFor, recordLessonOutcome, scoreFromResult, unlockLesson } from "./progress.js";
 import { narrationVoiceIdSchema } from "./narration-voices.js";
 import { instrumentUploadRateLimit, loginRateLimit, registerRateLimit, songUploadRateLimit } from "./rate-limits.js";
@@ -48,11 +51,34 @@ const updateProfileSchema = z
   .object({
     display_name: z.string().trim().min(1).max(80).optional(),
     narration_voice_id: narrationVoiceIdSchema.nullable().optional(),
+    daily_goal_minutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
+    timezone: z.string().max(64).refine(isValidTimeZone, "Unknown timezone").optional(),
   })
-  .refine(
-    (value) => value.display_name !== undefined || value.narration_voice_id !== undefined,
-    "Supply at least one profile field",
-  );
+  .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
+
+const PROFILE_SELECT = {
+  id: true,
+  email: true,
+  display_name: true,
+  narration_voice_id: true,
+  role: true,
+  daily_goal_minutes: true,
+  timezone: true,
+} as const;
+
+/**
+ * Progress rewards for an attempt that is already saved. A failure here is logged and
+ * reported as `rewards: null` rather than failing the request: the attempt itself is
+ * safe, and the backfill (scripts/backfill-progression.ts) can award it later.
+ */
+async function rewardsOrNull(work: () => Promise<Rewards>): Promise<Rewards | null> {
+  try {
+    return await work();
+  } catch (error) {
+    console.error("Awarding progress failed", error);
+    return null;
+  }
+}
 
 const narrationSchema = z.object({
   voiceId: narrationVoiceIdSchema,
@@ -235,14 +261,11 @@ app.use(adminUsersRouter);
 app.use(songsRouter);
 app.use(instrumentsRouter);
 app.use(archiveRouter);
-app.use(dashboardRouter);
+app.use(progressionRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId(req) },
-      select: { id: true, email: true, display_name: true, narration_voice_id: true, role: true },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId(req) }, select: PROFILE_SELECT });
     if (!user) {
       res.status(404).json({ error: { code: "not_found", message: "User not found" } });
       return;
@@ -256,11 +279,15 @@ app.get("/users/me", async (req, res, next) => {
 app.patch("/users/me", async (req, res, next) => {
   try {
     const input = updateProfileSchema.parse(req.body);
-    const user = await prisma.user.update({
-      where: { id: userId(req) },
-      data: input,
-      select: { id: true, email: true, display_name: true, narration_voice_id: true, role: true },
-    });
+    const uid = userId(req);
+    const user = await prisma.user.update({ where: { id: uid }, data: input, select: PROFILE_SELECT });
+    if (input.daily_goal_minutes !== undefined) {
+      // A goal changed mid-day applies to today too, unless today's goal is already met.
+      await prisma.practiceDay.updateMany({
+        where: { user_id: uid, day: dayKey(new Date(), user.timezone), goal_met_at: null },
+        data: { goal_minutes: input.daily_goal_minutes },
+      });
+    }
     res.json(user);
   } catch (e) {
     next(e);
@@ -441,8 +468,8 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       section.type === "midi-exercise" ? [section.exerciseId] : [],
     );
 
-    await prisma.$transaction(async (tx) => {
-      await tx.exerciseAttempt.create({
+    const attempt = await prisma.$transaction(async (tx) => {
+      const created = await tx.exerciseAttempt.create({
         data: {
           user_id: uid,
           exercise_id: row.id,
@@ -454,9 +481,19 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
       const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
       await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
+      return created;
     });
 
-    res.status(201).json(result);
+    const rewards = await rewardsOrNull(() =>
+      rewardExerciseAttempt(prisma, {
+        userId: uid,
+        attemptId: attempt.id,
+        exerciseId: row.id,
+        lessonId: row.lesson_id,
+        practiceSeconds: exerciseSeconds(performedNotes),
+      }),
+    );
+    res.status(201).json({ ...result, rewards });
   } catch (e) {
     next(e);
   }
@@ -539,11 +576,12 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
       }
     }
 
+    const rewards = await rewardsOrNull(() => rewardQuizAnswer(prisma, { userId: uid, lessonId: found!.lesson.id }));
     if (!correct) {
-      res.json({ correct: false });
+      res.json({ correct: false, rewards });
       return;
     }
-    res.json({ correct: true, explanation: found.question.explanation, correctIndex });
+    res.json({ correct: true, explanation: found.question.explanation, correctIndex, rewards });
   } catch (e) {
     next(e);
   }
