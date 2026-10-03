@@ -18,10 +18,104 @@ export interface SongMetadata {
   difficulty: number;
 }
 
+/** The measurable things that make a piece hard to play, from the notes alone. */
+export interface DifficultyFeatures {
+  durationSec: number;
+  /** Average notes per second over the whole piece. */
+  notesPerSec: number;
+  /**
+   * Notes per second in the busiest passages (90th percentile of 4s windows).
+   * This is the "tempo" term: the library's performance MIDIs carry no
+   * trustworthy BPM (see CLAUDE.md), so speed is measured from the notes.
+   */
+  peakNotesPerSec: number;
+  /** Average notes struck together (onsets within 30ms count as one chord). */
+  chordSize: number;
+  /** Pitch span in semitones, ignoring the outermost 2% of notes either side. */
+  rangeSemitones: number;
+}
+
+const CHORD_WINDOW_S = 0.03;
+const DENSITY_WINDOW_S = 4;
+const DENSITY_STEP_S = 2;
+
+/** Score boundaries between difficulty levels 1|2|3|4|5. */
+const LEVEL_THRESHOLDS = [1.5, 2.75, 4.25, 6.25];
+
+const percentile = (sorted: number[], p: number): number =>
+  sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]!;
+
+export function measureDifficultyFeatures(
+  notes: { midi: number; time: number }[],
+  durationSec: number,
+): DifficultyFeatures {
+  const byTime = [...notes].sort((a, b) => a.time - b.time);
+
+  let onsets = 0;
+  let lastOnset = Number.NEGATIVE_INFINITY;
+  for (const note of byTime) {
+    if (note.time - lastOnset > CHORD_WINDOW_S) {
+      onsets += 1;
+      lastOnset = note.time;
+    }
+  }
+
+  // Sliding windows over the sorted note times (two pointers, linear time).
+  const windowCounts: number[] = [];
+  let lo = 0;
+  let hi = 0;
+  for (let start = 0; start < Math.max(durationSec, DENSITY_STEP_S); start += DENSITY_STEP_S) {
+    while (lo < byTime.length && byTime[lo]!.time < start) lo += 1;
+    if (hi < lo) hi = lo;
+    while (hi < byTime.length && byTime[hi]!.time < start + DENSITY_WINDOW_S) hi += 1;
+    windowCounts.push(hi - lo);
+  }
+  windowCounts.sort((a, b) => a - b);
+
+  const pitches = byTime.map((note) => note.midi).sort((a, b) => a - b);
+
+  return {
+    durationSec,
+    notesPerSec: notes.length / durationSec,
+    peakNotesPerSec: percentile(windowCounts, 0.9) / DENSITY_WINDOW_S,
+    chordSize: notes.length / Math.max(1, onsets),
+    rangeSemitones: percentile(pitches, 0.98) - percentile(pitches, 0.02),
+  };
+}
+
+/**
+ * Continuous difficulty score (roughly 1 = nursery rhyme, 6+ = virtuoso).
+ * Weights were fitted by hand against the seeded library so that the authored
+ * beginner tunes land at level 1, Für Elise (the 32s excerpt) at 2,
+ * Moonlight I at 3, Clair de Lune at 4 and the Entertainer /
+ * Fantaisie-Impromptu at 5:
+ * - overall density and the busiest passages dominate (how fast you move),
+ * - every extra note per chord costs half a point (hand shapes, reading),
+ * - range beyond an octave means hand shifts,
+ * - length adds a little (stamina, memory). A 10-minute piece is not
+ *   "easiest" just because it is slow — that is how a 10:24 Schumann piece
+ *   used to top "Easiest first".
+ */
+export function difficultyScore(features: DifficultyFeatures): number {
+  return (
+    0.5 +
+    0.3 * features.notesPerSec +
+    0.12 * features.peakNotesPerSec +
+    0.5 * Math.max(0, features.chordSize - 1) +
+    0.02 * Math.max(0, features.rangeSemitones - 12) +
+    0.35 * Math.max(0, Math.log2(features.durationSec / 45))
+  );
+}
+
+/** Map a `difficultyScore` to the 1-5 level stored on Song.difficulty. */
+export function difficultyLevel(score: number): number {
+  return 1 + LEVEL_THRESHOLDS.filter((threshold) => score >= threshold).length;
+}
+
 /**
  * Parse and sanity-check a MIDI file, returning library metadata.
- * Difficulty is a 1-5 heuristic from note density and polyphony, tuned so
- * beginner rep lands 1-2 and virtuoso rep saturates at 5.
+ * Difficulty is a 1-5 level from `difficultyScore` (density, peak speed,
+ * polyphony, range and duration).
  *
  * Kept free of prisma/express imports so library scripts can reuse it.
  */
@@ -41,19 +135,7 @@ export function extractSongMetadata(bytes: Uint8Array): SongMetadata {
     throw new InvalidMidiError(`Duration ${durationSec.toFixed(1)}s outside ${MIN_DURATION_S}s-${MAX_DURATION_S / 60}min`);
   }
 
-  const notesPerSec = pianoNotes.length / durationSec;
-  // Mean simultaneity: for each note start, how many notes are sounding.
-  let overlapTotal = 0;
-  for (const note of pianoNotes) {
-    overlapTotal += pianoNotes.filter(
-      (other) => other.time <= note.time && other.time + other.duration > note.time,
-    ).length;
-  }
-  const polyphony = overlapTotal / pianoNotes.length;
-  // Calibrated on the seeded library: Für Elise (2.8 nps) → 2, Moonlight I
-  // (1.7 nps, poly 3) → 2, Clair de Lune (5.6 nps) → 4, The Entertainer
-  // (8.5 nps) → 5. Density dominates; pedal-inflated overlap gets low weight.
-  const raw = 0.75 + notesPerSec * 0.45 + (polyphony - 1) * 0.12;
-  const difficulty = Math.max(1, Math.min(5, Math.round(raw)));
+  const features = measureDifficultyFeatures(pianoNotes, durationSec);
+  const difficulty = difficultyLevel(difficultyScore(features));
   return { durationSec, noteCount: pianoNotes.length, difficulty };
 }

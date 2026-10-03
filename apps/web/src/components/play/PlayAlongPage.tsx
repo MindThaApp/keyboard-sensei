@@ -25,6 +25,7 @@ import {
 import { OsmdNotation } from "./OsmdNotation";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout, type VisibilityMode } from "./stageLayout";
+import { formatDuration } from "../../utils/songLibrary";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -477,7 +478,7 @@ export default function PlayAlongPage() {
         <div className="min-w-0 flex-1 basis-48">
           <h1 className="truncate font-display text-xl font-semibold">{song?.title ?? "Play along"}</h1>
           <p className="truncate text-xs text-slate-500">
-            {song?.artist} · {Math.round(parsed.durationS / 60)}:{String(Math.round(parsed.durationS % 60)).padStart(2, "0")} · {parsed.notes.length} notes
+            {song?.artist} · {formatDuration(parsed.durationS)} · {parsed.notes.length} notes
           </p>
         </div>
 
