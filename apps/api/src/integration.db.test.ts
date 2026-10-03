@@ -102,6 +102,32 @@ const exerciseOneNotes = (pitches: number[]) =>
     durationMs: 600,
   }));
 
+/** A note-perfect, perfectly timed performance of any content exercise. */
+const perfectRun = (exerciseId: string) => {
+  const exercise = m.content.exercises.find((item) => item.exerciseId === exerciseId)!;
+  const msPerBeat = 60_000 / exercise.tempoBpm;
+  return exercise.expected.map((note) => ({
+    note: note.note,
+    velocity: 80,
+    startTimestampMs: 1_000 + note.startBeat * msPerBeat,
+    endTimestampMs: 1_000 + (note.startBeat + note.durationBeats) * msPerBeat,
+    durationMs: note.durationBeats * msPerBeat,
+  }));
+};
+
+const exerciseIdsOf = (lessonId: string) =>
+  m.content.lessons
+    .find((lesson) => lesson.id === lessonId)!
+    .sections.flatMap((section) => (section.type === "midi-exercise" ? [section.exerciseId] : []));
+
+async function passEveryExercise(token: string, lessonId: string): Promise<void> {
+  for (const exerciseId of exerciseIdsOf(lessonId)) {
+    const res = await api("POST", `/exercises/${exerciseId}/attempts`, { token, body: { performedNotes: perfectRun(exerciseId) } });
+    expect(res.status).toBe(201);
+    expect(res.body.score, exerciseId).toBeGreaterThanOrEqual(70);
+  }
+}
+
 const quizQuestions = (lessonId: string) =>
   m.content.lessons
     .find((lesson) => lesson.id === lessonId)!
@@ -183,21 +209,31 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
   });
 
   describe("unlock chain", () => {
-    it("completing lesson 1 unlocks lesson 2, and re-passing never downgrades anything", async () => {
+    it("a lesson completes only when every exercise is passed, and nothing is ever downgraded", async () => {
       const user = await createUser();
       expect(await statusOf(user.token, "lesson-01")).toBe("unlocked");
       expect(await statusOf(user.token, "lesson-02")).toBe("locked");
 
+      // The original exercise alone no longer passes the lesson.
       const pass = await api("POST", "/exercises/exercise-01/attempts", {
         token: user.token,
         body: { performedNotes: exerciseOneNotes([48, 60, 72]) },
       });
       expect(pass.status).toBe(201);
       expect(pass.body.score).toBeGreaterThanOrEqual(70);
+      expect(await statusOf(user.token, "lesson-01")).toBe("unlocked");
+      expect(await statusOf(user.token, "lesson-02")).toBe("locked");
+
+      const detail = await api("GET", "/lessons/lesson-01", { token: user.token });
+      expect(detail.body.exerciseBests).toEqual({ "exercise-01": pass.body.score });
+
+      await passEveryExercise(user.token, "lesson-01");
       expect(await statusOf(user.token, "lesson-01")).toBe("completed");
       expect(await statusOf(user.token, "lesson-02")).toBe("unlocked");
+      const afterAll = await api("GET", "/lessons/lesson-01", { token: user.token });
+      expect(Object.keys(afterAll.body.exerciseBests).sort()).toEqual(exerciseIdsOf("lesson-01").sort());
 
-      // Finish lesson 2 through its quiz, which unlocks lesson 3.
+      // Lesson 2 now has exercises, so answering its quiz no longer completes it.
       for (const question of quizQuestions("lesson-02")) {
         const res = await api("POST", `/quiz-questions/${question.id}/answer`, {
           token: user.token,
@@ -205,15 +241,12 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         });
         expect(res.body.correct).toBe(true);
       }
+      expect(await statusOf(user.token, "lesson-02")).toBe("unlocked");
+      await passEveryExercise(user.token, "lesson-02");
       expect(await statusOf(user.token, "lesson-02")).toBe("completed");
       expect(await statusOf(user.token, "lesson-03")).toBe("unlocked");
 
-      // Re-passing lesson 1 re-runs "unlock the next lesson" on an already-COMPLETED
-      // lesson 2 — it must stay completed. A later failing attempt must not demote either.
-      await api("POST", "/exercises/exercise-01/attempts", {
-        token: user.token,
-        body: { performedNotes: exerciseOneNotes([48, 60, 72]) },
-      });
+      // A later failing attempt must not demote anything.
       const fail = await api("POST", "/exercises/exercise-01/attempts", {
         token: user.token,
         body: { performedNotes: exerciseOneNotes([49, 61, 73]) },
@@ -226,6 +259,41 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-01" } },
       });
       expect(progress.best_score).toBeGreaterThanOrEqual(70);
+    });
+
+    it("finishing a lesson opens the next lesson AND any path that branches from it", async () => {
+      const user = await createUser();
+      const course = m.content.lessons.map((lesson) => lesson.id);
+      // Lessons 1–10 already done (written directly; their unlock writes are not under test here).
+      await m.prisma.userProgress.createMany({
+        data: course.slice(0, 10).map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
+      });
+      expect(await statusOf(user.token, "lesson-11")).toBe("unlocked");
+      expect(await statusOf(user.token, "lesson-reading-c-position")).toBe("locked");
+
+      await passEveryExercise(user.token, "lesson-11");
+      expect(await statusOf(user.token, "lesson-11")).toBe("completed");
+      expect(await statusOf(user.token, "lesson-12")).toBe("unlocked");
+      expect(await statusOf(user.token, "lesson-reading-c-position")).toBe("unlocked");
+      expect(await statusOf(user.token, "lesson-chords-major-symbols")).toBe("locked");
+      // The branch's unlock was written, not just inferred.
+      const written = await m.prisma.userProgress.findUnique({
+        where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-reading-c-position" } },
+      });
+      expect(written?.status).toBe("unlocked");
+
+      // Completing lesson 12 behind the API's back (as if the Modern Chords path had been
+      // added after the learner finished it) writes no unlock row, yet its first lesson
+      // opens at read time.
+      await m.prisma.userProgress.update({
+        where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-12" } },
+        data: { status: "completed", best_score: 90 },
+      });
+      expect(await statusOf(user.token, "lesson-chords-major-symbols")).toBe("unlocked");
+      const detail = await api("GET", "/lessons/lesson-chords-major-symbols", { token: user.token });
+      expect(detail.body.progress.status).toBe("unlocked");
+      // A reading lesson with an extra classical prerequisite stays locked until both are met.
+      expect(await statusOf(user.token, "lesson-reading-sharp-keys")).toBe("locked");
     });
   });
 
@@ -398,11 +466,7 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     it("inserting a lesson mid-sequence reseeds cleanly and existing progress still points at the right lessons", async () => {
       const user = await createUser();
-      const pass = await api("POST", "/exercises/exercise-01/attempts", {
-        token: user.token,
-        body: { performedNotes: exerciseOneNotes([48, 60, 72]) },
-      });
-      expect(pass.status).toBe(201);
+      await passEveryExercise(user.token, "lesson-01");
       const before = await m.prisma.userProgress.findMany({ where: { user_id: user.id }, orderBy: { lesson_id: "asc" } });
       expect(before.map((row) => [row.lesson_id, row.status])).toEqual([
         ["lesson-01", "completed"],
