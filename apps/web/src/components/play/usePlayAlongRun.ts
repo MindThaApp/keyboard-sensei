@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { PlayAlongEngine, type ParsedPlayAlongSong } from "@keyboard-sensei/playalong-core";
+import { PlayAlongEngine, type AccompanimentMute, type PracticeRun } from "@keyboard-sensei/playalong-core";
 import type { PlayAlongResult } from "@keyboard-sensei/midi-engine";
 import type { RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { connectPlayAlongAudio } from "../../audio/playAlongAudio";
@@ -16,17 +16,21 @@ export interface RunSettings {
   metronomeSound: ClickSettings["sound"];
   metronomeVolume: ClickSettings["volume"];
   clickLevel: ClickSettings["level"];
+  accompanimentMute: AccompanimentMute;
 }
 
 interface Options<S extends RunSettings> {
-  parsed: ParsedPlayAlongSong | null;
+  /** What one run plays: the notes to judge, the accompaniment and the grid, in run time. */
+  run: PracticeRun | null;
+  /** False when the song's tempo lurches too much for a metronome to follow (count-ins still click). */
+  clickSafe: boolean;
   settings: S;
   /** Combined MIDI stream (virtual piano, computer keyboard, hardware). */
   subscribe: (listener: (event: RawMidiEvent) => void) => () => void;
   /** Called every animation frame while running, to draw. Must not set React state. */
   onFrame: (engine: PlayAlongEngine, songTimeS: number, settings: S) => void;
-  /** The run finished on its own (not cancelled). `settings` are the ones it ran with. */
-  onFinish: (result: PlayAlongResult, settings: S) => void;
+  /** The run finished on its own (not cancelled). `settings` and `run` are the ones it ran with. */
+  onFinish: (result: PlayAlongResult, settings: S, run: PracticeRun) => void;
 }
 
 /** How often the HUD store is refreshed during a run. */
@@ -39,7 +43,7 @@ const HUD_INTERVAL_MS = 120;
  * playAlongRunStore rather than React state, so the page itself only re-renders
  * when the run starts, pauses or ends.
  */
-export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subscribe, onFrame, onFinish }: Options<S>) {
+export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, settings, subscribe, onFrame, onFinish }: Options<S>) {
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const engineRef = useRef<PlayAlongEngine | null>(null);
@@ -63,8 +67,12 @@ export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subsc
     engineRef.current?.setWaitMode(settings.waitMode);
   }, [settings.waitMode]);
   useEffect(() => {
-    engineRef.current?.setGuideAudio(settings.guideAudio);
+    engineRef.current?.setGuideAudio(settings.guideAudio, performance.now());
   }, [settings.guideAudio]);
+  const { otherHand: muteOtherHand, removed: muteRemoved } = settings.accompanimentMute;
+  useEffect(() => {
+    engineRef.current?.setAccompanimentMute({ otherHand: muteOtherHand, removed: muteRemoved }, performance.now());
+  }, [muteOtherHand, muteRemoved]);
   const savedLatencyMs = useSavedLatencyOffsetMs();
   useEffect(() => {
     engineRef.current?.setLatencyOffsetMs(latencyOffsetMs());
@@ -90,15 +98,20 @@ export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subsc
     [subscribe],
   );
 
-  const start = useCallback(() => {
-    if (!parsed) return;
+  /** Start a run. `tempoPct` overrides the settings' speed (auto speed-up sets it before React has re-rendered). */
+  const start = useCallback((tempoPct?: number) => {
+    if (!run) return;
     stop();
     resetPlayAlongRun();
-    const runSettings = settingsRef.current;
+    const runSettings = tempoPct === undefined ? settingsRef.current : { ...settingsRef.current, tempoPct };
 
     const engine = new PlayAlongEngine({
-      notes: parsed.notes,
-      durationS: parsed.durationS,
+      notes: run.notes,
+      accompaniment: run.accompaniment,
+      accompanimentMute: runSettings.accompanimentMute,
+      durationS: run.durationS,
+      leadInS: run.leadInS,
+      finishGraceS: run.finishGraceS,
       tempoPct: runSettings.tempoPct,
       waitMode: runSettings.waitMode,
       guideAudio: runSettings.guideAudio,
@@ -108,9 +121,9 @@ export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subsc
         cancelAnimationFrame(rafRef.current);
         stopAudioRef.current?.();
         stopAudioRef.current = null;
-        publishPlayAlongRun({ stats: engine.liveStats, countdown: null, waiting: false, waitingNotes: [], songTimeS: parsed.durationS });
+        publishPlayAlongRun({ stats: engine.liveStats, countdown: null, waiting: false, waitingNotes: [], songTimeS: run.offsetS + run.durationS });
         setRunning(false);
-        onFinishRef.current(result, runSettings);
+        onFinishRef.current(result, runSettings, run);
       },
     });
     engineRef.current = engine;
@@ -121,12 +134,14 @@ export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subsc
     const disconnectGuide = connectPlayAlongAudio(engine);
     // clickSafe is false on the handful of recordings whose tempo lurches so hard
     // that a following click is a conductor, not a metronome — see buildBeatGrid.
-    const stopClicks = parsed.grid.clickSafe
-      ? new PlayAlongMetronome(parsed.grid.beats).follow(engine, () => {
-          const live = settingsRef.current;
-          return { enabled: live.metronome, sound: live.metronomeSound, volume: live.metronomeVolume, level: live.clickLevel };
-        })
-      : () => undefined;
+    // A loop's count-in clicks either way.
+    const stopClicks =
+      clickSafe || run.countIn.length > 0
+        ? new PlayAlongMetronome(clickSafe ? run.beats : [], run.countIn).follow(engine, () => {
+            const live = settingsRef.current;
+            return { enabled: live.metronome && clickSafe, sound: live.metronomeSound, volume: live.metronomeVolume, level: live.clickLevel };
+          })
+        : () => undefined;
     stopAudioRef.current = () => {
       stopClicks();
       disconnectGuide();
@@ -149,13 +164,13 @@ export function usePlayAlongRun<S extends RunSettings>({ parsed, settings, subsc
           countdown: songTime < 0 ? Math.ceil(-songTime) : null,
           waiting: engine.isWaiting,
           waitingNotes: engine.isWaiting ? engine.waitingMidis : [],
-          songTimeS: songTime,
+          songTimeS: songTime + run.offsetS,
         });
       }
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-  }, [parsed, stop]);
+  }, [run, clickSafe, stop]);
 
   const togglePause = useCallback(() => {
     const engine = engineRef.current;
