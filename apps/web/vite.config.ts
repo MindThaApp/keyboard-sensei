@@ -125,24 +125,16 @@ function pwaServiceWorkerPlugin() {
 export default defineConfig({
   plugins: [react(), pwaServiceWorkerPlugin()],
   resolve: {
-    alias: {
-      "@keyboard-sensei/shared-types": path.resolve(
-        workspaceRoot,
-        "packages/shared-types/src/index.ts",
-      ),
-      "@keyboard-sensei/lesson-engine": path.resolve(
-        workspaceRoot,
-        "packages/lesson-engine/src/index.ts",
-      ),
-      "@keyboard-sensei/midi-engine": path.resolve(
-        workspaceRoot,
-        "packages/midi-engine/src/index.ts",
-      ),
-      "@keyboard-sensei/music-theory": path.resolve(
-        workspaceRoot,
-        "packages/music-theory/src/index.ts",
-      ),
-    },
+    // Exact-match patterns: a plain string alias is a PREFIX match, so
+    // "@keyboard-sensei/midi-engine" would also swallow "@keyboard-sensei/midi-engine/web".
+    alias: [
+      { find: /^@keyboard-sensei\/shared-types$/, replacement: path.resolve(workspaceRoot, "packages/shared-types/src/index.ts") },
+      { find: /^@keyboard-sensei\/lesson-engine$/, replacement: path.resolve(workspaceRoot, "packages/lesson-engine/src/index.ts") },
+      { find: /^@keyboard-sensei\/midi-engine$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/index.ts") },
+      { find: /^@keyboard-sensei\/midi-engine\/web$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/web.ts") },
+      { find: /^@keyboard-sensei\/music-theory$/, replacement: path.resolve(workspaceRoot, "packages/music-theory/src/index.ts") },
+      { find: /^@keyboard-sensei\/playalong-core$/, replacement: path.resolve(workspaceRoot, "packages/playalong-core/src/index.ts") },
+    ],
   },
   server: {
     fs: {

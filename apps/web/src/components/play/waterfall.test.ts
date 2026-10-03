@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { keyboardGeometry, fitWhiteKeyWidth, drawWaterfall, WATERFALL_COLORS_LIGHT } from "./waterfall";
-import type { BarGridEntry } from "../../utils/playalongSong";
+import type { BarGridEntry } from "@keyboard-sensei/playalong-core";
 
 describe("keyboardGeometry (parameterised width)", () => {
   it("scales white key x-positions with whiteKeyWidthPx", () => {

@@ -7,14 +7,13 @@ import {
   type PlayAlongResult,
 } from "@keyboard-sensei/midi-engine";
 import { getSongFile, getSongNotationFile, getSongs, submitPlayAlongAttempt, type Song } from "../../services/api";
-import { parsePlayAlongSong, type ParsedPlayAlongSong } from "../../utils/playalongSong";
-import { PlayAlongEngine, type PlayAlongLiveStats } from "../../utils/playalongEngine";
-import { PlayAlongMetronome, CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
+import { parsePlayAlongSong, type ParsedPlayAlongSong, type PlayAlongEngine } from "@keyboard-sensei/playalong-core";
+import { CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
 import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { useTheme } from "../../contexts/ThemeContext";
-import VirtualPiano, { KeyboardSizingControls } from "../piano/VirtualPiano";
+import { KeyboardSizingControls } from "../piano/VirtualPiano";
 import { useKeyboardSizing, snapRangeToWhiteKeys } from "../piano/useKeyboardSizing";
 import {
   drawWaterfall,
@@ -22,10 +21,11 @@ import {
   WATERFALL_COLORS_DARK,
   WATERFALL_COLORS_LIGHT,
 } from "./waterfall";
-import { OsmdNotation } from "./OsmdNotation";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout, type VisibilityMode } from "./stageLayout";
 import { formatDuration } from "../../utils/songLibrary";
+import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano } from "./PlayAlongLive";
+import { usePlayAlongRun } from "./usePlayAlongRun";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -100,49 +100,20 @@ export default function PlayAlongPage() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [stats, setStats] = useState<PlayAlongLiveStats>({ judgedCount: 0, accuracyPct: 100, combo: 0, maxCombo: 0, wrongPressCount: 0 });
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [waitingNotes, setWaitingNotes] = useState<number[]>([]);
   const [result, setResult] = useState<PlayAlongResult | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
-  const [songTimeS, setSongTimeS] = useState(0);
-  const [paused, setPaused] = useState(false);
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const engineRef = useRef<PlayAlongEngine | null>(null);
-  const metronomeRef = useRef<PlayAlongMetronome | null>(null);
-  // The rAF loop is created once in start() and closes over that render's settings.
-  // Mirror them in a ref so changing the click sound/level mid-song takes effect
-  // without restarting the engine.
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollingScoreRef = useRef<ScrollingScoreHandle | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageWidth, setStageWidth] = useState(0);
   const [stageHeight, setStageHeight] = useState(0);
-  const rafRef = useRef<number>(0);
-  const phaseRef = useRef<Phase>("loading");
-  phaseRef.current = phase;
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
-
-  // Push setting changes into a RUNNING engine, so adjusting them while paused
-  // actually takes effect on resume rather than only on the next attempt.
-  // (lookaheadS needs no plumbing: drawWaterfall reads it from settings each frame.)
-  useEffect(() => {
-    engineRef.current?.setTempoPct(settings.tempoPct);
-  }, [settings.tempoPct]);
-  useEffect(() => {
-    engineRef.current?.setWaitMode(settings.waitMode);
-  }, [settings.waitMode]);
-  useEffect(() => {
-    engineRef.current?.setGuideAudio(settings.guideAudio);
-  }, [settings.guideAudio]);
 
   // Load song metadata + file.
   useEffect(() => {
@@ -244,36 +215,6 @@ export default function PlayAlongPage() {
   const layoutRef = useRef({ geometry, heightPx, colors });
   layoutRef.current = { geometry, heightPx, colors };
 
-  const togglePause = useCallback(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    if (engine.isPaused) {
-      engine.resume();
-      setPaused(false);
-    } else {
-      engine.pause();
-      setPaused(true);
-    }
-  }, []);
-
-  const stop = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
-    engineRef.current?.stop();
-    engineRef.current = null;
-    metronomeRef.current?.stop();
-    metronomeRef.current = null;
-  }, []);
-
-  useEffect(() => stop, [stop]);
-
-  // Key presses (virtual piano, computer keyboard, MIDI hardware) → engine.
-  useEffect(() => {
-    return subscribe((event) => {
-      if (event.type !== "noteon") return;
-      engineRef.current?.pressKey(event.note, event.timestampMs);
-    });
-  }, [subscribe]);
-
   // Static preview frame: drawWaterfall is otherwise only called from inside the
   // rAF loop, which only runs once playing — so before pressing Play the canvas
   // was blank and Visibility had no visible effect. Render one frame at
@@ -324,110 +265,78 @@ export default function PlayAlongPage() {
     scrollingScoreRef.current?.setSongTime(0);
   }, [phase, settings.viewMode, parsed]);
 
-  const start = useCallback(() => {
-    if (!parsed) return;
-    stop();
-    setResult(null);
-    setSubmitState("idle");
-    setStats({ judgedCount: 0, accuracyPct: 100, combo: 0, maxCombo: 0, wrongPressCount: 0 });
-
-    const engine = new PlayAlongEngine({
-      notes: parsed.notes,
-      durationS: parsed.durationS,
-      tempoPct: settings.tempoPct,
-      waitMode: settings.waitMode,
-      guideAudio: settings.guideAudio,
-      onFinish: (finished) => {
-        setResult(finished);
-        setPhase("done");
-        setWaiting(false);
-        setWaitingNotes([]);
-        if (!settings.waitMode && songId) {
-          setSubmitState("saving");
-          submitPlayAlongAttempt(songId, {
-            score: finalScore(finished, settings.tempoPct / 100, settings.lookaheadS),
-            accuracy: finished.accuracyPct,
-            tempo_pct: settings.tempoPct,
-            lookahead_s: settings.lookaheadS,
-            wait_mode: false,
-          })
-            .then(() => setSubmitState("saved"))
-            .catch(() => setSubmitState("failed"));
-        }
-      },
-    });
-    engineRef.current = engine;
-    setPaused(false);
-    // clickSafe is false on the handful of recordings whose tempo lurches so hard
-    // that a following click is a conductor, not a metronome — see buildBeatGrid.
-    metronomeRef.current = parsed.grid.clickSafe ? new PlayAlongMetronome(parsed.grid.beats) : null;
-    engine.start();
-    setPhase("playing");
-
-    let lastHudUpdate = 0;
-    const loop = (frameMs: number) => {
-      const active = engineRef.current;
-      if (!active) return;
-      const finished = active.tick(performance.now());
-      const songTime = active.songTime();
-
-      // Runs every frame (unlike the ~120ms-throttled HUD state below) and
-      // mutates the ribbon's DOM transform directly via refs inside
-      // ScrollingScore — never a setState, so this can't cause a 60fps React
-      // re-render (see docs/agent-briefing.md). No-op when the scrolling
-      // score isn't mounted (ref is null in any other view mode).
+  const onFrame = useCallback(
+    (engine: PlayAlongEngine, songTime: number, live: Settings) => {
+      if (!parsed) return;
+      // Runs every frame and mutates the ribbon's DOM transform directly via refs
+      // inside ScrollingScore — never a setState, so this can't cause a 60fps React
+      // re-render (see docs/agent-briefing.md). No-op when the scrolling score isn't
+      // mounted (ref is null in any other view mode).
       scrollingScoreRef.current?.setSongTime(songTime);
 
-      // Same loop as the waterfall: re-anchor the click off the engine's own song
-      // time every frame rather than pre-scheduling, so it cannot drift from the
-      // notes and cannot click through a wait-mode freeze.
-      const live = settingsRef.current;
-      if (live.metronome) {
-        metronomeRef.current?.tick(songTime, active.playbackRate, active.isWaiting, live.metronomeSound, live.metronomeVolume, live.clickLevel);
-      }
-
       const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          const { geometry, heightPx, colors } = layoutRef.current;
-          const dpr = window.devicePixelRatio || 1;
-          // Round before comparing: canvas.width is an integer setter, so once
-          // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
-          // unrounded comparison is NEVER equal — the canvas would be reallocated
-          // and its context reset on every single frame, at 60fps.
-          const targetWidth = Math.round(geometry.widthPx * dpr);
-          const targetHeight = Math.round(heightPx * dpr);
-          if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-          }
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          drawWaterfall(ctx, {
-            notes: parsed.notes,
-            judgments: active.judgments,
-            songTimeS: songTime,
-            lookaheadS: live.lookaheadS,
-            geometry,
-            heightPx,
-            colors,
-            bars: parsed.grid.bars,
-          });
-        }
+      const ctx = canvas?.getContext("2d");
+      if (!canvas || !ctx) return;
+      const { geometry, heightPx, colors } = layoutRef.current;
+      const dpr = window.devicePixelRatio || 1;
+      // Round before comparing: canvas.width is an integer setter, so once
+      // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
+      // unrounded comparison is NEVER equal — the canvas would be reallocated
+      // and its context reset on every single frame, at 60fps.
+      const targetWidth = Math.round(geometry.widthPx * dpr);
+      const targetHeight = Math.round(heightPx * dpr);
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
       }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawWaterfall(ctx, {
+        notes: parsed.notes,
+        judgments: engine.judgments,
+        songTimeS: songTime,
+        lookaheadS: live.lookaheadS,
+        geometry,
+        heightPx,
+        colors,
+        bars: parsed.grid.bars,
+      });
+    },
+    [parsed],
+  );
 
-      if (frameMs - lastHudUpdate > 120) {
-        lastHudUpdate = frameMs;
-        setStats(active.liveStats);
-        setCountdown(songTime < 0 ? Math.ceil(-songTime) : null);
-        setWaiting(active.isWaiting);
-        setWaitingNotes(active.isWaiting ? active.waitingMidis : []);
-        setSongTimeS(songTime);
-      }
-      if (!finished) rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-  }, [parsed, settings, songId, stop]);
+  const onFinish = useCallback(
+    (finished: PlayAlongResult, ran: Settings) => {
+      setResult(finished);
+      setPhase("done");
+      if (ran.waitMode || !songId) return;
+      setSubmitState("saving");
+      submitPlayAlongAttempt(songId, {
+        score: finalScore(finished, ran.tempoPct / 100, ran.lookaheadS),
+        accuracy: finished.accuracyPct,
+        tempo_pct: ran.tempoPct,
+        lookahead_s: ran.lookaheadS,
+        wait_mode: false,
+      })
+        .then(() => setSubmitState("saved"))
+        .catch(() => setSubmitState("failed"));
+    },
+    [songId],
+  );
+
+  const {
+    paused,
+    togglePause,
+    start: startRun,
+    cancel: cancelRunState,
+  } = usePlayAlongRun({ parsed, settings, subscribe, onFrame, onFinish });
+
+  const start = useCallback(() => {
+    if (!parsed) return;
+    setResult(null);
+    setSubmitState("idle");
+    startRun();
+    setPhase("playing");
+  }, [parsed, startRun]);
 
   // A calibration prompt lives in the MIDI status bar inside the settings panel; never
   // let it wait unseen behind a closed panel.
@@ -435,12 +344,9 @@ export default function PlayAlongPage() {
   const showSettings = settingsOpen || calibrating;
 
   const cancelRun = useCallback(() => {
-    stop();
+    cancelRunState();
     setPhase("ready");
-    setCountdown(null);
-    setWaiting(false);
-    setWaitingNotes([]);
-  }, [stop]);
+  }, [cancelRunState]);
 
   if (phase === "loading") return <p className="text-sm text-slate-500">Loading song…</p>;
   if (phase === "error" || !parsed) {
@@ -454,11 +360,6 @@ export default function PlayAlongPage() {
     );
   }
 
-  const liveScore = finalScore(
-    { judgments: [], wrongPressCount: stats.wrongPressCount, accuracyPct: stats.accuracyPct, maxCombo: stats.maxCombo, baseScore: stats.accuracyPct },
-    settings.tempoPct / 100,
-    settings.lookaheadS,
-  );
   const scoreBonus = Math.min(1.5, tempoMultiplier(settings.tempoPct / 100) * lookaheadMultiplier(settings.lookaheadS));
   const settingsLocked = phase === "playing" && !paused;
   const segmentClasses = (selected: boolean) =>
@@ -505,16 +406,8 @@ export default function PlayAlongPage() {
         <Link to="/play" className="secondary-button">← Library</Link>
       </div>
 
-      {/* HUD */}
       {phase === "playing" && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="status">
-          <span className="tabular-nums"><span className="text-xs text-slate-500">Score </span><strong>{settings.waitMode ? "—" : Math.round(liveScore)}</strong></span>
-          <span className="tabular-nums"><span className="text-xs text-slate-500">Accuracy </span><strong>{settings.waitMode ? "—" : `${Math.round(stats.accuracyPct)}%`}</strong></span>
-          <span className="tabular-nums"><span className="text-xs text-slate-500">Combo </span><strong className={stats.combo >= 10 ? "text-brass-600 dark:text-brass-400" : ""}>{settings.waitMode ? "—" : stats.combo}</strong></span>
-          {waiting && <span className="font-medium text-felt-600 dark:text-felt-400">Waiting for the highlighted key…</span>}
-          {countdown !== null && <span className="font-display text-lg font-semibold text-felt-600 dark:text-felt-400">Starting in {countdown}…</span>}
-          {paused && <span className="font-medium text-brass-700 dark:text-brass-300">Paused — open Settings to adjust, then resume.</span>}
-        </div>
+        <PlayAlongHud waitMode={settings.waitMode} tempoPct={settings.tempoPct} lookaheadS={settings.lookaheadS} paused={paused} />
       )}
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-2">
@@ -732,7 +625,7 @@ export default function PlayAlongPage() {
               // Archive-imported songs ship real MusicXML — render that rather than a
               // reconstruction from the MIDI. Capped so it can't squeeze the stage away.
               <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`} className="max-h-[35vh] overflow-y-auto">
-                <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />
+                <LiveOsmdNotation notationBytes={notationBytes} />
               </div>
             ) : (
               <div role="img" aria-label={`Scrolling sheet music: ${song?.title ?? "this song"}`}>
@@ -767,10 +660,8 @@ export default function PlayAlongPage() {
                   aria-label="Falling notes"
                 />
               )}
-              <VirtualPiano
+              <PlayAlongPiano
                 sizing={sizing}
-                showLabels={false}
-                expectedNotes={waitingNotes}
                 scrollable={false}
                 showControls={false}
                 showHint={false}
