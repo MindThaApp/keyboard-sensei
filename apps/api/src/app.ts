@@ -25,6 +25,7 @@ import { songsRouter } from "./songs.js";
 import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { dashboardRouter } from "./dashboard.js";
+import { unlockLesson } from "./progress.js";
 
 const credentials = z.object({
   email: z.string().email(),
@@ -133,10 +134,9 @@ app.use(
     origin: env.CORS_ORIGIN.split(",").map((value) => value.trim()),
     // Custom response headers aren't CORS-safelisted by default -- without
     // this, /songs/fetch-url-preview's x-song-* metadata headers are
-    // invisible to the browser on every cross-origin deployment (dev
-    // :5174->:3001, prod :8181->:3101 both cross-origin, no proxy), so the
-    // URL-import preview silently showed "0:00 / 0 notes / difficulty 1"
-    // for every real fetch despite the API sending correct values.
+    // invisible to the browser on cross-origin development (web :5174 -> API
+    // :3001); production uses nginx's same-origin /api proxy. Without this,
+    // URL-import preview silently showed "0:00 / 0 notes / difficulty 1" in dev.
     exposedHeaders: ["x-song-duration-sec", "x-song-note-count", "x-song-difficulty"],
   }),
 );
@@ -440,11 +440,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       if (completed) {
         const nextLesson = await tx.lesson.findFirst({ where: { order: row.lesson.order + 1 } });
         if (nextLesson) {
-          await tx.userProgress.upsert({
-            where: { user_id_lesson_id: { user_id: uid, lesson_id: nextLesson.id } },
-            create: { user_id: uid, lesson_id: nextLesson.id, status: ProgressStatus.unlocked },
-            update: { status: { set: ProgressStatus.unlocked } },
-          });
+          await unlockLesson(tx, uid, nextLesson.id);
         }
       }
     });
@@ -536,16 +532,16 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
         });
         const nextLesson = rows.find((row) => row.order === found!.order + 1);
         if (nextLesson) {
-          await prisma.userProgress.upsert({
-            where: { user_id_lesson_id: { user_id: uid, lesson_id: nextLesson.id } },
-            create: { user_id: uid, lesson_id: nextLesson.id, status: ProgressStatus.unlocked },
-            update: { status: { set: ProgressStatus.unlocked } },
-          });
+          await unlockLesson(prisma, uid, nextLesson.id);
         }
       }
     }
 
-    res.json({ correct, explanation: found.question.explanation, correctIndex });
+    if (!correct) {
+      res.json({ correct: false });
+      return;
+    }
+    res.json({ correct: true, explanation: found.question.explanation, correctIndex });
   } catch (e) {
     next(e);
   }
@@ -635,11 +631,11 @@ app.post("/users/me/assessment-placement", async (req, res, next) => {
                   best_score: Math.max(current?.best_score ?? 0, placement.placementScore),
                   completed_at: current?.completed_at ?? now,
                 }
-              : current?.status === ProgressStatus.completed
-                ? {}
-                : { status: ProgressStatus.unlocked },
+              : {},
           });
         }
+        const nextLesson = rows[placement.completedLessonCount];
+        if (nextLesson) await unlockLesson(tx, uid, nextLesson.id);
       });
     }
     res.json(placement);

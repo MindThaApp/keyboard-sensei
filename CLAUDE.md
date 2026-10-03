@@ -9,7 +9,7 @@ Full-stack piano learning web app. pnpm monorepo: `apps/web` (React/Vite/TS/Tail
 ## Commands
 
 ### Deploy
-Live on the home LAN server at `192.168.4.4` (Debian, user `ramin`), Dockerized, reachable at `https://192.168.4.4:8181` (Caddy reverse proxy) / `:3101` (api), via Tailscale subnet routing when off-LAN. HTTPS only (internal CA) — required for Web MIDI hardware input, which browsers only allow in a secure context. Each LAN device that wants hardware MIDI needs the Caddy CA root imported once (copy from `/data/caddy/pki/authorities/local/root.crt` inside the `keyboard-sensei-caddy-1` container, or from the shared drive at `/home/ramin/shared/keyboard-sensei-lan-ca.crt`) — `security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db <path>` on macOS, then fully quit and reopen the browser (a tab refresh alone won't pick up newly-trusted certs).
+Live on the home LAN server at `192.168.4.4` (Debian, user `ramin`), Dockerized, reachable at `https://192.168.4.4:8181` (Caddy reverse proxy; API at `https://192.168.4.4:8181/api`), via Tailscale subnet routing when off-LAN. HTTPS only (internal CA) — required for Web MIDI hardware input, which browsers only allow in a secure context. Each LAN device that wants hardware MIDI needs the Caddy CA root imported once (copy from `/data/caddy/pki/authorities/local/root.crt` inside the `keyboard-sensei-caddy-1` container, or from the shared drive at `/home/ramin/shared/keyboard-sensei-lan-ca.crt`) — `security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db <path>` on macOS, then fully quit and reopen the browser (a tab refresh alone won't pick up newly-trusted certs).
 
 **ALWAYS deploy from a clean worktree at HEAD, never the working tree.** Agents frequently have uncommitted work in flight, and rsyncing the working tree ships it. A broken deploy was caused exactly this way (a file staged while an agent was mid-edit, importing a module that wasn't committed yet).
 
@@ -47,6 +47,8 @@ ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api
 
 `ELEVENLABS_API_KEY` lives in `apps/api/.env` (local) and the server's `~/apps/keyboard-sensei/.env.deploy` (gitignored both places, never committed, never a `VITE_` var). `ADMIN_PASSWORD` (server `.env.deploy`) sets the seeded admin's password; local dev fallback is `admin-sensei-dev`.
 
+**Backups:** run `scripts/backup-keyboard-sensei.sh` on the server; restore steps are in `scripts/restore-keyboard-sensei.md`.
+
 **Alternative: prebuilt GHCR images.** CI (`.github/workflows/ci.yml`) builds/pushes `ghcr.io/ramin-azizi/keyboard-sensei-{web,api}` on every push to `master`. To use those instead of building on the server: `docker-compose.ghcr.yml`, but the server needs a one-time `docker login ghcr.io` with a PAT that has `read:packages` (repo/images are private) — currently NOT set up (`gh auth refresh -s read:packages` would restore it); deploys use the build-on-server path (`docker-compose.deploy.yml`) until that's done.
 
 ## Gotchas / Lessons Learned
@@ -81,7 +83,7 @@ These are the highest-value things to check first. Each was built and unit-teste
 3. **Sustain pedal** (his sister's bug report). Should now hold notes when pedalled — both synth and sampled voices.
 4. **Sampled instruments** — does "Rhodes" actually sound like a Rhodes? Verified by instrumentation (an AudioBufferSourceNode plays, not an oscillator), never by ear.
 
-- Auth hardening: refresh tokens, authenticate the TTS audio route — not started (quiz-integrity half of this item is done: `correctIndex` no longer ships to the client).
+- Auth hardening: refresh tokens, authenticate the TTS audio route — not started (quiz integrity: `correctIndex` is stripped from lesson payloads and the answer route no longer leaks it on wrong answers; fixed 2026-10-03).
 - De-minify remaining one-liner-style files; delete the stale duplicate app copy at the parent root (see Commands section) — needs Ramin's confirmation on the delete.
 - More content batches toward the ~100-hour target (34 lessons / repertoire+ear-training+technique batches shipped so far).
 - Detailed phase-by-phase breakdown for theory library, skill tree, scrolling sight-reading: `/Users/raminazizi/.claude/plans/gleaming-watching-origami.md` — scope each phase in detail immediately before it starts, not before. (Dashboard/achievements phase is now done — see History.)

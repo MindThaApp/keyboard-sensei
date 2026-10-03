@@ -9,7 +9,7 @@ function QuestionView({ question }: { question: QuizQuestion }) {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSelect(index: number) {
-    if (result || submitting) return;
+    if (result?.correct || submitting) return;
     setSelectedIndex(index);
     setSubmitting(true);
     const response = await submitQuiz(question.id, { selectedAnswer: index });
@@ -23,13 +23,14 @@ function QuestionView({ question }: { question: QuizQuestion }) {
       <div className="space-y-2">
         {question.options.map((option, index) => {
           const isSelected = selectedIndex === index;
-          const isCorrectOption = result !== null && index === result.correctIndex;
+          const isCorrectOption = result?.correct === true && index === result.correctIndex;
 
           let optionClasses = "border-slate-300 hover:border-slate-400 dark:border-slate-600 dark:hover:border-slate-400";
-          if (result) {
+          if (result?.correct) {
             if (isCorrectOption) optionClasses = "border-emerald-500 bg-emerald-50 dark:bg-emerald-950";
-            else if (isSelected) optionClasses = "border-rose-500 bg-rose-50 dark:bg-rose-950";
             else optionClasses = "border-slate-200 opacity-60 dark:border-slate-700";
+          } else if (result && isSelected) {
+            optionClasses = "border-rose-500 bg-rose-50 dark:bg-rose-950";
           } else if (isSelected) {
             optionClasses = "border-slate-500";
           }
@@ -38,10 +39,10 @@ function QuestionView({ question }: { question: QuizQuestion }) {
             <button
               key={index}
               type="button"
-              disabled={!!result || submitting}
+              disabled={!!result?.correct || submitting}
               onClick={() => void handleSelect(index)}
               className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${optionClasses} ${
-                result ? "cursor-default" : "cursor-pointer"
+                result?.correct ? "cursor-default" : "cursor-pointer"
               }`}
             >
               {option}
@@ -51,8 +52,7 @@ function QuestionView({ question }: { question: QuizQuestion }) {
       </div>
       {result && (
         <p className={`text-sm ${result.correct ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"}`}>
-          {result.correct ? "Correct! " : "Not quite. "}
-          {result.explanation}
+          {result.correct ? <>Correct! {result.explanation}</> : "Not quite — try again."}
         </p>
       )}
     </div>

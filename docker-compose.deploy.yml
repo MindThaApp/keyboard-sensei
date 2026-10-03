@@ -33,8 +33,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "3101:3001"
     restart: unless-stopped
 
   web:

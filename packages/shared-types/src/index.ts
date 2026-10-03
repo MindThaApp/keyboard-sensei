@@ -49,7 +49,7 @@ export interface AssessmentPlacement { completedLessonCount: number; placementSc
 export interface AssessmentPlacementPayload { scores: number[] }
 export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct }
 export interface QuizAnswerPayload { selectedAnswer: number }
-export interface QuizAnswerResponse { correct: boolean; explanation: string; correctIndex: number }
+export interface QuizAnswerResponse { correct: boolean; explanation?: string; correctIndex?: number }
 export interface AttemptSummary { id: string; exerciseId: string; lessonId: string; lessonTitle: string; score: number; createdAt: string }
 export interface AttemptsResponse { attempts: AttemptSummary[] }
 export interface ApiErrorResponse { error: { code: string; message: string; details?: unknown } }
