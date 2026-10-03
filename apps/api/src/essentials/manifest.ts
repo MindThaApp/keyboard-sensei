@@ -71,6 +71,12 @@ export interface EssentialsPiece {
    * same rule the play-along parser uses); a single track splits at middle C.
    */
   tracks?: { right: number[]; left: number[]; melody?: number[] };
+  /**
+   * A tune that moves between tracks (Schumann's Happy Farmer: left hand,
+   * then right): from each `fromBeat` (quarter beats) until the next span,
+   * the tune is in `tracks`. Overrides `tracks.melody`.
+   */
+  melodySpans?: { fromBeat: number; tracks: number[] }[];
   /** Skip an accompaniment-only introduction when finding the tune (quarter-note beats). */
   melodyStartBeat?: number;
   /**
@@ -86,8 +92,28 @@ export interface EssentialsPiece {
    * that single default tempo (checked when it is loaded).
    */
   tempoBpm?: number;
+  /**
+   * Corrections to a source's own tempo map, where the file's tempo is far
+   * from the score's marking or from how the piece is played (each use says
+   * why in `note`): every tempo multiplied by `scale`, then tempo events
+   * set at the given beats (quarter beats of the source).
+   */
+  tempoFix?: { scale?: number; at?: { beat: number; bpm: number }[] };
+  /**
+   * A span of the source (quarter beats, [from, to)) to remove, everything
+   * after it moving earlier: a first ending LilyPond played straight into
+   * the second, or an upbeat the first verse doesn't have.
+   */
+  cutBeats?: [number, number];
+  /**
+   * Tracks whose notes are dropped when another track sounds the same pitch
+   * at the same moment (hidden notes a typesetter used to anchor slurs).
+   */
+  dropUnisonsIn?: number[];
   /** Force the beginner time scale (see ArrangementMeta.beginnerTimeScale). */
   beginnerTimeScale?: 1 | 2;
+  /** The tune really leaps 9+ semitones (see ArrangementMeta.keepLeaps). */
+  keepLeaps?: boolean;
   /** Opening notes of the tune in the source's key, scientific pitch (C4 = middle C). */
   incipit: string;
   /**
@@ -433,7 +459,8 @@ export const ESSENTIALS: EssentialsPiece[] = [
     incipit: "E4 A4 C5 B4 E4 B4 D5 C5 E5 G#4 E5 A4", incipitBasis: "known-melody",
   },
 
-  // ---- Authored: arranged here, tune checked against two independent PD sources.
+  // ---- Added in the top-up, ranked among themselves. Mutopia incipits were read off an
+  // independent public-domain scan; authored tunes were checked against two sources.
   {
     slug: "twinkle-twinkle-little-star", rank: 59, title: "Twinkle, Twinkle, Little Star", composer: "Traditional", genre: "other",
     source: {
@@ -446,6 +473,135 @@ export const ESSENTIALS: EssentialsPiece[] = [
       verification: "All 42 notes of the tune match both sources (Mozart's theme in 2/4 with two ornamented cadences, here plain as the song is sung). Bass read off the 1878 score, bars 1–8 and 9–12.",
     },
     incipit: "C5 C5 G5 G5 A5 A5 G5 F5 F5 E5 E5 D5 D5 C5 G5 G5 F5 F5 E5 E5 D5", incipitBasis: "pd-score",
+  },
+  {
+    slug: "wedding-march", rank: 60, title: "Wedding March", composer: "Felix Mendelssohn", genre: "classical",
+    source: { url: `${MUTOPIA}Mendelssohn-BartholdyF/O61/Sommernachtstraum-wedding-march/Sommernachtstraum-wedding-march.mid`, sha256: "db95bd1d11c81fccb6323b389fa7d69de9323f00a9272acf89a2f6c016502f50", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2017/10/24-2198", maintainer: "Alexander Brock", infoUrl: info(2198) },
+    tracks: { right: [0], left: [1, 2] },
+    melodyStartBeat: 20,
+    incipit: "C6 B5 F#5 A5 G5 F5 D5 C5 D5 G4 D5 E5", incipitBasis: "pd-score",
+    note: "Dubois's organ transcription (Durand); the pedal goes to the left hand. Five bars of trumpet fanfare come before the tune. Checked against the Durand edition scan, IMSLP #7402.",
+  },
+  {
+    slug: "hallelujah-chorus", rank: 61, title: "Hallelujah Chorus", composer: "George Frideric Handel", genre: "classical",
+    source: { url: `${MUTOPIA}HandelGF/hallelujah/hallelujah-mids.zip`, member: "chorale-score.mid", sha256: "74bf4f72e3c534d3cea991885106a829c0bb38e362f13432e24b85a7981277d3", licence: "Public Domain", mutopiaId: "Mutopia-2015/01/17-459", maintainer: "Joshua Koo", infoUrl: info(459) },
+    tracks: { right: [0, 1], left: [2, 3], melody: [0] },
+    cutBeats: [0, 12], tempoFix: { scale: 100 / 120 },
+    incipit: "D5 A4 B4 A4 D5 A4 B4 A4 D5 D5 D5 D5 D5 D5 D5 D5 D5 C#5 D5 C#5 D5", incipitBasis: "pd-score",
+    note: "The four choir parts (sopranos and altos in the right hand, tenors and basses in the left), from the choir's entry; the orchestra's three-bar introduction is not in this source. Slowed from ♩=120 to ♩=100. Checked against the Novello vocal score (ed. Prout), IMSLP #162689.",
+  },
+  {
+    slug: "air-on-the-g-string", rank: 62, title: "Air on the G String", composer: "Johann Sebastian Bach", genre: "classical",
+    source: { url: `${MUTOPIA}BachJS/BWV1068/bach-air/bach-air-mids.zip`, member: "bach-air-score.mid", sha256: "af2a0b1c1649cf212f7d358d48f0a591a48c4ac907aaa26773c422d039860bf2", licence: "Creative Commons Attribution-ShareAlike 3.0", mutopiaId: "Mutopia-2008/10/28-242", maintainer: "jeff covey", infoUrl: info(242) },
+    tracks: { right: [0, 1, 2], left: [3], melody: [0] },
+    cutBeats: [20, 24],
+    incipit: "F#5 B5 G5 F#5 E5 D5 C#5 D5 C#5 B4 A4 A5 F#5 C5 B4 E5", incipitBasis: "pd-score",
+    note: "The Air from Orchestral Suite No. 3 BWV 1068 in D, from the string parts; the Full version plays all four on the piano. The source MIDI plays the first-half ending and then the second straight after it; the first ending is cut so the cadence sounds once. Repeats are not taken. Checked against the Bach-Gesellschaft score, IMSLP #1468.",
+  },
+  {
+    slug: "gounod-ave-maria", rank: 63, title: "Ave Maria (Bach–Gounod)", composer: "Charles Gounod, after J. S. Bach", genre: "classical",
+    source: { url: `${MUTOPIA}GounodC/AveMaria-PianoViolin/AveMaria-PianoViolin.mid`, sha256: "374fa21eccbaad7b994da5b8db779c65cc527a382bf819b82126dfcd678a4297", licence: "Public Domain", mutopiaId: "Mutopia-2017/01/25-2167", maintainer: "Yann Leprince", infoUrl: info(2167) },
+    tracks: { right: [0, 1], left: [2], melody: [0] },
+    melodyStartBeat: 16,
+    incipit: "E5 F5 G5 D5 E5 A5 A4 B4 C5 D5 E5 D5 G5 G4 A4 B4 C5 D5 C5", incipitBasis: "pd-score",
+    note: "Violin and piano: the violin's tune over Bach's Prelude in C, both in the right hand. Checked against the Heugel edition scan, IMSLP #258490.",
+  },
+  {
+    slug: "brindisi", rank: 64, title: "Brindisi (Libiamo ne' lieti calici)", composer: "Giuseppe Verdi", genre: "classical",
+    source: { url: `${MUTOPIA}VerdiG/Traviata_02/Traviata_02.mid`, sha256: "b6d7d5243e9543e7d43cfb427ed7f2fb567165b7d4037734295cf44cb12bc4b2", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1215", maintainer: "Alberto Corella", infoUrl: info(1215) },
+    melodyStartBeat: 2.5, tempoBpm: 90, keepLeaps: true,
+    incipit: "F5 D6 F5 D6 D6 F5 D6 D6 C#6 D6 F6 Eb6 D6", incipitBasis: "pd-score",
+    note: "La Traviata No. 2 in Toledo's piano transcription. The source sets no tempo; the score's Allegretto ♩.=60 in 3/8 is ♩=90. Checked against the same transcription's scan, IMSLP #280103.",
+  },
+  {
+    slug: "carmen-prelude", rank: 65, title: "Carmen: Prelude", composer: "Georges Bizet", genre: "classical",
+    source: { url: `${MUTOPIA}BizetG/prelude/prelude.mid`, sha256: "56f763077572437e5975a6bcdad3ca67fafd0694479bbcffef0a23f36d37e878", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2005/11/22-635", maintainer: "Alex O'S", infoUrl: info(635) },
+    tempoFix: { at: [{ beat: 240, bpm: 58 }] },
+    incipit: "A5 A5 A5 A5 E5 D5 E5 A5 A5 A5 A5 B5 C#6 B5 A5 A5 A5 B5 A5 G#5 A5", incipitBasis: "pd-score",
+    note: "Includes the Toreador refrain. The closing Andante moderato (the fate motif) is marked ♩=58 in the score but the source plays it at the opening's 116, so it is slowed there. The first-section repeat is not taken. Checked against the Choudens first-edition vocal score, IMSLP #108884.",
+  },
+  {
+    slug: "rachmaninoff-prelude-c-sharp-minor", rank: 66, title: "Prelude in C-sharp Minor, Op. 3 No. 2", composer: "Sergei Rachmaninoff", genre: "classical",
+    source: { url: `${MUTOPIA}RachmaninoffS/O3/rach-prelude-op3-no2/rach-prelude-op3-no2.mid`, sha256: "cd7879a13accb06c539b1a74855121ed25ec4c71f8069473c6fc78ae56d7c43b", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2015/07/09-2033", maintainer: "Petro Kostandy", infoUrl: info(2033) },
+    tracks: { right: [0, 1], left: [2, 3] },
+    tempoFix: { scale: 0.83 }, keepLeaps: true,
+    incipit: "A3 G#3 C#3 C#5 E5 D#5 A3 D5 G#3 C5 C#3 C#5 E5 D#5", incipitBasis: "pd-score",
+    note: "Published 1893; Rachmaninoff died in 1943. The source runs at ♩=60/192/62 (Lento, Agitato, Tempo I), 2:44 against the usual 3:30; its tempos are scaled to ♩≈50/160/51. Checked against the Gutheil edition scan, IMSLP #641676.",
+  },
+  {
+    slug: "stars-and-stripes-forever", rank: 67, title: "The Stars and Stripes Forever", composer: "John Philip Sousa", genre: "other",
+    source: { url: `${MUTOPIA}SousaJP/TheStarsAndStripesForever/TheStarsAndStripesForever.mid`, sha256: "73e75e76c0708dbec4697ab61438b5c63ca3b5c1a56de59f1f5ab0478fd3b274", licence: "Public Domain", mutopiaId: "Mutopia-2017/11/06-626", maintainer: "Benjamin Bloomfield", infoUrl: info(626) },
+    incipit: "Eb5 D5 Eb5 C5 Eb5 F5 F#5 G5 G#5 A5 Bb5 Bb4 G5 G5 G5 G5", incipitBasis: "pd-score",
+    note: "Sousa's own piano version (John Church, 1897). Checked against the first-edition scan, IMSLP #14778.",
+  },
+  {
+    slug: "revolutionary-etude", rank: 68, title: "Revolutionary Étude, Op. 10 No. 12", composer: "Frédéric Chopin", genre: "classical",
+    source: { url: `${MUTOPIA}ChopinFF/O10/op-10-12-wfi/op-10-12-wfi.mid`, sha256: "1902287905aa68175f9d13207e6cfc397894d4210617ec1a5c1ae38334c3c7d6", licence: "Public Domain", mutopiaId: "Mutopia-2018/05/15-743", maintainer: "Roland Goretzki", infoUrl: info(743) },
+    melodyStartBeat: 38.75,
+    incipit: "C6 D6 Eb6 Eb6 G5 G5 G5 Ab5", incipitBasis: "pd-score",
+    note: "The right-hand octave theme enters in bar 10 after the opening chords and left-hand runs. Checked against IMSLP #514955.",
+  },
+  {
+    slug: "gnossienne-1", rank: 69, title: "Gnossienne No. 1", composer: "Erik Satie", genre: "classical",
+    source: { url: `${MUTOPIA}SatieE/Gnossienne/no_1/no_1.mid`, sha256: "f49fc6c6653295e09350d64479d09b4c31091aa5dade81f2494383ab7e71708a", licence: "Creative Commons Attribution-ShareAlike 4.0", mutopiaId: "Mutopia-2015/07/23-2035", maintainer: "Knute Snortum", infoUrl: info(2035) },
+    melodyStartBeat: 1, tempoFix: { scale: 0.88 },
+    incipit: "C5 Eb5 D5 C5 C5 B4 C5 B4 C5 Eb5 D5 C5 E5 F5 E5 F5", incipitBasis: "pd-score",
+    note: "Grace notes are part of the tune. ♩=100 slowed to ♩=88, nearer most recordings of “Lent”. Checked against the Rouart-Lerolle 1913 first edition scan, IMSLP #920505.",
+  },
+  {
+    slug: "debussy-arabesque-1", rank: 70, title: "Arabesque No. 1", composer: "Claude Debussy", genre: "classical",
+    source: { url: `${MUTOPIA}DebussyC/L66/debussy_Arabesque_1/debussy_Arabesque_1.mid`, sha256: "6732dc10799ec0af47d19d9095562d0671864a750129e0279901def169a34757", licence: "Public Domain", mutopiaId: "Mutopia-2011/10/25-1777", maintainer: "Keith OHara", infoUrl: info(1777) },
+    melodyStartBeat: 1, dropUnisonsIn: [0], tempoFix: { scale: 100 / 144 },
+    incipit: "C#5 E5 F#5 G#5 D#5 B4 A4 C#5 D#5 E5 B4 G#4", incipitBasis: "pd-score",
+    note: "The source's right hand carries four hidden notes doubling the left (slur anchors); they are dropped. Its ♩=144 runs under 3 minutes against the usual 4–4½, so it is slowed to ♩=100. Checked against the Durand 1904 scan, IMSLP #254504.",
+  },
+  {
+    slug: "pathetique-3", rank: 71, title: "Pathétique Sonata (3rd Movement)", composer: "Ludwig van Beethoven", genre: "classical",
+    source: { url: `${MUTOPIA}BeethovenLv/O13/pathetique-3/pathetique-3.mid`, sha256: "e0e27f158b9eac0747569f0e4096c96c54a5eba425c567b368523afef2190797", licence: "Public Domain", mutopiaId: "Mutopia-2013/01/08-296", maintainer: "Chris Sawer", infoUrl: info(296) },
+    incipit: "G4 C5 D5 Eb5 F5 D5 Eb5 C5 C5 B4 C5 D5 Eb5 D5 Eb5 F5 G5 G5", incipitBasis: "pd-score",
+    note: "Checked against the Universal Edition (Schenker) scan, IMSLP #00008; grace notes are left out of the incipit.",
+  },
+  {
+    slug: "prelude-in-a-major", rank: 72, title: "Prelude in A Major, Op. 28 No. 7", composer: "Frédéric Chopin", genre: "classical",
+    source: { url: `${MUTOPIA}ChopinFF/O28/Chop-28-7/Chop-28-7.mid`, sha256: "6eed7f2185afd852f01d695e50db84cdb4c8742de1a26294dc3202569346ef36", licence: "Public Domain", mutopiaId: "Mutopia-2015/01/17-470", maintainer: "Magnus Lewis-Smith", infoUrl: info(470) },
+    tempoFix: { scale: 63 / 120 },
+    incipit: "E4 C#5 D5 B4 B4 B4 F#5 D#5 E5 A5 A5 A5 C#5 A#4 B4 D5", incipitBasis: "pd-score",
+    note: "The source's ♩=120 plays this Andante in 24 seconds, twice the usual pace; slowed to ♩=63. Checked against IMSLP #974284.",
+  },
+  {
+    slug: "brahms-waltz-op-39-15", rank: 73, title: "Waltz in A-flat, Op. 39 No. 15", composer: "Johannes Brahms", genre: "classical",
+    source: { url: `${MUTOPIA}BrahmsJ/O39/waltz-op39-15/waltz-op39-15.mid`, sha256: "e081ef3fe7023cdf4656e1528df50534b2e3df863cd0a194a04a82206f783ace", licence: "Public Domain", mutopiaId: "Mutopia-2006/07/30-794", maintainer: "Brian D. Rude", infoUrl: info(794) },
+    tempoFix: { scale: 84 / 116 },
+    incipit: "C5 Ab4 Ab4 C5 C5 Ab4 Ab4 C5 Db5 Eb5 Db5 C5 Bb4 C5 Ab4 Ab4 Eb5 F5", incipitBasis: "pd-score",
+    note: "The original version, in A-flat. The source's ♩=116 runs 1:08 against the usual 1:30–1:50, so it is slowed to ♩=84. Checked against the Breitkopf Werke scan, IMSLP #84174.",
+  },
+  {
+    slug: "minuet-in-g-minor", rank: 74, title: "Minuet in G Minor", composer: "Christian Petzold (attr. J. S. Bach)", genre: "classical",
+    source: { url: `${MUTOPIA}BachJS/BWVAnh115/anna-magdalena-05/anna-magdalena-05.mid`, sha256: "6584a133df31cc3635af7c616b14e8c67f8d99df96a91371c54daf3745d4f444", licence: "Public Domain", mutopiaId: "Mutopia-2015/08/21-76", maintainer: "Allen Garvin", infoUrl: info(76) },
+    incipit: "Bb5 A5 G5 A5 D5 D5 G5 G4 A4 Bb4 C5 D5 Eb5 F5 Eb5 D5", incipitBasis: "pd-score",
+    note: "BWV Anh. 115, the partner of the Minuet in G. Repeats are not taken. Checked against the Bach-Gesellschaft vol. 43 scan, IMSLP #02320.",
+  },
+  {
+    slug: "in-the-bleak-midwinter", rank: 75, title: "In the Bleak Midwinter", composer: "Gustav Holst", genre: "other",
+    source: { url: `${MUTOPIA}HolstGT/cranham/cranham.mid`, sha256: "8bdd6cb58b8bef36cfa18ae2046128ae3faddf9ed2be1341d3fa09ee9aa745e1", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1233", maintainer: "Steve Dunlop", infoUrl: info(1233) },
+    tempoBpm: 96, cutBeats: [0, 1],
+    incipit: "A4 Bb4 C5 A4 G4 F4 G4 A4 G4 D4 G4 A4 Bb4 C5 A4 G4 F4 G4 A4 G4 F4 F4", incipitBasis: "pd-score",
+    note: "The hymn tune CRANHAM (1906). The source opens with an upbeat that only later verses need, which also put every barline a beat late; it is cut, as in the first verse. The source's tempo setting is misspelt, so it played at ♩=60; The English Hymnal marks ♩=100. Checked against The English Hymnal (1906) scan, IMSLP #989464.",
+  },
+  {
+    slug: "abide-with-me", rank: 76, title: "Abide with Me", composer: "William H. Monk", genre: "other",
+    source: { url: `${MUTOPIA}MonkWH/eventide/eventide.mid`, sha256: "1a1e1a2c28b23f3e769aa49958e32bd4aa1eaf8e4555729a9e1b2997649f71eb", licence: "Public Domain", mutopiaId: "Mutopia-2008/01/13-1241", maintainer: "Steve Dunlop", infoUrl: info(1241) },
+    tempoBpm: 72,
+    incipit: "F#4 F#4 E4 D4 A4 B4 A4 A4 G4 F#4 F#4 G4 A4 B4 A4 G4 E4 F#4 G#4 A4", incipitBasis: "pd-score",
+    note: "The hymn tune EVENTIDE, in D (hymnals usually print E-flat). The source's tempo setting is misspelt, so it played at ♩=60; ♩=72 is a usual hymnal tempo. Checked against a hymnal scan, IMSLP #153572.",
+  },
+  {
+    slug: "happy-farmer", rank: 77, title: "The Happy Farmer, Op. 68 No. 10", composer: "Robert Schumann", genre: "classical",
+    source: { url: `${MUTOPIA}SchumannR/O68/schumann-op68-10-gai-laboureur/schumann-op68-10-gai-laboureur.mid`, sha256: "2cdada01ea988df090bfd0ab4bc377b28d97c7dee390a862822e541a47d921de", licence: "Creative Commons Attribution-ShareAlike 2.5", mutopiaId: "Mutopia-2007/02/11-659", maintainer: "Philippe Hézaine", infoUrl: info(659) },
+    tracks: { right: [0], left: [2] },
+    melodySpans: [{ fromBeat: 0, tracks: [2] }, { fromBeat: 32, tracks: [0] }],
+    incipit: "C3 F3 A3 C4 F3 Bb3 D4 F4 D4 C4 A3 Bb3 G3 C3 Bb3 A3 F3 C3 A3", incipitBasis: "pd-score",
+    note: "The tune is in the left hand for the first half, then moves to the right. Checked against the Breitkopf Werke scan, IMSLP #51556.",
   },
 ];
 

@@ -42,6 +42,19 @@ describe("note-list notation", () => {
     expect(midi.header.tempos[0].bpm).toBeCloseTo(90);
   });
 
+  it("checks bars against meter changes and writes them as time signatures", () => {
+    const score: AuthoredScore = {
+      meter: [4, 4], bpm: 90, pickupBeats: 1, meterChanges: [{ bar: 3, meter: [3, 4] }, { bar: 4, meter: [4, 4] }],
+      melody: "A4 q | D5 w | E5 h. | F5 w", left: ["r q | D3 w | A2 h. | D3 w"],
+    };
+    expect(checkScore(score)).toEqual([]);
+    const midi = new Midi(buildAuthoredMidi(score));
+    const ppq = midi.header.ppq;
+    expect(midi.header.timeSignatures.map((ts) => [ts.ticks / ppq, ...ts.timeSignature])).toEqual([[0, 4, 4], [8, 3, 4], [11, 4, 4]]);
+    expect(midi.tracks[0].notes.map((note) => note.ticks / ppq)).toEqual([3, 4, 8, 11]);
+    expect(checkScore({ ...score, meterChanges: [] }).join()).toMatch(/Bar 3 is 3 beats, expected 4/);
+  });
+
   it("rejects a chord in the melody and voices of different lengths", () => {
     expect(checkScore({ meter: [4, 4], bpm: 90, melody: "C4+E4 w", left: ["C3 w"] }).join()).toMatch(/single line/);
     expect(checkScore({ meter: [4, 4], bpm: 90, melody: "C4 w | D4 w", left: ["C3 w"] }).join()).toMatch(/differ in length/);
