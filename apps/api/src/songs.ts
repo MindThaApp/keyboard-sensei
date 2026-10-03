@@ -66,6 +66,17 @@ const songPatchSchema = z
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one field");
 
+/**
+ * A curated collection the song belongs to, for the shelves on /play.
+ * "beginner": the authored pack from scripts/generate-beginner-pack.ts, which
+ * writes `beginner-<slug>.mid` with no uploader. The client also has an
+ * "essentials" shelf that stays hidden until songs are tagged with it here.
+ */
+export type SongCollection = "beginner" | "essentials";
+
+export const songCollection = (song: { file_path: string; uploader_id: string | null }): SongCollection | null =>
+  !song.uploader_id && path.basename(song.file_path).startsWith("beginner-") ? "beginner" : null;
+
 const songListItem = (song: {
   id: string;
   title: string;
@@ -76,6 +87,7 @@ const songListItem = (song: {
   note_count: number;
   content_rights: string;
   notation_path: string | null;
+  file_path: string;
   uploader_id: string | null;
 }, userId: string) => ({
   id: song.id,
@@ -91,6 +103,7 @@ const songListItem = (song: {
   // here); fetch actual notation bytes via GET /songs/:id/notation.
   notation_path: song.notation_path ? "available" : null,
   mine: song.uploader_id === userId,
+  collection: songCollection(song),
 });
 
 /** Song library routes; mounted behind requireAuth. */

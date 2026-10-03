@@ -8,6 +8,8 @@ import { PrismaClient, ProgressStatus, type Prisma } from "@prisma/client";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import { exercises, lessons } from "../src/content.js";
 import { seedContent } from "../src/seed-content.js";
+import { DUPLICATE_OF, prepareLibraryManifest } from "../src/library-titles.js";
+import { extractSongMetadata, type SongMetadata } from "../src/midi-metadata.js";
 const prisma=new PrismaClient();
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 
@@ -21,25 +23,92 @@ interface LibraryManifestEntry{id:string;title:string;artist:string;genre:string
 interface InstrumentManifestEntry{id:string;name:string;description:string;category:string;rights:string;sourceUrl:string;packDir:string}
 
 /**
+ * Re-measure duration/notes/difficulty from the file itself, so a change to
+ * the difficulty heuristic reaches an existing database on reseed without
+ * re-running the fetch. Falls back to the stored values if the file no longer
+ * parses (it validated when it was fetched).
+ */
+async function measureSongFile(filePath:string,fallback:SongMetadata):Promise<SongMetadata>{
+  try{
+    return extractSongMetadata(new Uint8Array(await readFile(filePath)));
+  }catch(error){
+    console.warn(`Could not re-measure ${path.basename(filePath)}: ${error instanceof Error?error.message:String(error)}`);
+    return fallback;
+  }
+}
+
+/**
  * Upsert the curated song library from scripts/midi-manifest.json. Files come
  * from `pnpm exec tsx scripts/fetch-midi-library.ts`; entries whose file is
  * missing on disk are skipped with a warning so a partial library never
  * breaks seeding.
+ *
+ * Titles are cleaned and known duplicates dropped (src/library-titles.ts).
+ * Idempotent: ids never change, and a dropped duplicate's row is deleted only
+ * while nobody has a play-along attempt on it.
  */
 async function seedSongs():Promise<void>{
   let raw:string;
   try{raw=await readFile(MANIFEST_PATH,"utf8")}catch{console.warn("No midi-manifest.json — skipping song library seed (run scripts/fetch-midi-library.ts)");return}
-  const entries=JSON.parse(raw) as LibraryManifestEntry[];
+  const prepared=prepareLibraryManifest(JSON.parse(raw) as LibraryManifestEntry[]);
+  if(prepared.unresolvedDuplicates.length>0){
+    console.warn(`Song library: possible duplicates not in DUPLICATE_OF: ${prepared.unresolvedDuplicates.map((ids)=>ids.join(" = ")).join("; ")}`);
+  }
+
   let seeded=0,missing=0;
-  for(const entry of entries){
+  for(const entry of prepared.entries){
     const file_path=path.join(LIBRARY_DIR,entry.file);
     if(!existsSync(file_path)){missing+=1;continue}
-    const data={title:entry.title,artist:entry.artist,genre:entry.genre,difficulty:entry.difficulty,duration_sec:entry.durationSec,note_count:entry.noteCount,content_rights:entry.rights,source_url:`${entry.source}`,file_path};
+    const metadata=await measureSongFile(file_path,{durationSec:entry.durationSec,noteCount:entry.noteCount,difficulty:entry.difficulty});
+    const data={
+      title:entry.title,
+      artist:entry.artist,
+      genre:entry.genre,
+      difficulty:metadata.difficulty,
+      duration_sec:metadata.durationSec,
+      note_count:metadata.noteCount,
+      content_rights:entry.rights,
+      source_url:`${entry.source}`,
+      file_path,
+    };
     await prisma.song.upsert({where:{id:`seed-${entry.id}`},create:{id:`seed-${entry.id}`,...data},update:data});
     seeded+=1;
   }
   if(missing>0)console.warn(`Song library: ${missing} manifest entries missing on disk (run scripts/fetch-midi-library.ts to fetch)`);
-  console.log(`Seeded ${seeded} library songs`);
+  console.log(`Seeded ${seeded} library songs (${prepared.renamed.length} titles cleaned up)`);
+
+  // Walk DUPLICATE_OF itself, not just this manifest's drops: a manifest
+  // written by the fetch script already omits them, but old rows may remain.
+  let removed=0;
+  for(const [duplicateId,keptId] of Object.entries(DUPLICATE_OF)){
+    const row=await prisma.song.findUnique({where:{id:`seed-${duplicateId}`},select:{id:true,title:true,uploader_id:true,_count:{select:{attempts:true}}}});
+    if(!row)continue;
+    if(row.uploader_id||row._count.attempts>0){
+      console.warn(`Song library: keeping duplicate "${row.title}" (${row.id}) — it has ${row._count.attempts} play-along attempt(s)`);
+      continue;
+    }
+    await prisma.song.delete({where:{id:row.id}});
+    removed+=1;
+    console.log(`Song library: removed duplicate "${row.title}" (kept ${keptId})`);
+  }
+  if(removed>0)console.log(`Removed ${removed} duplicate library songs`);
+}
+
+/**
+ * Other public songs (the authored beginner pack) also get the current
+ * difficulty heuristic. Users' own uploads keep what was measured at upload.
+ */
+async function remeasurePublicSongs():Promise<void>{
+  const rows=await prisma.song.findMany({where:{uploader_id:null},select:{id:true,file_path:true,duration_sec:true,note_count:true,difficulty:true}});
+  let updated=0;
+  for(const row of rows){
+    // seed-* rows are the manifest library, already handled by seedSongs.
+    if(row.id.startsWith("seed-")||!existsSync(row.file_path))continue;
+    const metadata=await measureSongFile(row.file_path,{durationSec:row.duration_sec,noteCount:row.note_count,difficulty:row.difficulty});
+    await prisma.song.update({where:{id:row.id},data:{difficulty:metadata.difficulty,duration_sec:metadata.durationSec,note_count:metadata.noteCount}});
+    updated+=1;
+  }
+  if(updated>0)console.log(`Re-measured ${updated} other public songs`);
 }
 
 async function seedInstruments():Promise<void>{
@@ -76,6 +145,7 @@ async function main(){
   if(content.deletedLessonIds.length>0||content.deletedExerciseIds.length>0)console.log(`Pruned unreferenced content: lessons [${content.deletedLessonIds.join(", ")}], exercises [${content.deletedExerciseIds.join(", ")}]`);
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});
   await seedSongs();
+  await remeasurePublicSongs();
   await seedInstruments();
   console.log(`Seeded ${lessons.length} lessons, ${exercises.length} exercises, demo user ${demo.email}, and admin ${admin.email}`);
 }
