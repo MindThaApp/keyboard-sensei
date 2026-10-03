@@ -1,0 +1,20 @@
+{
+  "name": "@keyboard-sensei/playalong-core",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@keyboard-sensei/midi-engine": "workspace:*",
+    "@keyboard-sensei/shared-types": "workspace:*",
+    "@tonejs/midi": "^2.0.28"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

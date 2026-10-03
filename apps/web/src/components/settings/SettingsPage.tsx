@@ -17,6 +17,7 @@ import {
   type KeyboardSize,
 } from "../../utils/keyboardRange";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
+import AudioLatencySection from "./AudioLatencySection";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
@@ -540,7 +541,12 @@ export default function SettingsPage() {
       {activeTab === "account" && <AccountSection />}
       {activeTab === "appearance" && <AppearanceSection />}
       {activeTab === "instruments" && <InstrumentSection />}
-      {activeTab === "midi" && <MidiSection />}
+      {activeTab === "midi" && (
+        <>
+          <MidiSection />
+          <AudioLatencySection />
+        </>
+      )}
       {activeTab === "narration" && <NarrationSection />}
       {activeTab === "library" && <SongLibrarySection />}
     </div>
