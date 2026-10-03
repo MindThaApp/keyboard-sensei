@@ -25,7 +25,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authenticated && !user) {
-      void api.getCurrentUser().then(setUser).catch(() => {
+      // Only a rejected token logs you out — a network blip or a request aborted by a
+      // fast reload must not wipe a valid session.
+      void api.getCurrentUser().then(setUser).catch((error: unknown) => {
+        if (!(error instanceof api.ApiError) || error.status !== 401) return;
         api.clearToken();
         setAuthenticated(false);
       });

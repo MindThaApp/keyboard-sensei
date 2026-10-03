@@ -7,6 +7,12 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
   const response = await fetch(`${API_URL}${path}`, {
@@ -14,7 +20,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...init.headers },
   });
   const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  if (!response.ok) throw new Error(body?.error?.message ?? `Request failed (${response.status})`);
+  if (!response.ok) throw new ApiError(body?.error?.message ?? `Request failed (${response.status})`, response.status);
   return body as T;
 }
 
