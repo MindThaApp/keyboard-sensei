@@ -77,10 +77,21 @@ model Song {
   file_path      String
   uploader_id    String?
   created_at     DateTime           @default(now())
+  // One piece offered at several difficulty levels (the Essentials pack):
+  // every version of a piece shares `arrangement_group`; `arrangement_level`
+  // is "beginner" | "intermediate" | "full". NULL for ordinary songs.
+  arrangement_group String?
+  arrangement_level String?
+  // Credit line required by the source's licence (e.g. CC BY typesetting).
+  attribution    String?
+  // A library song superseded by a better version of the same piece. Hidden
+  // from the song list but kept, because users' play-along history points at it.
+  retired_at     DateTime?
   uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
   attempts       PlayAlongAttempt[]
 
   @@index([uploader_id])
+  @@index([arrangement_group])
 }
 
 model Instrument {

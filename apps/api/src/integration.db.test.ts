@@ -479,4 +479,65 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(await m.prisma.lesson.count({ where: { id: "lesson-dummy-retire" } })).toBe(0);
     });
   });
+
+  describe("Essentials replacements", () => {
+    const song = (id: string, file_path: string, uploader_id: string | null = null) =>
+      m.prisma.song.create({
+        data: { id, title: id, artist: "x", genre: "classical", difficulty: 1, duration_sec: 30, note_count: 30, content_rights: "public-domain", file_path, uploader_id },
+      });
+
+    it("deletes unplayed superseded songs, retires played ones, never touches uploads, and is idempotent", async () => {
+      const { applyEssentialsReplacements } = await import("./essentials/replacements.js");
+      const user = await createUser();
+      await song("seed-ludwig-van-beethoven-fur-elise", "/lib/fur.mid"); // played → retired
+      await song("seed-frederic-chopin-minute-waltz", "/lib/minute.mid"); // unplayed → deleted
+      await song("seed-scott-joplin-entertainer", "/lib/ent.mid"); // its Full version is missing → untouched
+      const beginner = await song("beginner-silent-night-row", "/lib/beginner-silent-night.mid"); // beginner pack → retired
+      const upload = await song("upload-elise", "/lib/beginner-amazing-grace.mid", user.id); // an upload → untouched
+      await m.prisma.playAlongAttempt.create({
+        data: { user_id: user.id, song_id: "seed-ludwig-van-beethoven-fur-elise", score: 80, accuracy: 0.8, tempo_pct: 100, lookahead_s: 4, wait_mode: false },
+      });
+
+      const index = [
+        { slug: "fur-elise", level: "full" as const, file: "fur-elise-full.mid", noteCount: 1, durationSec: 30, transpose: 0, shiftSec: 0, timeScale: 1 as const },
+        { slug: "minute-waltz", level: "full" as const, file: "minute-waltz-full.mid", noteCount: 1, durationSec: 30, transpose: 0, shiftSec: 0, timeScale: 1 as const },
+        { slug: "silent-night", level: "beginner" as const, file: "silent-night-beginner.mid", noteCount: 1, durationSec: 30, transpose: 0, shiftSec: 0, timeScale: 1 as const },
+        { slug: "amazing-grace", level: "beginner" as const, file: "amazing-grace-beginner.mid", noteCount: 1, durationSec: 30, transpose: 0, shiftSec: 0, timeScale: 1 as const },
+      ];
+      const report = await applyEssentialsReplacements(m.prisma, index);
+      expect(report.deleted).toEqual(["seed-frederic-chopin-minute-waltz (seed-frederic-chopin-minute-waltz)"]);
+      expect(report.retired).toHaveLength(2);
+
+      const rows = await m.prisma.song.findMany({ select: { id: true, retired_at: true } });
+      const state = Object.fromEntries(rows.map((row) => [row.id, row.retired_at ? "retired" : "live"]));
+      expect(state).toMatchObject({
+        "seed-ludwig-van-beethoven-fur-elise": "retired",
+        "seed-scott-joplin-entertainer": "live",
+        [beginner.id]: "retired",
+        [upload.id]: "live",
+      });
+      expect(state["seed-frederic-chopin-minute-waltz"]).toBeUndefined();
+      expect(await m.prisma.playAlongAttempt.count({ where: { song_id: "seed-ludwig-van-beethoven-fur-elise" } })).toBe(1);
+
+      // The song list hides retired rows; the history still has the attempt.
+      const list = await api("GET", "/songs", { token: user.token });
+      const ids = list.body.songs.map((s: { id: string }) => s.id);
+      expect(ids).not.toContain("seed-ludwig-van-beethoven-fur-elise");
+      expect(ids).toContain("seed-scott-joplin-entertainer");
+      const history = await api("GET", "/songs/attempts/me", { token: user.token });
+      expect(history.status).toBe(200);
+
+      // Idempotent: a second run changes nothing.
+      const again = await applyEssentialsReplacements(m.prisma, index);
+      expect(again).toEqual({ deleted: [], retired: [], restored: [] });
+
+      // If the Essentials version goes away, the retired song comes back.
+      const restored = await applyEssentialsReplacements(m.prisma, []);
+      expect(restored.restored).toHaveLength(2);
+      expect((await m.prisma.song.findUniqueOrThrow({ where: { id: "seed-ludwig-van-beethoven-fur-elise" } })).retired_at).toBeNull();
+
+      await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.song.deleteMany({ where: { id: { in: ["seed-ludwig-van-beethoven-fur-elise", "seed-scott-joplin-entertainer", beginner.id, upload.id] } } });
+    });
+  });
 });
