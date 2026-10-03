@@ -156,7 +156,7 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
               <li key={path} className="flex items-center justify-between gap-3 text-sm">
                 <Link to="/learn" className="text-slate-800 hover:underline dark:text-slate-200">{pathLabel(path)}</Link>
                 <span className="tabular-nums text-slate-700 dark:text-slate-300">
-                  <span className="text-brass-600 dark:text-brass-300" aria-hidden>★ </span>
+                  <span className="text-brass-700 dark:text-brass-300" aria-hidden>★ </span>
                   {earned} / {pathLessons.length * 3}
                 </span>
               </li>

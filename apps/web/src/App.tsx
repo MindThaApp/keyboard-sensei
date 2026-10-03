@@ -158,6 +158,7 @@ export default function App() {
           <Route path="/dashboard" element={<Redirect to="/progress" />} />
           <Route path="/lessons" element={<Redirect to="/learn" />} />
           <Route path="/library" element={<SongLibraryPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />

@@ -48,6 +48,12 @@ function GoalCard({ today }: { today: TodayResponse }) {
             {streak.current > 0 ? `${streak.current}-day goal streak` : "Meet your goal to start a streak"}
             {streak.longest > streak.current && ` · best ${streak.longest}`}
           </p>
+          {streak.frozenDays.length > 0 && (
+            <p className="text-xs text-slate-600 dark:text-slate-300" data-testid="freeze-used">
+              <span aria-hidden>❄️ </span>
+              A streak freeze covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`} ({streak.frozenDays.map((day) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })).join(", ")}).
+            </p>
+          )}
           <p className="text-xs text-slate-600 dark:text-slate-300">
             {streak.freezesAvailable > 0
               ? `${streak.freezesAvailable} streak freeze${streak.freezesAvailable > 1 ? "s" : ""} banked — a missed day won't break your streak.`

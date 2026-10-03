@@ -71,7 +71,8 @@ function BestScore({ score }: { score: number | undefined }) {
   if (score === undefined) return null;
   return (
     <span className="shrink-0 text-xs font-medium tabular-nums text-brass-700 dark:text-brass-300" title="Your best play-along score">
-      <span aria-hidden="true">★ </span>
+      {/* "Best", not a ★: stars now mean mastery, shown next to this. */}
+      <span aria-hidden="true">Best </span>
       <span className="sr-only">Your best score </span>
       {Math.round(score)}
     </span>
