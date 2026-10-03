@@ -295,6 +295,9 @@ function drawStaveSystem(
     }
   }
   for (const { note, ids } of noteEntries) {
+    // Tag rests so they can be told apart from noteheads in the DOM (styling, and
+    // the rest-vs-notehead collision check used when verifying engraving).
+    if (note.isRest()) note.getSVGElement()?.classList.add("ks-rest");
     if (!ids || ids.length === 0) continue;
     const el = note.getSVGElement();
     if (!el) continue;
@@ -357,7 +360,10 @@ export function expandCropBoxForVerticalRange(
 
   const top = Math.min(box.y, requiredTop);
   const bottom = Math.max(box.y + box.height, requiredBottom);
-  return { ...box, y: top, height: bottom - top };
+  // Copy fields explicitly — never `{ ...box }`. The real caller passes the
+  // DOMRect from getBBox(), whose x/y/width/height are prototype getters, not
+  // own properties, so a spread silently drops x and width (→ NaN viewBox).
+  return { x: box.x, y: top, width: box.width, height: bottom - top };
 }
 
 function syncActiveNoteElements(
