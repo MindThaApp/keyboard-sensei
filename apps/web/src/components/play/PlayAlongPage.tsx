@@ -25,7 +25,8 @@ import { OsmdNotation } from "./OsmdNotation";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout, type VisibilityMode } from "./stageLayout";
 import { formatDuration } from "../../utils/songLibrary";
-import { pianoSynth } from "../../utils/synth";
+import { connectPlayAlongAudio } from "../../audio/playAlongAudio";
+import { latencyOffsetMs, useSavedLatencyOffsetMs } from "../../audio/latency";
 
 // Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
 // engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
@@ -112,7 +113,8 @@ export default function PlayAlongPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const engineRef = useRef<PlayAlongEngine | null>(null);
-  const metronomeRef = useRef<PlayAlongMetronome | null>(null);
+  /** Disconnects the run's audio (guide notes + metronome) from the shared scheduler. */
+  const stopAudioRef = useRef<(() => void) | null>(null);
   // The rAF loop is created once in start() and closes over that render's settings.
   // Mirror them in a ref so changing the click sound/level mid-song takes effect
   // without restarting the engine.
@@ -143,6 +145,10 @@ export default function PlayAlongPage() {
   useEffect(() => {
     engineRef.current?.setGuideAudio(settings.guideAudio);
   }, [settings.guideAudio]);
+  const savedLatencyMs = useSavedLatencyOffsetMs();
+  useEffect(() => {
+    engineRef.current?.setLatencyOffsetMs(latencyOffsetMs());
+  }, [savedLatencyMs]);
 
   // Load song metadata + file.
   useEffect(() => {
@@ -260,8 +266,8 @@ export default function PlayAlongPage() {
     cancelAnimationFrame(rafRef.current);
     engineRef.current?.stop();
     engineRef.current = null;
-    metronomeRef.current?.stop();
-    metronomeRef.current = null;
+    stopAudioRef.current?.();
+    stopAudioRef.current = null;
   }, []);
 
   useEffect(() => stop, [stop]);
@@ -337,6 +343,7 @@ export default function PlayAlongPage() {
       tempoPct: settings.tempoPct,
       waitMode: settings.waitMode,
       guideAudio: settings.guideAudio,
+      latencyOffsetMs: latencyOffsetMs(),
       onFinish: (finished) => {
         setResult(finished);
         setPhase("done");
@@ -357,28 +364,23 @@ export default function PlayAlongPage() {
       },
     });
     engineRef.current = engine;
-    // The engine announces guide notes; it no longer plays them itself.
-    const guideTimers = new Set<number>();
-    engine.on((event) => {
-      if (event.type === "guideSilence") {
-        for (const timer of guideTimers) window.clearTimeout(timer);
-        guideTimers.clear();
-        pianoSynth.stopAll();
-        return;
-      }
-      if (event.type !== "guideNoteOn" && event.type !== "guideNoteOff") return;
-      const timer = window.setTimeout(() => {
-        guideTimers.delete(timer);
-        if (event.type === "guideNoteOn") pianoSynth.playNote(event.midi, event.velocity);
-        else pianoSynth.stopNote(event.midi);
-      }, Math.max(0, event.atMs - performance.now()));
-      guideTimers.add(timer);
-    });
     setPaused(false);
+    engine.start(performance.now());
+    // Guide notes and clicks are scheduled ahead at exact times by the shared
+    // audio scheduler, which also keeps the engine ticking in a background tab.
+    const disconnectGuide = connectPlayAlongAudio(engine);
     // clickSafe is false on the handful of recordings whose tempo lurches so hard
     // that a following click is a conductor, not a metronome — see buildBeatGrid.
-    metronomeRef.current = parsed.grid.clickSafe ? new PlayAlongMetronome(parsed.grid.beats) : null;
-    engine.start(performance.now());
+    const stopClicks = parsed.grid.clickSafe
+      ? new PlayAlongMetronome(parsed.grid.beats).follow(engine, () => {
+          const live = settingsRef.current;
+          return { enabled: live.metronome, sound: live.metronomeSound, volume: live.metronomeVolume, level: live.clickLevel };
+        })
+      : () => undefined;
+    stopAudioRef.current = () => {
+      stopClicks();
+      disconnectGuide();
+    };
     setPhase("playing");
 
     let lastHudUpdate = 0;
@@ -395,13 +397,7 @@ export default function PlayAlongPage() {
       // score isn't mounted (ref is null in any other view mode).
       scrollingScoreRef.current?.setSongTime(songTime);
 
-      // Same loop as the waterfall: re-anchor the click off the engine's own song
-      // time every frame rather than pre-scheduling, so it cannot drift from the
-      // notes and cannot click through a wait-mode freeze.
       const live = settingsRef.current;
-      if (live.metronome) {
-        metronomeRef.current?.tick(songTime, active.playbackRate, active.isWaiting, live.metronomeSound, live.metronomeVolume, live.clickLevel);
-      }
 
       const canvas = canvasRef.current;
       if (canvas) {

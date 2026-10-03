@@ -22,6 +22,7 @@ import AppHeader from "./components/shell/AppHeader";
 import { useAuth } from "./contexts/AuthContext";
 import { applyAssessmentPlacement } from "./services/api";
 import { useProgressStore } from "./state/progressStore";
+import AudioNoticeToasts from "./components/shell/AudioNoticeToasts";
 
 /**
  * Page width system. Every page shares one centred column (max-w-6xl, 1152px); the
@@ -131,6 +132,7 @@ export default function App() {
         </Routes>
       </main>
       <FeedbackWidget open={feedbackOpen} onOpenChange={setFeedbackOpen} showLauncher={!isPerformanceView} />
+      <AudioNoticeToasts />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import VirtualPiano from "../piano/VirtualPiano";
 import { uploadSong, type SongGenre } from "../../services/api";
 import { MidiRecorder, type MidiRecordingResult } from "@keyboard-sensei/playalong-core";
 import { parsePlayAlongSong } from "@keyboard-sensei/playalong-core";
-import { pianoSynth } from "../../utils/synth";
+import { playSequence } from "../../audio/noteSequence";
 
 const GENRES: { value: SongGenre; label: string }[] = [
   { value: "classical", label: "Classical" },
@@ -35,7 +35,7 @@ export default function RecordingPage() {
   const navigate = useNavigate();
   const recorderRef = useRef(new MidiRecorder());
   const recordingRef = useRef(false);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stopPreviewRef = useRef<(() => void) | null>(null);
   const [state, setState] = useState<"idle" | "recording" | "ready" | "saving" | "playing">("idle");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [liveNoteCount, setLiveNoteCount] = useState(0);
@@ -47,9 +47,8 @@ export default function RecordingPage() {
   const canSave = !!recording && recording.noteCount >= 20 && recording.durationSec >= 20;
 
   const clearPreview = () => {
-    for (const timer of timersRef.current) clearTimeout(timer);
-    timersRef.current = [];
-    pianoSynth.stopAll();
+    stopPreviewRef.current?.();
+    stopPreviewRef.current = null;
   };
 
   useEffect(() => {
@@ -123,15 +122,12 @@ export default function RecordingPage() {
     clearPreview();
     setState("playing");
     const parsed = parsePlayAlongSong(toArrayBuffer(recording.bytes));
-    let lastEnd = 0;
-    for (const note of parsed.notes) {
-      const onMs = note.startS * 1000;
-      const offMs = onMs + note.durationS * 1000;
-      lastEnd = Math.max(lastEnd, offMs);
-      timersRef.current.push(setTimeout(() => pianoSynth.playNote(note.midi, 90), onMs));
-      timersRef.current.push(setTimeout(() => pianoSynth.stopNote(note.midi), offMs));
-    }
-    timersRef.current.push(setTimeout(() => setState("ready"), lastEnd + 150));
+    stopPreviewRef.current = playSequence(parsed.notes, {
+      onEnd: () => {
+        stopPreviewRef.current = null;
+        setState("ready");
+      },
+    });
   };
 
   const save = async () => {

@@ -8,6 +8,8 @@ import VirtualPiano from "../piano/VirtualPiano";
 import NotationRenderer from "../notation/NotationRenderer";
 import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
+import { playSequence } from "../../audio/noteSequence";
+import { latencyOffsetMs } from "../../audio/latency";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
 import { estimateKey, type KeyInfo } from "../../utils/keySignature";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
@@ -148,7 +150,7 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey }: Props) {
-  const { subscribe, mockAdapter } = useMidiContext();
+  const { subscribe } = useMidiContext();
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
 
@@ -191,8 +193,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const pausedMs = useRef(0);
   /** Wall-clock moment the current pause began; null when not paused. */
   const pauseStart = useRef<number | null>(null);
-  const previewTimeouts = useRef<number[]>([]);
-  const previewSounding = useRef<Set<number>>(new Set());
+  const stopListenRef = useRef<(() => void) | null>(null);
+  const [listenNotes, setListenNotes] = useState<number[]>([]);
   const metronomeOnRef = useRef(metronomeOn);
   metronomeOnRef.current = metronomeOn;
   const metronomeSettingsRef = useRef(metronomeSettings);
@@ -216,7 +218,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     () =>
       subscribe((event) => {
         if (!active.current) return;
-        const elapsedMs = elapsedPerformanceMs(event.timestampMs, start.current, pausedMs.current);
+        // The player plays in time with what they HEAR, which is late by the output
+        // latency; move each press back by that much before judging or recording it.
+        const elapsedMs = elapsedPerformanceMs(event.timestampMs - latencyOffsetMs(), start.current, pausedMs.current);
         raw.current.push({ ...event, timestampMs: elapsedMs });
         if (event.type !== "noteon") return;
         setPlayed(true);
@@ -238,10 +242,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   );
 
   const stopPreview = () => {
-    for (const id of previewTimeouts.current) window.clearTimeout(id);
-    previewTimeouts.current = [];
-    for (const note of previewSounding.current) mockAdapter.triggerNoteOff(note);
-    previewSounding.current.clear();
+    stopListenRef.current?.();
+    stopListenRef.current = null;
+    setListenNotes([]);
   };
 
   // Cancel any sound/clicks/live-follow loop when the exercise unmounts.
@@ -282,25 +285,24 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     stopPreview();
     setPhase("listening");
     const firstBeat = Math.min(...exercise.expected.map((n) => n.startBeat));
-    let lastEnd = 0;
-    for (const event of exercise.expected) {
-      const onAt = (event.startBeat - firstBeat) * msPerBeat;
-      const offAt = onAt + event.durationBeats * msPerBeat;
-      lastEnd = Math.max(lastEnd, offAt);
-      previewTimeouts.current.push(
-        window.setTimeout(() => {
-          previewSounding.current.add(event.note);
-          mockAdapter.triggerNoteOn(event.note, 96);
-        }, onAt),
-      );
-      previewTimeouts.current.push(
-        window.setTimeout(() => {
-          previewSounding.current.delete(event.note);
-          mockAdapter.triggerNoteOff(event.note);
-        }, offAt),
-      );
-    }
-    previewTimeouts.current.push(window.setTimeout(() => setPhase((p) => (p === "listening" ? "idle" : p)), lastEnd + 150));
+    const secondsPerBeat = msPerBeat / 1000;
+    stopListenRef.current = playSequence(
+      exercise.expected.map((event) => ({
+        midi: event.note,
+        startS: (event.startBeat - firstBeat) * secondsPerBeat,
+        durationS: event.durationBeats * secondsPerBeat,
+      })),
+      {
+        velocity: 96,
+        onNote: (midi, on) =>
+          setListenNotes((current) => (on ? [...current, midi] : current.filter((note) => note !== midi))),
+        onEnd: () => {
+          stopListenRef.current = null;
+          setListenNotes([]);
+          setPhase((p) => (p === "listening" ? "idle" : p));
+        },
+      },
+    );
   };
 
   const flashLiveDelta = (value: number) => {
@@ -386,7 +388,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       start.current = performance.now();
       active.current = true;
       setPhase("recording");
-      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      onRecordingClockRef.current?.({ startTimeMs: start.current + pausedMs.current, effectiveBpm });
       return;
     }
     setPhase("counting-in");
@@ -396,13 +398,15 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       sound: metronomeSettingsRef.current.sound,
       volume: metronomeSettingsRef.current.volume,
       onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
-      onGo: () => {
-        start.current = performance.now();
+      onGo: (downbeatMs) => {
+        // The exact time the downbeat was scheduled to sound, not when this
+        // callback happened to run.
+        start.current = downbeatMs;
         active.current = true;
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
         startLiveFollow();
-        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+        onRecordingClockRef.current?.({ startTimeMs: start.current + pausedMs.current, effectiveBpm });
       },
     });
   };
@@ -434,9 +438,9 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
    */
   const resumeExercise = () => {
     if (phase !== "paused") return;
-    const unfreeze = () => {
+    const unfreeze = (resumeAtMs = performance.now()) => {
       if (pauseStart.current !== null) {
-        pausedMs.current += performance.now() - pauseStart.current;
+        pausedMs.current += resumeAtMs - pauseStart.current;
         pauseStart.current = null;
       }
     };
@@ -444,7 +448,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       unfreeze();
       active.current = true;
       setPhase("recording");
-      onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+      onRecordingClockRef.current?.({ startTimeMs: start.current + pausedMs.current, effectiveBpm });
       return;
     }
     setPhase("counting-in");
@@ -454,13 +458,13 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       sound: metronomeSettingsRef.current.sound,
       volume: metronomeSettingsRef.current.volume,
       onBeat: (index, isCountIn) => setBeat({ index, isCountIn }),
-      onGo: () => {
-        unfreeze();
+      onGo: (downbeatMs) => {
+        unfreeze(downbeatMs);
         active.current = true;
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
         startLiveFollow(true);
-        onRecordingClockRef.current?.({ startTimeMs: start.current, effectiveBpm });
+        onRecordingClockRef.current?.({ startTimeMs: start.current + pausedMs.current, effectiveBpm });
       },
     });
   };
@@ -588,6 +592,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         highestNote={highestNote}
         recommendedRange={exerciseRange}
         expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : []}
+        soundingNotes={listenNotes}
         feedbackByNote={feedback}
       />
 
