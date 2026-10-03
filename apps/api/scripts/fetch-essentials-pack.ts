@@ -1,7 +1,7 @@
 /**
  * Fetch the Essentials pack's source MIDI files (see src/essentials/manifest.ts).
  *
- * Every source is downloaded from its pinned Mutopia URL and rejected unless
+ * Every Mutopia source is downloaded from its pinned URL and rejected unless
  * its sha256 matches the manifest, so the pack is reproducible. Zip sources
  * have their member extracted. Each file is validated (parses, plausible
  * duration, sane tempo and meter) and written to
@@ -15,7 +15,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ToneMidi from "@tonejs/midi";
 import { ESSENTIALS_DIR, sourceFileName, unzipMember } from "../src/essentials/build.js";
-import { ESSENTIALS } from "../src/essentials/manifest.js";
+import { AUTHORED_SCORES } from "../src/essentials/authored/index.js";
+import { buildAuthoredMidi } from "../src/essentials/authored/notation.js";
+import { ESSENTIALS, isAuthored } from "../src/essentials/manifest.js";
 import { extractSongMetadata } from "../src/midi-metadata.js";
 
 const { Midi } = ToneMidi;
@@ -55,20 +57,29 @@ async function main(): Promise<void> {
 
   for (const piece of ESSENTIALS) {
     try {
-      let raw = cache.get(piece.source.url);
-      if (!raw) {
-        raw = await download(piece.source.url);
-        cache.set(piece.source.url, raw);
+      const { source } = piece;
+      let bytes: Buffer;
+      if (isAuthored(source)) {
+        // Arranged in this repo: the "fetch" is writing its score out as MIDI.
+        const score = AUTHORED_SCORES[piece.slug];
+        if (!score) throw new Error("no authored score");
+        bytes = buildAuthoredMidi(score);
+      } else {
+        let raw = cache.get(source.url);
+        if (!raw) {
+          raw = await download(source.url);
+          cache.set(source.url, raw);
+        }
+        const sha256 = createHash("sha256").update(raw).digest("hex");
+        if (sha256 !== source.sha256) throw new Error(`sha256 mismatch (got ${sha256}) — the upstream file changed`);
+        bytes = source.member ? unzipMember(raw, source.member) : raw;
       }
-      const sha256 = createHash("sha256").update(raw).digest("hex");
-      if (sha256 !== piece.source.sha256) throw new Error(`sha256 mismatch (got ${sha256}) — the upstream file changed`);
-      const bytes = piece.source.member ? unzipMember(raw, piece.source.member) : raw;
       const meta = extractSongMetadata(new Uint8Array(bytes)); // throws InvalidMidiError
       const timelineProblem = checkTimeline(bytes);
       if (timelineProblem) throw new Error(timelineProblem);
       await writeFile(path.join(ESSENTIALS_DIR, sourceFileName(piece.slug)), bytes);
       fetched++;
-      console.log(`  ok  ${piece.slug.padEnd(32)} ${meta.noteCount} notes ${meta.durationSec.toFixed(0)}s  ${piece.source.licence}`);
+      console.log(`  ok  ${piece.slug.padEnd(32)} ${meta.noteCount} notes ${meta.durationSec.toFixed(0)}s  ${isAuthored(piece.source) ? "authored" : piece.source.licence}`);
     } catch (error) {
       failed.push(piece.slug);
       console.warn(`SKIP ${piece.slug}: ${error instanceof Error ? error.message : String(error)}`);
