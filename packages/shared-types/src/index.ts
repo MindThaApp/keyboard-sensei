@@ -58,7 +58,8 @@ export interface UserProgress {
 export interface LessonListItem extends Lesson { order: number; progress: LessonProgress }
 /** `exerciseBests`: the learner's best score per exercise in this lesson (absent = never attempted). */
 export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[]; exerciseBests: Record<string, number> }
-export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin" }
+/** `daily_goal_minutes` / `timezone` come with GET and PATCH /users/me (not with login). */
+export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin"; daily_goal_minutes?: number; timezone?: string | null }
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }

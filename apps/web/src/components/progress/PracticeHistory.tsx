@@ -112,7 +112,7 @@ function ExerciseHistory() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Your exercise attempts will show up here. Start a lesson to log your first one.
         </p>
-        <Link to="/" className="primary-button mt-4 inline-block">Browse lessons</Link>
+        <Link to="/learn" className="primary-button mt-4 inline-block">Browse lessons</Link>
       </section>
     );
   }
@@ -158,7 +158,7 @@ function PlayAlongHistory() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Pick a song and play along with the falling notes — your scores land here.
         </p>
-        <Link to="/play" className="primary-button mt-4 inline-block">Browse songs</Link>
+        <Link to="/practice" className="primary-button mt-4 inline-block">Browse songs</Link>
       </section>
     );
   }
@@ -183,13 +183,14 @@ function PlayAlongHistory() {
   );
 }
 
-export default function PracticeHistoryPage() {
+/** Every saved attempt, newest first: lesson exercises or play-along runs. Shown on Progress. */
+export default function PracticeHistory() {
   const [tab, setTab] = useState<"exercises" | "playalong">("exercises");
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice history</h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">Practice history</h2>
         <div className="ml-auto flex gap-1 text-sm" role="tablist" aria-label="History type">
           {([["exercises", "Exercises"], ["playalong", "Play-along"]] as const).map(([value, label]) => (
             <button
