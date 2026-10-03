@@ -46,12 +46,11 @@ export const earTrainingExercises: MidiExercise[] = [
 
 export const earTrainingLessons: Lesson[] = [
   defineLesson({
-    n: 28,
+    id: "lesson-28",
     title: "Ear training: steps and skips",
     level: "intermediate",
     branch: "theory",
     estimatedMinutes: 15,
-    requiresLessonIds: ["lesson-27"],
     objectives: [
       "Tell a step (2nd) from a skip (3rd) by sound alone, without looking at the keys",
       "Play back a short three-note pattern from memory after hearing it",
@@ -95,7 +94,7 @@ export const earTrainingLessons: Lesson[] = [
     skillRewards: rewards({ theory: 3, note_reading: 1, keyboard_layout: 1 }),
   }),
   defineLesson({
-    n: 29,
+    id: "lesson-29",
     title: "Ear training: major or minor?",
     level: "intermediate",
     branch: "theory",
@@ -143,7 +142,7 @@ export const earTrainingLessons: Lesson[] = [
     skillRewards: rewards({ theory: 3, chords: 3 }),
   }),
   defineLesson({
-    n: 30,
+    id: "lesson-30",
     title: "Ear training: play a melody by ear",
     level: "intermediate",
     branch: "theory",

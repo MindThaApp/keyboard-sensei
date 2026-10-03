@@ -80,7 +80,7 @@ dashboardRouter.get("/users/me/dashboard", async (req, res, next) => {
 
     const [allLessons, progressRows, exerciseAttempts, playAlongAttempts, quizAttemptCount, existingAchievements] =
       await Promise.all([
-        prisma.lesson.findMany({ select: { id: true, level: true } }),
+        prisma.lesson.findMany({ where: { retired_at: null }, select: { id: true, level: true } }),
         prisma.userProgress.findMany({
           where: { user_id: uid },
           include: { lesson: { select: { level: true, lesson_json: true } } },

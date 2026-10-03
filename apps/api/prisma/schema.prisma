@@ -34,6 +34,7 @@ model User {
   instruments        Instrument[]
   playalong_attempts PlayAlongAttempt[]
   achievements       UserAchievement[]
+  tts_usage          TtsUserUsage[]
 }
 
 model UserAchievement {
@@ -78,6 +79,8 @@ model Song {
   created_at     DateTime           @default(now())
   uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
   attempts       PlayAlongAttempt[]
+
+  @@index([uploader_id])
 }
 
 model Instrument {
@@ -124,6 +127,8 @@ model PlayAlongAttempt {
   created_at  DateTime @default(now())
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   song        Song     @relation(fields: [song_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
 model TtsUsage {
@@ -145,6 +150,19 @@ model TtsNarration {
   @@unique([lessonId, sectionIndex, voiceId])
 }
 
+/// Characters of NEW narration (cache misses only) each user triggered per UTC day.
+/// Enforces a per-user daily cap so one account cannot drain the shared monthly pool.
+model TtsUserUsage {
+  id             String   @id @default(cuid())
+  user_id        String
+  day            String
+  charactersUsed Int      @default(0)
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, day])
+}
+
 model Lesson {
   id            String         @id
   lesson_json   Json
@@ -152,6 +170,10 @@ model Lesson {
   level         String
   branch        String
   order         Int            @unique
+  /// Set by the seed when a lesson leaves the content but user data still references
+  /// it: the row is kept (history survives), hidden from the course, and given a
+  /// negative order so it sits outside the 1..N unlock chain. NULL = live lesson.
+  retired_at    DateTime?
   created_at    DateTime       @default(now())
   updated_at    DateTime       @updatedAt
   exercises     Exercise[]
@@ -163,6 +185,8 @@ model Exercise {
   id            String            @id
   exercise_json Json
   lesson_id     String
+  /// Same policy as Lesson.retired_at: removed from content but has attempts.
+  retired_at    DateTime?
   created_at    DateTime          @default(now())
   updated_at    DateTime          @updatedAt
   lesson        Lesson            @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
@@ -179,6 +203,8 @@ model ExerciseAttempt {
   created_at       DateTime @default(now())
   user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   exercise         Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
 model QuizAttempt {
@@ -191,6 +217,8 @@ model QuizAttempt {
   created_at      DateTime @default(now())
   user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   lesson          Lesson   @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, lesson_id])
 }
 
 model UserProgress {

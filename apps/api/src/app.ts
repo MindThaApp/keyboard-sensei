@@ -287,6 +287,7 @@ app.get("/lessons", async (req, res, next) => {
     const uid = userId(req);
     const admin = await isAdmin(uid);
     const rows = await prisma.lesson.findMany({
+      where: { retired_at: null },
       orderBy: { order: "asc" },
       include: { progress: { where: { user_id: uid } } },
     });
@@ -316,10 +317,10 @@ app.get("/lessons/:id", async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         progress: { where: { user_id: userId(req) } },
-        exercises: true,
+        exercises: { where: { retired_at: null } },
       },
     });
-    if (!row) {
+    if (!row || row.retired_at) {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
@@ -396,7 +397,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       where: { id: req.params.id },
       include: { lesson: true },
     });
-    if (!row) {
+    if (!row || row.retired_at || row.lesson.retired_at) {
       res.status(404).json({ error: { code: "not_found", message: "Exercise not found" } });
       return;
     }
@@ -463,6 +464,7 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
     // so we scan. The lessons table is small (dozens of rows), so a full scan per
     // answer is fine; prefer this clarity over a raw-SQL jsonpath query.
     const rows = await prisma.lesson.findMany({
+      where: { retired_at: null },
       select: { id: true, order: true, lesson_json: true },
     });
 
@@ -606,6 +608,7 @@ app.post("/users/me/assessment-placement", async (req, res, next) => {
     if (placement.completedLessonCount > 0) {
       const uid = userId(req);
       const rows = await prisma.lesson.findMany({
+        where: { retired_at: null },
         orderBy: { order: "asc" },
         take: placement.completedLessonCount + 1,
       });
