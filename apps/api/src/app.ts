@@ -13,7 +13,13 @@ import type {
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
-import { calculateAssessmentPlacement, validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
+import {
+  calculateAssessmentPlacement,
+  lessonCompletion,
+  resolveLessonStatus,
+  validateLesson,
+  validateMidiExercise,
+} from "@keyboard-sensei/lesson-engine";
 import { createAccessToken, isAdmin, requireAuth } from "./auth.js";
 import { prisma } from "./db.js";
 import { env } from "./config.js";
@@ -25,7 +31,7 @@ import { songsRouter } from "./songs.js";
 import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { dashboardRouter } from "./dashboard.js";
-import { unlockLesson } from "./progress.js";
+import { exerciseBestsFor, recordLessonOutcome, scoreFromResult, unlockLesson } from "./progress.js";
 import { narrationVoiceIdSchema } from "./narration-voices.js";
 import { instrumentUploadRateLimit, loginRateLimit, registerRateLimit, songUploadRateLimit } from "./rate-limits.js";
 
@@ -110,15 +116,6 @@ const sanitizeLesson = (lesson: Lesson): Lesson => ({
     };
   }),
 });
-
-/** Read the numeric `score` out of a stored attempt result JSON, defaulting to 0. */
-const scoreFromResult = (result: Prisma.JsonValue): number => {
-  if (typeof result === "object" && result !== null && !Array.isArray(result)) {
-    const score = (result as Record<string, unknown>).score;
-    if (typeof score === "number") return score;
-  }
-  return 0;
-};
 
 /** Read the `title` out of a stored lesson JSON without requiring a full schema parse. */
 const lessonTitleFromJson = (lessonJson: Prisma.JsonValue): string => {
@@ -288,34 +285,40 @@ app.post("/users/me/password", async (req, res, next) => {
 });
 
 /**
- * Admins see every lesson unlocked without seeded UserProgress rows (read-time
- * unlock, so new lessons are automatically open to them). Completed stays
- * completed; anything else is reported as unlocked.
+ * Status as the learner sees it: stored progress, plus a read-time check of each
+ * lesson's prerequisites (see resolveLessonStatus). Admins see every lesson unlocked
+ * without seeded UserProgress rows, so new lessons are automatically open to them.
  */
-const effectiveStatus = (stored: ProgressStatus | undefined, order: number, admin: boolean): ProgressStatus => {
-  if (stored === ProgressStatus.completed) return ProgressStatus.completed;
-  if (admin) return ProgressStatus.unlocked;
-  return stored ?? (order === 1 ? ProgressStatus.unlocked : ProgressStatus.locked);
-};
+async function completedLessonIdsFor(uid: string): Promise<Set<string>> {
+  const rows = await prisma.userProgress.findMany({
+    where: { user_id: uid, status: ProgressStatus.completed },
+    select: { lesson_id: true },
+  });
+  return new Set(rows.map((row) => row.lesson_id));
+}
 
 app.get("/lessons", async (req, res, next) => {
   try {
     const uid = userId(req);
-    const admin = await isAdmin(uid);
-    const rows = await prisma.lesson.findMany({
-      where: { retired_at: null },
-      orderBy: { order: "asc" },
-      include: { progress: { where: { user_id: uid } } },
-    });
+    const [admin, completedIds, rows] = await Promise.all([
+      isAdmin(uid),
+      completedLessonIdsFor(uid),
+      prisma.lesson.findMany({
+        where: { retired_at: null },
+        orderBy: { order: "asc" },
+        include: { progress: { where: { user_id: uid } } },
+      }),
+    ]);
     res.json(
       rows.map((row) => {
         const progress = row.progress[0];
+        const lesson = validateLesson(row.lesson_json);
         return {
-          ...sanitizeLesson(validateLesson(row.lesson_json)),
+          ...sanitizeLesson(lesson),
           order: row.order,
           progress: {
             lessonId: row.id,
-            status: effectiveStatus(progress?.status, row.order, admin),
+            status: resolveLessonStatus(lesson, progress?.status, completedIds, admin),
             bestScore: progress?.best_score ?? 0,
             completedAt: progress?.completed_at ?? null,
           },
@@ -329,10 +332,11 @@ app.get("/lessons", async (req, res, next) => {
 
 app.get("/lessons/:id", async (req, res, next) => {
   try {
+    const uid = userId(req);
     const row = await prisma.lesson.findUnique({
       where: { id: req.params.id },
       include: {
-        progress: { where: { user_id: userId(req) } },
+        progress: { where: { user_id: uid } },
         exercises: { where: { retired_at: null } },
       },
     });
@@ -340,20 +344,23 @@ app.get("/lessons/:id", async (req, res, next) => {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
-    const admin = await isAdmin(userId(req));
+    const lesson = validateLesson(row.lesson_json);
+    const [admin, completedIds, exerciseBests] = await Promise.all([
+      isAdmin(uid),
+      completedLessonIdsFor(uid),
+      exerciseBestsFor(prisma, uid, row.exercises.map((item) => item.id)),
+    ]);
+    const stored = row.progress[0];
     res.json({
-      lesson: sanitizeLesson(validateLesson(row.lesson_json)),
-      progress: row.progress[0]
-        ? {
-            lessonId: row.id,
-            status: effectiveStatus(row.progress[0].status, row.order, admin),
-            bestScore: row.progress[0].best_score,
-            completedAt: row.progress[0].completed_at,
-          }
-        : admin
-          ? { lessonId: row.id, status: ProgressStatus.unlocked, bestScore: 0, completedAt: null }
-          : null,
+      lesson: sanitizeLesson(lesson),
+      progress: {
+        lessonId: row.id,
+        status: resolveLessonStatus(lesson, stored?.status, completedIds, admin),
+        bestScore: stored?.best_score ?? 0,
+        completedAt: stored?.completed_at ?? null,
+      },
       exercises: row.exercises.map((item) => validateMidiExercise(item.exercise_json)),
+      exerciseBests,
     });
   } catch (e) {
     next(e);
@@ -429,6 +436,11 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
     const result = scoreMidiExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
     const uid = userId(req);
 
+    const lesson = validateLesson(row.lesson.lesson_json);
+    const lessonExerciseIds = lesson.sections.flatMap((section) =>
+      section.type === "midi-exercise" ? [section.exerciseId] : [],
+    );
+
     await prisma.$transaction(async (tx) => {
       await tx.exerciseAttempt.create({
         data: {
@@ -439,33 +451,9 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
           result: json(result),
         },
       });
-      const current = await tx.userProgress.findUnique({
-        where: { user_id_lesson_id: { user_id: uid, lesson_id: row.lesson_id } },
-      });
-      const best = Math.max(current?.best_score ?? 0, result.score);
-      const completed = best >= 70;
-      await tx.userProgress.upsert({
-        where: { user_id_lesson_id: { user_id: uid, lesson_id: row.lesson_id } },
-        create: {
-          user_id: uid,
-          lesson_id: row.lesson_id,
-          status: completed ? ProgressStatus.completed : ProgressStatus.unlocked,
-          best_score: best,
-          completed_at: completed ? new Date() : null,
-        },
-        update: {
-          best_score: best,
-          ...(completed
-            ? { status: ProgressStatus.completed, completed_at: current?.completed_at ?? new Date() }
-            : {}),
-        },
-      });
-      if (completed) {
-        const nextLesson = await tx.lesson.findFirst({ where: { order: row.lesson.order + 1 } });
-        if (nextLesson) {
-          await unlockLesson(tx, uid, nextLesson.id);
-        }
-      }
+      // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
+      const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
+      await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
     });
 
     res.status(201).json(result);
@@ -545,22 +533,9 @@ app.post("/quiz-questions/:id/answer", async (req, res, next) => {
         },
         select: { question_id: true },
       });
-      if (new Set(correctAttempts.map((item) => item.question_id)).size === questionIds.length) {
-        await prisma.userProgress.upsert({
-          where: { user_id_lesson_id: { user_id: uid, lesson_id: found.lesson.id } },
-          create: {
-            user_id: uid,
-            lesson_id: found.lesson.id,
-            status: ProgressStatus.completed,
-            best_score: 100,
-            completed_at: new Date(),
-          },
-          update: { status: ProgressStatus.completed, best_score: 100, completed_at: new Date() },
-        });
-        const nextLesson = rows.find((row) => row.order === found!.order + 1);
-        if (nextLesson) {
-          await unlockLesson(prisma, uid, nextLesson.id);
-        }
+      const completion = lessonCompletion(found.lesson, {}, new Set(correctAttempts.map((item) => item.question_id)));
+      if (completion.completed) {
+        await prisma.$transaction((tx) => recordLessonOutcome(tx, uid, found!.lesson.id, completion));
       }
     }
 
