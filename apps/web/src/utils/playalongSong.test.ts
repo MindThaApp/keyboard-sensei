@@ -220,3 +220,37 @@ describe.skipIf(!hasLibraryFixtures())("parsePlayAlongSong", () => {
     });
   });
 });
+
+describe("parsePlayAlongSong keys", () => {
+  const scale = (midi: Midi, tonic: number) => {
+    const track = midi.addTrack();
+    [0, 2, 4, 5, 7, 9, 11, 12, 7, 4, 0].forEach((step, i) => track.addNote({ midi: tonic + step, time: i * 0.5, duration: 0.5 }));
+  };
+  const parse = (midi: Midi) => parsePlayAlongSong(new Uint8Array(midi.toArray()).buffer as ArrayBuffer);
+
+  it("uses the file's key-signature event", () => {
+    const midi = new Midi();
+    midi.header.keySignatures.push({ key: "Db", scale: "major", ticks: 0 });
+    scale(midi, 61);
+    expect(parse(midi).keys).toEqual([{ startBeat: 0, startS: 0, key: { fifths: -5, mode: "major" } }]);
+  });
+
+  it("estimates the key when the file declares none", () => {
+    const midi = new Midi();
+    scale(midi, 62);
+    expect(parse(midi).keys[0].key).toEqual({ fifths: 2, mode: "major" });
+  });
+});
+
+describe.skipIf(!hasLibraryFixtures())("parsePlayAlongSong keys (library)", () => {
+  it("reads Clair de Lune as D♭ major, with its E-major middle section", () => {
+    const song = parsePlayAlongSong(loadLibraryFile("claude-debussy-clair-de-lune.mid"));
+    expect(song.keys[0].key).toEqual({ fifths: -5, mode: "major" });
+    expect(song.keys.map((k) => k.key.fifths)).toEqual([-5, 4, -5]);
+  });
+
+  it("does not take Für Elise's placeholder C-major event at its word: the notes say minor", () => {
+    const song = parsePlayAlongSong(loadLibraryFile("ludwig-van-beethoven-fur-elise.mid"));
+    expect(song.keys[0].key.mode).toBe("minor");
+  });
+});
