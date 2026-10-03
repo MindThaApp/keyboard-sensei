@@ -63,6 +63,12 @@ describe("engrave — ties, chords and voicing", () => {
     expect(bars[1].notes[0].ids).toBeUndefined();
   });
 
+  it("adds a bar for a last note that rings over the barline (it used to loop forever)", () => {
+    // Lesson 9's exercise: the last chord starts on beat 4 and is held for two beats.
+    const result = run([note(60, 0, 2), note(64, 0, 2), note(60, 3, 2), note(67, 3, 2)]);
+    expect(measuresOf(result)).toEqual(["h[c/4,e/4] qr q~[c/4,g/4]", "q[c/4,g/4] qr hr"]);
+  });
+
   it("splits a syncopated half note at the middle of a 4/4 bar", () => {
     expect(measuresOf(run([note(60, 0, 1), note(62, 1, 2), note(64, 3, 1)]))).toEqual(["q[c/4] q~[d/4] q[d/4] q[e/4]"]);
   });
