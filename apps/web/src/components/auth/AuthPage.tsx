@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
@@ -56,6 +56,77 @@ function CheckYourEmail({ email }: { email: string }) {
   );
 }
 
+/** A text field with a label that is always visible (not a placeholder), plus optional helper copy. */
+function LabeledInput({
+  label,
+  hint,
+  type = "text",
+  value,
+  onChange,
+  autoComplete,
+}: {
+  label: string;
+  hint?: string;
+  type?: "text" | "email" | "password";
+  value: string;
+  onChange(value: string): void;
+  autoComplete?: string;
+}) {
+  const id = useId();
+  const [shown, setShown] = useState(false);
+  const isPassword = type === "password";
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-medium text-slate-800 dark:text-slate-100">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          className={`input${isPassword ? " pr-16" : ""}`}
+          type={isPassword && shown ? "text" : type}
+          value={value}
+          autoComplete={autoComplete}
+          aria-describedby={hint ? `${id}-hint` : undefined}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 min-w-[44px] px-3 text-sm text-felt-700 underline dark:text-felt-300"
+            aria-pressed={shown}
+            onClick={() => setShown((s) => !s)}
+          >
+            {shown ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-slate-600 dark:text-slate-300">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A small keyboard drawing for the landing card; decorative. */
+function KeysIllustration() {
+  const whites = Array.from({ length: 8 }, (_, i) => i);
+  const blacks = [0, 1, 3, 4, 5];
+  return (
+    <svg viewBox="0 0 160 56" className="h-16 w-full" role="presentation" aria-hidden="true">
+      {whites.map((i) => (
+        <rect key={i} x={i * 20 + 0.5} y={0.5} width={19} height={55} rx={3} className="fill-white stroke-slate-300 dark:fill-slate-100 dark:stroke-slate-500" />
+      ))}
+      <rect x={60.5} y={0.5} width={19} height={55} rx={3} className="fill-felt-400/60 stroke-felt-500" />
+      {blacks.map((i) => (
+        <rect key={i} x={i * 20 + 14} y={0.5} width={12} height={34} rx={2} className="fill-slate-800 dark:fill-slate-900" />
+      ))}
+    </svg>
+  );
+}
+
 export function RegistrationForm({
   onRegistered,
   onGoogleSignedIn,
@@ -94,31 +165,28 @@ export function RegistrationForm({
 
   return (
     <div className="space-y-3">
-      <input
-        aria-label="Display name"
-        className="input"
-        placeholder="Display name"
+      <LabeledInput
+        label="Your name"
+        hint="What we call you in the app. You can change it later."
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={setName}
+        autoComplete="name"
       />
-      <input
-        aria-label="Email"
-        className="input"
+      <LabeledInput
+        label="Email"
         type="email"
-        placeholder="Email"
+        hint="Use an address you can open: it's how you get back in if you forget your password."
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={setEmail}
+        autoComplete="email"
       />
-      <p className="text-xs text-slate-600 dark:text-slate-300">
-        Use an email address you can receive mail at: it's how you reset a forgotten password.
-      </p>
-      <input
-        aria-label="Password"
-        className="input"
+      <LabeledInput
+        label="Password"
         type="password"
-        placeholder="Password (8+ characters)"
+        hint="At least 8 characters."
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={setPassword}
+        autoComplete="new-password"
       />
       {error && (
         <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">
@@ -178,17 +246,18 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
               Keyboard <span className="text-felt-600 dark:text-felt-400">Sensei</span>
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Build classical piano technique through a growing library of focused lessons.
+              Learn piano one small step at a time, on a keyboard or on your screen.
             </p>
           </div>
+          {mode === "landing" && <KeysIllustration />}
 
           {mode === "landing" && (
             <div className="space-y-3">
-              <button className="primary-button w-full" onClick={() => void logIn(true)}>
-                Start Demo
+              <button className="primary-button w-full" onClick={() => setMode("register")}>
+                Create a free account
               </button>
-              <button className="secondary-button w-full" onClick={() => setMode("register")}>
-                Sign Up
+              <button className="secondary-button w-full" onClick={() => void logIn(true)}>
+                Try it without an account
               </button>
               <button
                 className="w-full text-sm text-felt-700 underline dark:text-felt-300"
@@ -201,21 +270,13 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
 
           {mode === "login" && (
             <div className="space-y-3">
-              <input
-                aria-label="Email"
-                className="input"
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <input
-                aria-label="Password"
-                className="input"
+              <LabeledInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+              <LabeledInput
+                label="Password"
                 type="password"
-                placeholder="Password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
+                autoComplete="current-password"
               />
               {error && (
                 <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">

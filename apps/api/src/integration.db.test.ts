@@ -239,9 +239,13 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const songs = {
         library: await m.prisma.song.create({ data: { ...base, title: "ADL cover", content_rights: "cover-arrangement", file_path: await write("seed-cover.mid") } }),
         essentials: await m.prisma.song.create({
-          data: { ...base, id: "essentials-test-piece-full", title: "Essential", content_rights: "cc-by-sa", attribution: "Typeset by someone, CC BY-SA", file_path: await write("essentials/test-piece-full.mid") },
+          data: { ...base, id: "essentials-test-piece-full", title: "Essential", content_rights: "cc-by-sa-2.5", file_licence: "cc-by-sa-2.5", source_kind: "essentials", public_eligible: true, attribution: "Typeset by someone, CC BY-SA", file_path: await write("essentials/test-piece-full.mid") },
         }),
-        beginner: await m.prisma.song.create({ data: { ...base, title: "Beginner tune", content_rights: "public-domain", file_path: await write("beginner-test-tune.mid") } }),
+        beginner: await m.prisma.song.create({ data: { ...base, title: "Beginner tune", content_rights: "public-domain", file_licence: "public-domain", source_kind: "beginner", public_eligible: true, file_path: await write("beginner-test-tune.mid") } }),
+        // Looks like a pack file but the catalogue never cleared it: the column decides, not the path.
+        uncleared: await m.prisma.song.create({
+          data: { ...base, title: "Uncleared", content_rights: "cc-by-nc-sa-4.0", file_licence: "cc-by-nc-sa-4.0", source_kind: "essentials", public_eligible: false, attribution: "Not for the public build", file_path: await write("essentials/uncleared-full.mid") },
+        }),
         upload: await m.prisma.song.create({ data: { ...base, title: "Owner upload", content_rights: "user-upload", file_path: await write("upload-owner.mid"), uploader_id: owner.id } }),
         archive: await m.prisma.song.create({
           data: { ...base, title: "Owner archive import", content_rights: "archive-import", file_path: await write("archive-owner.mid"), notation_path: await write("archive-owner.mxl"), uploader_id: owner.id },
@@ -255,13 +259,27 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       try {
         // Off (the default): the LAN behaviour, unchanged.
         expect(m.env.PUBLIC_CATALOGUE).toBe(false);
-        expect(await listed(stranger.token)).toEqual(ids("library", "essentials", "beginner"));
+        expect(await listed(stranger.token)).toEqual(ids("library", "essentials", "beginner", "uncleared"));
         expect((await api("GET", `/songs/${songs.library.id}/file`, { token: stranger.token })).status).toBe(200);
+
+        // Credits (no sign-in): every shared CC-licensed song, with its attribution.
+        const credits = async () => (await api("GET", "/credits")).body.credits as { song_id: string; attribution: string; licence: string; licence_url: string }[];
+        const offCredits = await credits();
+        expect(offCredits.map((c) => c.song_id)).toEqual(expect.arrayContaining([songs.essentials.id, songs.uncleared.id]));
+        expect(offCredits.map((c) => c.song_id)).not.toContain(songs.beginner.id);
+        expect(offCredits.map((c) => c.song_id)).not.toContain(songs.library.id);
 
         m.env.PUBLIC_CATALOGUE = true;
         expect(await listed(stranger.token)).toEqual(ids("essentials", "beginner"));
         expect(await listed(owner.token)).toEqual(ids("essentials", "beginner", "upload", "archive"));
-        expect(await listed(admin.token)).toEqual(ids("library", "essentials", "beginner", "upload", "archive"));
+        expect(await listed(admin.token)).toEqual(ids("library", "essentials", "beginner", "uncleared", "upload", "archive"));
+        expect((await api("GET", `/songs/${songs.uncleared.id}/file`, { token: stranger.token })).status).toBe(404);
+
+        const onCredits = await credits();
+        expect(onCredits.map((c) => c.song_id)).toContain(songs.essentials.id);
+        expect(onCredits.map((c) => c.song_id)).not.toContain(songs.uncleared.id);
+        const credit = onCredits.find((c) => c.song_id === songs.essentials.id)!;
+        expect(credit).toMatchObject({ attribution: "Typeset by someone, CC BY-SA", licence: "cc-by-sa-2.5", licence_url: "https://creativecommons.org/licenses/by-sa/2.5/" });
 
         // The attribution CC BY-SA requires travels with the song.
         const listing = (await api("GET", "/songs", { token: stranger.token })).body.songs as { id: string; attribution: string | null }[];
