@@ -77,6 +77,9 @@ services:
   # CA once (see the deploy notes for how to fetch it from the caddy_data volume).
   caddy:
     image: caddy:2-alpine
+    environment:
+      # The LAN address or hostname clients use (Caddy issues its internal cert for it).
+      DEPLOY_HOST: ${DEPLOY_HOST:-127.0.0.1}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - keyboard-sensei-caddy-data:/data
