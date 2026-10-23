@@ -43,7 +43,12 @@ export const isInstrumentFetchRateLimited = (userId: string): boolean => {
 
 type PackLayout =
   | { type: "single"; file: string; contentType: string }
-  | { type: "notes"; notes: Record<string, { file: string; contentType: string }> };
+  | {
+      type: "notes";
+      notes: Record<string, { file: string; contentType: string }>;
+      /** Present on multi-layer packs (the VCSL piano): tells the player how to map keys and touch to samples. */
+      sampler?: unknown;
+    };
 
 const instrumentListItem = (instrument: {
   id: string;
@@ -170,6 +175,29 @@ instrumentsRouter.get("/instruments", async (req, res, next) => {
       orderBy: [{ category: "asc" }, { name: "asc" }],
     });
     res.json({ instruments: rows.map((row) => instrumentListItem(row, userId)) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * How to play a pack whose samples aren't one-per-key: the layer/root map from its layout.json,
+ * or `{ sampler: null }` for a plain one-sample-per-note pack.
+ */
+instrumentsRouter.get("/instruments/:id/sampler", async (req, res, next) => {
+  try {
+    const userId = uid(req);
+    const instrument = await prisma.instrument.findUnique({ where: { id: z.string().parse(req.params.id) } });
+    if (!instrument || !(await canAccess(instrument, userId))) {
+      res.status(404).json({ error: { code: "not_found", message: "Instrument not found" } });
+      return;
+    }
+    try {
+      const layout = JSON.parse(await readFile(path.join(instrument.pack_path, "layout.json"), "utf8")) as PackLayout;
+      res.json({ sampler: layout.type === "notes" ? (layout.sampler ?? null) : null });
+    } catch {
+      res.status(404).json({ error: { code: "not_found", message: "Instrument pack not found on disk" } });
+    }
   } catch (e) {
     next(e);
   }

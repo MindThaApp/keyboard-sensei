@@ -1,4 +1,7 @@
 import type { Request, Response } from "express";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { ZodError } from "zod";
@@ -231,5 +234,57 @@ describe("DELETE /instruments/:id", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
     expect(prismaMock.instrument.delete).toHaveBeenCalledWith({ where: { id: "inst-owner-1" } });
+  });
+});
+
+describe("GET /instruments/:id/sampler", () => {
+  const layered = {
+    engine: "layered-piano",
+    version: 1,
+    layers: [{ key: "v3", maxVelocity: 127, trim: 1, roots: [60] }],
+    release: { key: "r", roots: [60], seconds: 0.9 },
+  };
+
+  async function packDir(layout: unknown): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), "ks-pack-"));
+    await writeFile(path.join(dir, "layout.json"), JSON.stringify(layout));
+    return dir;
+  }
+
+  it("hands a layered pack's description to the player", async () => {
+    const dir = await packDir({ type: "notes", notes: { v3_60: { file: "v3_60.mp3", contentType: "audio/mpeg" } }, sampler: layered });
+    mockDb([row({ id: "seed-studio", uploader_id: null, pack_path: dir })]);
+
+    const response = await callInstrumentsRouter({ method: "GET", url: "/instruments/seed-studio/sampler", userId: "owner-1" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ sampler: layered });
+  });
+
+  it("says null for an ordinary one-sample-per-key pack", async () => {
+    const dir = await packDir({ type: "notes", notes: { C4: { file: "C4.mp3", contentType: "audio/mpeg" } } });
+    mockDb([row({ id: "seed-plain", uploader_id: null, pack_path: dir })]);
+
+    const response = await callInstrumentsRouter({ method: "GET", url: "/instruments/seed-plain/sampler", userId: "owner-1" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ sampler: null });
+  });
+
+  it("does not describe another user's upload", async () => {
+    const dir = await packDir({ type: "notes", notes: {}, sampler: layered });
+    mockDb([row({ id: "other-inst", uploader_id: "other-1", pack_path: dir })]);
+
+    const response = await callInstrumentsRouter({ method: "GET", url: "/instruments/other-inst/sampler", userId: "owner-1" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("is a 404 when the pack is missing on disk", async () => {
+    mockDb([row({ id: "seed-gone", uploader_id: null, pack_path: "/nonexistent/pack" })]);
+
+    const response = await callInstrumentsRouter({ method: "GET", url: "/instruments/seed-gone/sampler", userId: "owner-1" });
+
+    expect(response.status).toBe(404);
   });
 });
