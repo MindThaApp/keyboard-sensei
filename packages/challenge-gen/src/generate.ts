@@ -375,7 +375,9 @@ function tieAcrossBarlines(line: Tone[], rng: Rng): Tone[] {
   for (const tone of line) {
     const previous = out[out.length - 1];
     const onBarline = tone.start % BEATS_PER_BAR === 0;
-    if (previous && onBarline && previous.degree === tone.degree && previous.start + previous.duration === tone.start && chance(rng, 0.7)) {
+    // Only whole beats either side: a tie into a dotted eighth reads badly and engraves ambiguously.
+    const plain = previous !== undefined && previous.duration >= 1 && tone.duration >= 1;
+    if (previous && plain && onBarline && previous.degree === tone.degree && previous.start + previous.duration === tone.start && chance(rng, 0.7)) {
       previous.duration += tone.duration;
       previous.held = previous.held || tone.held;
       continue;

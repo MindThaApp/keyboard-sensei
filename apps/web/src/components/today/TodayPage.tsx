@@ -9,6 +9,7 @@ import { drillLink, lessonExerciseLink, songPracticeLink } from "../../utils/pra
 import { warmupFor } from "../../utils/warmup";
 import { Advanced, Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, ProgressRing, Skeleton } from "../ui";
 import { StarRating } from "../progress/ProgressBits";
+import DailyChallengeRow from "../challenge/DailyChallengeRow";
 
 const HANDS_LABEL = { both: "both hands", right: "right hand", left: "left hand" } as const;
 const LEVEL_LABEL = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
@@ -169,7 +170,7 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           accessory="chevron"
         />
       )}
-      {/* WP9 places <DailyChallengeRow /> here: the "Daily challenge · Tier n" row. */}
+      <DailyChallengeRow />
     </ListGroup>
   );
 }
