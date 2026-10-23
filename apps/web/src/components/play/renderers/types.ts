@@ -51,3 +51,17 @@ export interface WaterfallRenderer {
 }
 
 export type NotesStyle = "classic" | "neon2d" | "neon3d";
+
+/**
+ * Dispatched on `window` when a style cannot run as chosen and hands over to another one
+ * (no WebGL 2, or too slow on this device). The page turns it into a toast.
+ */
+export const NOTES_STYLE_FALLBACK_EVENT = "ks:notes-style-fallback";
+
+export interface NotesStyleFallback {
+  style: NotesStyle;
+  fallback: NotesStyle;
+  /** unsupported: the device lacks what the style needs; performance: too slow here;
+   *  unavailable: its code could not be fetched. */
+  reason: "unsupported" | "performance" | "unavailable";
+}

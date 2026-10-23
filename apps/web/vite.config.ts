@@ -25,6 +25,12 @@ const neverPrecacheExtensions = new Set([
   ".wav",
 ]);
 
+/**
+ * Chunks only some users ever load (an optional notes style and its `three` dependency,
+ * ~550 KB): fetched when chosen, never downloaded up front by the service worker.
+ */
+const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/];
+
 type StaticShellFile = {
   url: string;
   digest: string;
@@ -41,7 +47,7 @@ async function listStaticShellFiles(dir: string, prefix = ""): Promise<StaticShe
         return listStaticShellFiles(fullPath, relativePath);
       }
 
-      if (!entry.isFile() || entry.name === "sw.js" || entry.name.endsWith(".map")) {
+      if (!entry.isFile() || entry.name === "sw.js" || entry.name.endsWith(".map") || neverPrecacheChunks.some((pattern) => pattern.test(entry.name))) {
         return [];
       }
 

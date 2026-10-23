@@ -23,7 +23,7 @@ import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
 import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
 import PracticeResultSheet, { type FinishedRun } from "./PracticeResultSheet";
 import PracticeSettingsSheet from "./PracticeSettingsSheet";
-import { loadRenderer, type WaterfallRenderer } from "./renderers";
+import { loadRenderer, NOTES_STYLE_FALLBACK_EVENT, styleFallbackToast, type NotesStyleFallback, type WaterfallRenderer } from "./renderers";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout } from "./stageLayout";
 import { usePlayAlongRun } from "./usePlayAlongRun";
@@ -175,6 +175,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{ id: number; title: string; body: string } | null>(null);
+  const showStyleFallback = useCallback((detail: NotesStyleFallback) => {
+    setToast({ id: Date.now(), ...styleFallbackToast(detail) });
+  }, []);
   const [loopOn, setLoopOn] = useState(preset.loop !== undefined);
   const [loopRange, setLoopRange] = useState<LoopRange>(() => {
     const start = Math.min(preset.loop?.startBar ?? 0, barCount - 1);
@@ -287,7 +290,13 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   useEffect(() => {
     if (!canvas) return;
     let cancelled = false;
-    void loadRenderer(settings.notesStyle).then((renderer) => {
+    const style = settings.notesStyle;
+    // A style whose chunk can't be fetched (e.g. offline before it was ever loaded) gets Classic.
+    const load = loadRenderer(style).catch(() => {
+      if (!cancelled) showStyleFallback({ style, fallback: "classic", reason: "unavailable" });
+      return loadRenderer("classic");
+    });
+    void load.then((renderer) => {
       if (cancelled) {
         renderer.dispose();
         return;
@@ -301,6 +310,14 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       cancelled = true;
     };
   }, [canvas, settings.notesStyle]);
+
+  // A style that can't run here hands over to another one (Neon 3D without WebGL 2, or
+  // too slow on this device) and says so; the page shows it as a toast.
+  useEffect(() => {
+    const onFallback = (event: Event) => showStyleFallback((event as CustomEvent<NotesStyleFallback>).detail);
+    window.addEventListener(NOTES_STYLE_FALLBACK_EVENT, onFallback);
+    return () => window.removeEventListener(NOTES_STYLE_FALLBACK_EVENT, onFallback);
+  }, []);
   useEffect(
     () => () => {
       rendererRef.current?.dispose();
