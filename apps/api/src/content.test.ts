@@ -3,6 +3,8 @@ import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-en
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { DYNAMICS_OPT_IN, exercises, lessons } from "./content.js";
 import { estimateLessonMinutes, midi, vexKey } from "./content/build.js";
+import { LEGACY_PREREQUISITES } from "./content/legacy-prerequisites.js";
+import { validateTiers } from "./content/tiers.js";
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
 const exerciseIdsOf = (lesson: Lesson) =>
@@ -167,6 +169,45 @@ describe("lesson tiers", () => {
       expect(lesson.skills.length, lesson.id).toBeGreaterThan(0);
       expect(validateLesson(lesson).skills, lesson.id).toEqual(lesson.skills);
     }
+  });
+
+  it("never puts a lesson's prerequisite in a later tier", () => {
+    const tierById = new Map(lessons.map((lesson) => [lesson.id, lesson.tier]));
+    for (const lesson of lessons) {
+      for (const requiredId of lesson.unlockCriteria.requiresLessonIds) {
+        expect(tierById.has(requiredId), `${lesson.id} requires unknown ${requiredId}`).toBe(true);
+        expect(tierById.get(requiredId)!, `${lesson.id} requires ${requiredId}`).toBeLessThanOrEqual(lesson.tier);
+      }
+    }
+  });
+
+  it("orders every path by tier, so the Learn screen's order never steps back a tier", () => {
+    for (const path of ["classical-technical", "sightreading-intensive", "modern-chords"] as const) {
+      const tiers = byPath(path).map((lesson) => lesson.tier);
+      expect(tiers, path).toEqual([...tiers].sort((a, b) => a - b));
+    }
+  });
+
+  it("rejects content where a prerequisite sits in a later tier", () => {
+    const [first, second] = lessons;
+    const broken = [
+      { ...first!, tier: 2 as const },
+      { ...second!, tier: 1 as const, unlockCriteria: { ...second!.unlockCriteria, requiresLessonIds: [first!.id] } },
+    ];
+    expect(() => validateTiers(broken)).toThrow(/later tier/);
+  });
+
+  it("keeps the frozen pre-reorder prerequisites pointing at real lessons", () => {
+    const ids = new Set(lessons.map((lesson) => lesson.id));
+    for (const [lessonId, required] of Object.entries(LEGACY_PREREQUISITES)) {
+      expect(ids.has(lessonId), lessonId).toBe(true);
+      for (const id of required) expect(ids.has(id), `${lessonId} -> ${id}`).toBe(true);
+    }
+  });
+
+  it("plays lesson-09 (tier 1, one hand) with the right hand only", () => {
+    const hands = new Set(exerciseById.get("exercise-09")!.expected.map((event) => event.hand));
+    expect([...hands]).toEqual(["right"]);
   });
 
   it("keeps the first-steps tier to the six foundation lessons", () => {

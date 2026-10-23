@@ -10,7 +10,8 @@ const at = (tier: TierId, skills: SkillChip[]): TierAssignment => ({ tier, skill
 /**
  * Tier and skill chips for every lesson, keyed by the permanent lesson id.
  * Tiers 6 and 7 are intentionally empty (the UI shows them as "Coming soon").
- * Tier assignment does not touch the unlock chain, which still follows `order`.
+ * Each path's unlock chain is ordered by tier (see content.ts), so a lesson's
+ * prerequisites are always in the same or an earlier tier (checked by validateTiers).
  */
 export const LESSON_TIERS: Record<string, TierAssignment> = {
   // Tier 0: first steps
@@ -25,7 +26,7 @@ export const LESSON_TIERS: Record<string, TierAssignment> = {
   "lesson-reading-c-position": at(1, ["reading-treble", "five-finger"]),
   "lesson-rhythm-rests": at(1, ["rhythm"]),
   "lesson-08": at(1, ["five-finger", "technique"]),
-  "lesson-09": at(1, ["technique", "two-hands"]),
+  "lesson-09": at(1, ["technique", "five-finger"]),
   "lesson-reading-intervals": at(1, ["reading-treble"]),
   "lesson-11": at(1, ["reading-treble", "rhythm"]),
 
@@ -85,6 +86,13 @@ export const LESSON_TIERS: Record<string, TierAssignment> = {
   "lesson-chords-lead-sheet": at(5, ["chords", "repertoire", "two-hands"]),
 };
 
+/** The tier of a lesson id; throws if the lesson has no assignment. */
+export function tierOf(lessonId: string): TierId {
+  const assignment = LESSON_TIERS[lessonId];
+  if (!assignment) throw new Error(`Lesson ${lessonId} has no tier assignment (content/tiers.ts)`);
+  return assignment.tier;
+}
+
 /** Attach the tier and skills to a lesson; throws if the lesson has no assignment. */
 export function withTier(lesson: Lesson): Lesson {
   const assignment = LESSON_TIERS[lesson.id];
@@ -92,12 +100,23 @@ export function withTier(lesson: Lesson): Lesson {
   return { ...lesson, tier: assignment.tier, skills: assignment.skills };
 }
 
-/** Seed-time validation: every lesson has a tier and at least one skill, and the table has no stray ids. */
+/**
+ * Seed-time validation: every lesson has a tier and at least one skill, the table has
+ * no stray ids, and no lesson waits on a prerequisite from a later tier.
+ */
 export function validateTiers(lessons: readonly Lesson[]): void {
-  const ids = new Set(lessons.map((lesson) => lesson.id));
+  const byId = new Map(lessons.map((lesson) => [lesson.id, lesson]));
+  const ids = new Set(byId.keys());
   for (const lesson of lessons) {
     if (!Number.isInteger(lesson.tier) || lesson.tier < 0 || lesson.tier > 7) throw new Error(`Lesson ${lesson.id} has an invalid tier`);
     if (lesson.skills.length === 0) throw new Error(`Lesson ${lesson.id} has no skills`);
+    for (const requiredId of lesson.unlockCriteria.requiresLessonIds) {
+      const required = byId.get(requiredId);
+      if (!required) throw new Error(`Lesson ${lesson.id} requires unknown lesson ${requiredId}`);
+      if (required.tier > lesson.tier) {
+        throw new Error(`Lesson ${lesson.id} (tier ${lesson.tier}) requires ${requiredId} from a later tier (${required.tier})`);
+      }
+    }
   }
   for (const id of Object.keys(LESSON_TIERS)) {
     if (!ids.has(id)) throw new Error(`content/tiers.ts lists unknown lesson ${id}`);
