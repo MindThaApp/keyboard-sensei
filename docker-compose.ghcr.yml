@@ -35,6 +35,18 @@ services:
       TRUST_PROXY: 2
       # Set REGISTRATION_OPEN=false in .env.deploy to close self-service sign-up.
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # Public release settings; see docker-compose.deploy.yml and docs/operations.md.
+      # (VITE_GOOGLE_CLIENT_ID is a build arg, so the CI-built web image has no Google button.)
+      PUBLIC_CATALOGUE: ${PUBLIC_CATALOGUE:-false}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+      APP_URL: ${APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
