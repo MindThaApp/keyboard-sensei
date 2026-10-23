@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BACKUP_DIR=${BACKUP_DIR:-/home/ramin/backups/keyboard-sensei}
+BACKUP_DIR=${BACKUP_DIR:-$HOME/backups/keyboard-sensei}
 COMPOSE_PROJECT=${COMPOSE_PROJECT:-keyboard-sensei}
 DATE=${DATE:-$(date +%Y-%m-%d_%H%M)}
 
