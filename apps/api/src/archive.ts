@@ -3,6 +3,7 @@ import path from "node:path";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
+import { env } from "./config.js";
 import { extractSongMetadata, InvalidMidiError, isFetchRateLimited, MIDI_LIBRARY_DIR } from "./songs.js";
 
 const searchQuerySchema = z.object({
@@ -55,6 +56,19 @@ async function fetchArchiveRowBytes(sourceRef: string): Promise<{ midiBytes: Buf
 
 /** Archive browse/search routes; mounted behind requireAuth. */
 export const archiveRouter: Router = Router();
+
+/**
+ * PianoCoRe is CC BY-NC-SA 4.0 (non-commercial). Our server fetches and serves the files,
+ * which makes us the distributor, so a public deployment offers neither search nor import.
+ * Songs users imported before stay private to them (see canSeeSong in songs.ts).
+ */
+archiveRouter.use("/archive", (_req, res, next) => {
+  if (!env.PUBLIC_CATALOGUE) {
+    next();
+    return;
+  }
+  res.status(404).json({ error: { code: "not_available", message: "The piano archive isn't available on this server" } });
+});
 
 archiveRouter.get("/archive/search", async (req, res, next) => {
   try {

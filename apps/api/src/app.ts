@@ -172,6 +172,15 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+/** Deployment features the web app adapts to (e.g. no archive search on a public catalogue). */
+app.get("/config", (_req, res) =>
+  res.json({
+    publicCatalogue: env.PUBLIC_CATALOGUE,
+    googleSignIn: env.GOOGLE_CLIENT_IDS.length > 0,
+    registrationOpen: env.REGISTRATION_OPEN,
+  }),
+);
+
 app.use(authRouter);
 
 app.get("/tts/audio/:id", async (req, res, next) => {
