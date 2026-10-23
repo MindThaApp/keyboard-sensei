@@ -234,7 +234,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       syncDevices(connectedDevices);
       setWebMidiConnected(connectedDevices.length > 0);
       setWebMidiError(connectedDevices.length === 0
-        ? "Your MIDI keyboard was disconnected. Plug it back in — it should reconnect automatically."
+        ? "Your keyboard was disconnected. Plug it back in — it should reconnect automatically."
         : null);
     }));
 
@@ -258,7 +258,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const connectWebMidi = useCallback(async () => {
     if (!webMidiSupported) {
       setWebMidiError(
-        "This browser doesn't support Web MIDI hardware input. Use the on-screen keyboard below instead — it works identically for every lesson.",
+        "This browser doesn't support connecting a keyboard. Use the on-screen keyboard below instead — it works identically for every lesson.",
       );
       return;
     }
@@ -266,7 +266,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       await Promise.race([
         webAdapterRef.current!.connect(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("The browser didn't respond to the MIDI request. Unplug your keyboard, plug it back in, then reload the page.")), 5000),
+          setTimeout(() => reject(new Error("The browser didn't respond to the keyboard request. Unplug your keyboard, plug it back in, then reload the page.")), 5000),
         ),
       ]);
       const connectedDevices = webAdapterRef.current!.listDevices();
@@ -276,8 +276,8 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         // instead of USB-to-HOST, so the OS never exposes it as a MIDI input).
         setWebMidiConnected(false);
         setWebMidiError(isNativeApp()
-          ? "No MIDI keyboard found. Plug one in over USB (most phones need a USB-C OTG adapter), or search for a Bluetooth keyboard."
-          : "MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
+          ? "No keyboard found. Plug one in over USB (most phones need a USB-C OTG adapter), or search for a Bluetooth keyboard."
+          : "Keyboard access granted, but no keyboard was detected — check the USB connection and try again.");
         syncDevices([]);
         return;
       }
@@ -286,7 +286,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       syncDevices(connectedDevices);
     } catch (err) {
       setWebMidiConnected(false);
-      setWebMidiError(err instanceof Error ? err.message : "Failed to connect to a MIDI device.");
+      setWebMidiError(err instanceof Error ? err.message : "Failed to connect to a keyboard.");
     }
   }, [webMidiSupported, syncDevices]);
 
