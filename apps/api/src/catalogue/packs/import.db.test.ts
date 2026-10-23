@@ -18,8 +18,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { backfillCatalogue } from "../backfill.js";
 import { sharedSongWhere } from "../eligibility.js";
 import { BATCH_A } from "./batch-a.js";
+import { BATCH_C } from "./batch-c.js";
 import { PACKS_DIR, importPack, type Fetcher } from "./import.js";
-import type { Pack, PackPiece } from "./pack.js";
+import { songIdOf, type Pack, type PackPiece } from "./pack.js";
 
 const { Midi } = ToneMidi;
 
@@ -272,5 +273,33 @@ describe.skipIf(!enabled)("source pack importer (real Postgres)", () => {
     expect(failed.map((piece) => piece.slug)).toEqual(["k331-menuetto"]);
     expect(report.pieces.filter((piece) => piece.incipit?.result === "pass").length).toBe(21);
     expect(report.pieces.filter((piece) => piece.incipit?.result === "none").length).toBe(19);
+  });
+
+  const cachedC = existsSync(path.join(PACKS_DIR, BATCH_C.id, "raw"));
+  it.skipIf(!cachedC)("imports the real Batch C pins as drafts, then re-running changes nothing", async () => {
+    const offline: Fetcher = async (url) => {
+      throw new Error(`not cached: ${url}`);
+    };
+    const first = await importPack(prisma, BATCH_C, { fetcher: offline, year: 2026 });
+    expect(first.pieces.filter((piece) => piece.status === "rejected")).toEqual([]);
+    expect(first.counts).toMatchObject({ created: 30, rejected: 0 });
+
+    const songIds = BATCH_C.pieces.map((piece) => songIdOf(piece));
+    const songs = await prisma.song.findMany({ where: { id: { in: songIds } } });
+    expect(songs).toHaveLength(30);
+    expect(songs.every((song) => song.source_kind === "mutopia" && song.uploader_id === null)).toBe(true);
+    const works = await prisma.work.findMany({ where: { id: { in: BATCH_C.pieces.map((piece) => piece.slug) } }, include: { tags: true } });
+    expect(works).toHaveLength(30);
+    expect(works.every((work) => work.curation_status === "draft")).toBe(true);
+    expect(works.some((work) => work.tags.some((tag) => tag.tag_id === "midiano-classics"))).toBe(false);
+    // Sousa died in 1932: public domain only because the marches came out before 1931.
+    expect(works.filter((work) => work.composer_id === "john-philip-sousa").map((work) => work.pd_status)).toEqual(["pd-us-eu", "pd-us-eu"]);
+    // Drafts: none of it is listed until a reviewer publishes it.
+    expect((await prisma.song.findMany({ where: sharedSongWhere(), select: { id: true } })).filter((song) => songIds.includes(song.id))).toEqual([]);
+
+    const before = await snapshot();
+    const second = await importPack(prisma, BATCH_C, { fetcher: offline, year: 2026 });
+    expect(second.counts).toMatchObject({ created: 0, updated: 0, unchanged: 30, rejected: 0 });
+    expect(await snapshot()).toBe(before);
   });
 });

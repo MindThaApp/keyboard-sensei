@@ -94,6 +94,10 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "friedrich-kuhlau", name: "Friedrich Kuhlau", sort_name: "Kuhlau, Friedrich", born: 1786, died: 1832, aliases: ["Kuhlau", "Frederik Kuhlau"], era: "classical-era" },
   { id: "jean-louis-streabbog", name: "Jean-Louis Streabbog", sort_name: "Streabbog, Jean-Louis", born: 1835, died: 1886, aliases: ["Streabbog", "Louis Streabbog", "Jean-Louis Gobbaerts", "Gobbaerts"], era: "romantic" },
   { id: "jan-ladislav-dussek", name: "Jan Ladislav Dussek", sort_name: "Dussek, Jan Ladislav", born: 1760, died: 1812, aliases: ["Dussek", "Johann Ladislaus Dussek", "J. L. Dussek"], era: "classical-era" },
+  { id: "tom-turpin", name: "Tom Turpin", sort_name: "Turpin, Tom", born: null, died: 1922, aliases: ["Thomas Turpin", "Thomas Million Turpin"], era: "ragtime" },
+  { id: "john-field", name: "John Field", sort_name: "Field, John", born: 1782, died: 1837, aliases: ["Field"], era: "romantic" },
+  { id: "jean-philippe-rameau", name: "Jean-Philippe Rameau", sort_name: "Rameau, Jean-Philippe", born: 1683, died: 1764, aliases: ["Rameau"], era: "baroque" },
+  { id: "domenico-scarlatti", name: "Domenico Scarlatti", sort_name: "Scarlatti, Domenico", born: 1685, died: 1757, aliases: ["Scarlatti"], era: "baroque" },
 ];
 
 /**
