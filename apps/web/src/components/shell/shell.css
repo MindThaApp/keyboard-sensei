@@ -207,6 +207,10 @@ html[data-focus-mode] .ks-feedback-launcher,
 html[data-focus-mode] .ks-toast-viewport {
   display: none !important;
 }
+/* The Practice page's Songs / Gym / Record switcher is page chrome too. */
+html[data-focus-mode] .ks-seg[aria-label="Practice"] {
+  display: none;
+}
 html[data-focus-mode] .ks-shell-main {
   padding-top: 0;
   padding-bottom: 0;
