@@ -6,6 +6,7 @@ import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboard
 import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
 import { useExperienceMode } from "../ui/useExperienceMode";
+import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useMediaQuery } from "../../utils/motion";
 import "./keybed.css";
 
@@ -52,8 +53,9 @@ export interface VirtualPianoProps {
   /** Upper bound for the white keys' height. Key height otherwise scales with key width
    *  (4:1), which made a fit-to-width 14-key keyboard ~290px tall. */
   maxWhiteKeyHeightPx?: number;
-  /** False hides the key-size / instrument / auto-fit row, for a parent that renders
-   *  `KeyboardSizingControls` itself (Play-Along puts them in its settings panel). */
+  /** The key-size / instrument / auto-fit row. Defaults to on in Advanced mode only; pass
+   *  false when a parent renders `KeyboardSizingControls` itself (Play-Along puts them in
+   *  its settings panel). */
   showControls?: boolean;
   /** False hides the "use your computer keyboard" hint line. */
   showHint?: boolean;
@@ -127,6 +129,8 @@ const PianoKey = memo(function PianoKey({
 });
 
 const DEFAULT_MAX_WHITE_KEY_HEIGHT_PX = 180;
+/** An upright phone is narrow but tall: keys keep a playable height however many are fitted in. */
+const PHONE_PORTRAIT_MIN_WHITE_KEY_HEIGHT_PX = 168;
 
 /**
  * Key count + range label, instrument picker, key-size slider and the Auto-fit cycle
@@ -191,6 +195,8 @@ function VirtualPiano({
 }: VirtualPianoProps) {
   const flat = variant === "flat";
   const experience = useExperienceMode();
+  const { device, orientation } = useDeviceClass();
+  const phonePortrait = device === "phone" && orientation === "portrait" && !flat && !sizingProp;
   const finePointer = useMediaQuery("(pointer: fine)");
   const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
@@ -243,6 +249,9 @@ function VirtualPiano({
     onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
     keepTightRangeVisible: true,
     simpleFit: experience === "simple" && !sizingProp && !flat,
+    // On an upright phone the exercise's whole range fits on screen (narrow keys, no
+    // sideways scroll) instead of stopping at the comfortable-key-width floor.
+    fitFloorPx: phonePortrait ? ZOOM_MIN_PX : undefined,
   });
   const sizing = sizingProp ?? ownSizing;
   const { geometry } = sizing;
@@ -276,7 +285,11 @@ function VirtualPiano({
   const expectedSet = new Set(expectedNotes);
   const soundingSet = new Set(soundingNotes);
 
-  const whiteKeyHeightPx = Math.min(geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO, maxWhiteKeyHeightPx);
+  const naturalKeyHeightPx = geometry.whiteKeyWidthPx * WHITE_KEY_HEIGHT_RATIO;
+  const whiteKeyHeightPx = Math.min(
+    phonePortrait ? Math.max(naturalKeyHeightPx, PHONE_PORTRAIT_MIN_WHITE_KEY_HEIGHT_PX) : naturalKeyHeightPx,
+    maxWhiteKeyHeightPx,
+  );
   const blackKeyHeightPx = whiteKeyHeightPx * BLACK_KEY_HEIGHT_RATIO;
 
   function press(note: number) {
@@ -457,7 +470,7 @@ function VirtualPiano({
             aria-valuenow={geometry.lowestNote}
             aria-valuemin={PIANO_LOWEST}
             aria-valuemax={PIANO_HIGHEST}
-            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+            className="absolute top-0 z-30 w-3 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
             style={{ left: 0, height: whiteKeyHeightPx }}
             onPointerDown={sizing.dragHandlers.onLeftPointerDown}
             onPointerMove={sizing.dragHandlers.onPointerMove}
@@ -472,7 +485,7 @@ function VirtualPiano({
             aria-valuenow={geometry.highestNote}
             aria-valuemin={PIANO_LOWEST}
             aria-valuemax={PIANO_HIGHEST}
-            className="absolute top-0 z-30 w-3 -translate-x-1/2 cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
+            className="absolute top-0 z-30 w-3 -translate-x-full cursor-ew-resize touch-none rounded bg-slate-400/40 hover:bg-slate-400/70"
             style={{ left: geometry.widthPx, height: whiteKeyHeightPx }}
             onPointerDown={sizing.dragHandlers.onRightPointerDown}
             onPointerMove={sizing.dragHandlers.onPointerMove}
@@ -482,7 +495,7 @@ function VirtualPiano({
           )}
         </div>
       </div>
-      {(showControls ?? !flat) && (
+      {(showControls ?? (!flat && experience === "advanced")) && (
         <div className="mt-1">
           <KeyboardSizingControls sizing={sizing} />
         </div>

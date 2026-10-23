@@ -218,6 +218,9 @@ export interface UseKeyboardSizingOptions {
   /** Simple mode: window the default range to <= 15 white keys of >= 26 px (see
    *  simpleWindowRange). Off for callers that share one geometry with a falling-note canvas. */
   simpleFit?: boolean;
+  /** Narrowest key (px) the fit-to-width step may produce in Simple mode; defaults to
+   *  SIMPLE_MIN_KEY_PX. Lower it to fit a wide range on a narrow screen without scrolling. */
+  fitFloorPx?: number;
 }
 
 export interface KeyboardSizing {
@@ -255,6 +258,7 @@ export function useKeyboardSizing({
   onDeviceRangeChange,
   keepTightRangeVisible = false,
   simpleFit = false,
+  fitFloorPx = SIMPLE_MIN_KEY_PX,
 }: UseKeyboardSizingOptions): KeyboardSizing {
   const hasTight = tightRange != null;
   const steps = useMemo(() => stepsFor(hasTight), [hasTight]);
@@ -316,7 +320,7 @@ export function useKeyboardSizing({
   const fitWidthPx =
     containerWidthPx > 0
       ? clampZoomPx(
-          Math.max(simpleFit ? SIMPLE_MIN_KEY_PX : 0, fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidthPx)),
+          Math.max(simpleFit ? fitFloorPx : 0, fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidthPx)),
         )
       : DEFAULT_WHITE_KEY_WIDTH_PX;
   const widthPx = isWidthFit
