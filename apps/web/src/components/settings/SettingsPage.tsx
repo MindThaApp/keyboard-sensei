@@ -127,16 +127,7 @@ function AccountSection() {
     setSignOutError(null);
     setSignOutStatus(null);
     try {
-      const response = await fetch(`${api.API_URL}/auth/sign-out-all`, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${api.getToken() ?? ""}` },
-      });
-      const body = (await response.json().catch(() => null)) as
-        | { accessToken?: string; user?: AuthUser; error?: { message?: string } }
-        | null;
-      if (!response.ok || !body?.accessToken || !body.user) {
-        throw new Error(body?.error?.message ?? "Could not sign out other devices.");
-      }
+      const body = await api.signOutAll();
       acceptSession({ accessToken: body.accessToken, user: body.user });
       setSignOutStatus("Signed out everywhere else. You stay signed in on this device.");
     } catch (err) {
