@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
   finalScore,
@@ -272,6 +272,24 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   // An upright phone is too narrow for octave padding: there the song's own range is
   // the default, so the keys stay big enough to hit.
   const phonePortrait = device === "phone" && orientation === "portrait";
+
+  // The notation starts below the floating modules. They wrap onto several rows on a
+  // narrow screen, so their height is measured, not assumed; the tallest height seen
+  // is kept, so pressing Play (when the legend and tools give way to the HUD) never
+  // shifts the stage. The CSS var is set directly: no render per measurement.
+  const topRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const top = topRef.current;
+    const root = top?.parentElement;
+    if (!top || !root) return;
+    let tallest = 0;
+    const observer = new ResizeObserver(() => {
+      tallest = Math.max(tallest, Math.ceil(top.getBoundingClientRect().height));
+      root.style.setProperty("--ks-top-height", `${tallest}px`);
+    });
+    observer.observe(top);
+    return () => observer.disconnect();
+  }, [device, orientation]);
   const paddedRange = useMemo(() => pianoRangeFor(pitchSpan.min, pitchSpan.max), [pitchSpan]);
   const defaultRange = phonePortrait ? tightRange : paddedRange;
   // One geometry for the keys and the falling notes, so they can never drift apart.
@@ -626,7 +644,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
 
       {/* Floating modules. Translucent clear-dark fills with no blur: nothing blurs the
           animating canvas, and none of them moves the stage when Play is pressed. */}
-      <div className="ks-practice__top">
+      <div ref={topRef} className="ks-practice__top">
         {focus.active ? (
           <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--round">
             <button type="button" className="ks-practice-iconbtn" onClick={focus.exit} aria-label="Exit focus mode">
