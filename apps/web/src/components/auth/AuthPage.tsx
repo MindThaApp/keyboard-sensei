@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
 import { LegalLinks } from "../legal/PublicPageLayout";
+import { useServerConfig } from "../../services/serverConfig";
 import GoogleSignInButton, { googleSignInEnabled } from "./GoogleSignInButton";
 
 type EntryKind = "demo" | "signup" | "login";
@@ -214,6 +215,9 @@ export function RegistrationForm({
 
 export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): void }) {
   const { login } = useAuth();
+  // The shared demo account is for the private build only; unknown config counts as "not public yet".
+  const serverConfig = useServerConfig();
+  const demoAvailable = serverConfig !== null && !serverConfig.publicCatalogue;
   const [mode, setMode] = useState<"landing" | "login" | "register">("landing");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -256,9 +260,11 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
               <button className="primary-button w-full" onClick={() => setMode("register")}>
                 Create a free account
               </button>
-              <button className="secondary-button w-full" onClick={() => void logIn(true)}>
-                Try it without an account
-              </button>
+              {demoAvailable && (
+                <button className="secondary-button w-full" onClick={() => void logIn(true)}>
+                  Try it without an account
+                </button>
+              )}
               <button
                 className="w-full text-sm text-felt-700 underline dark:text-felt-300"
                 onClick={() => setMode("login")}
