@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ghcr.io/ramin-azizi/keyboard-sensei-api:latest
+    image: ghcr.io/mindthaapp/keyboard-sensei-api:latest
     environment:
       DATABASE_URL: postgresql://keyboard_sensei:${POSTGRES_PASSWORD}@postgres:5432/keyboard_sensei
       JWT_SECRET: ${JWT_SECRET}
@@ -59,7 +59,7 @@ services:
 
   web:
     # VITE_API_URL is baked as /api at CI build time and proxied by nginx.
-    image: ghcr.io/ramin-azizi/keyboard-sensei-web:latest
+    image: ghcr.io/mindthaapp/keyboard-sensei-web:latest
     depends_on:
       - api
     restart: unless-stopped
