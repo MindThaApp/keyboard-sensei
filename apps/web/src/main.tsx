@@ -6,23 +6,30 @@ import { MidiProvider } from "./components/midi/MidiContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { AppearanceProvider } from "./contexts/AppearanceContext";
 import { ExperienceProvider } from "./contexts/ExperienceContext";
+import { monitoring, startMonitoring } from "./monitoring";
+import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
 import "./index.css";
 
+startMonitoring();
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AppearanceProvider>
-      <ExperienceProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <MidiProvider>
-              <App />
-            </MidiProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </ExperienceProvider>
-    </AppearanceProvider>
+    <AppErrorBoundary>
+      <AppearanceProvider>
+        <ExperienceProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <MonitoringBridge />
+              <MidiProvider>
+                <App />
+              </MidiProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </ExperienceProvider>
+      </AppearanceProvider>
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
 

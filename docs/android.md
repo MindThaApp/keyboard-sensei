@@ -229,6 +229,20 @@ fingerprint production users present; register it too.
    (Play's current minimum is 12 testers for 14 days) before production
    access is granted.
 
+## Crash reports (Sentry)
+
+The app uses `@sentry/capacitor` (with `@sentry/react`) and reports to the
+**android** Sentry project, `environment: android`. Set `VITE_SENTRY_DSN_ANDROID`
+(or `VITE_SENTRY_DSN`) when building the web bundle; without a DSN there is no
+monitoring and no prompt. On first launch the app asks once whether to send
+anonymous crash reports; the choice is in Settings → Account → Crash reports. The
+native SDK is only started after the user agrees. Native (Java/NDK) crash reports
+bypass the JavaScript redactor, so keep **Prevent Storing of IP Addresses** on in
+the Sentry project (docs/operations.md, "Error monitoring"). `cap sync` registers
+the plugin in `capacitor.settings.gradle`; no Sentry Gradle plugin is used, so
+native frames are not symbolicated (JavaScript frames are, via the uploaded
+source maps).
+
 ## Real-device checklist
 
 The emulator cannot attach MIDI hardware or play through a speaker you can
