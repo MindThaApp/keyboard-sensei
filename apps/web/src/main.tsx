@@ -5,13 +5,17 @@ import App from "./App";
 import { MidiProvider } from "./components/midi/MidiContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { monitoring, startMonitoring } from "./monitoring";
+import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
 import "./index.css";
 
+startMonitoring();
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider><BrowserRouter><AuthProvider><MidiProvider><App /></MidiProvider></AuthProvider></BrowserRouter></ThemeProvider>
+    <AppErrorBoundary><ThemeProvider><BrowserRouter><AuthProvider><MonitoringBridge /><MidiProvider><App /></MidiProvider></AuthProvider></BrowserRouter></ThemeProvider></AppErrorBoundary>
   </React.StrictMode>,
 );
 

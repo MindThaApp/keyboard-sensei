@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { submitFeedback, submitFeedbackWithScreenshot, type FeedbackType } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { monitoring } from "../../monitoring";
 
 const TYPES: { value: FeedbackType; label: string }[] = [
   { value: "bug", label: "Bug" },
@@ -75,11 +76,12 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
     setState("sending");
     setError(null);
     try {
-      if (screenshot) {
-        await submitFeedbackWithScreenshot(type, message.trim(), location.pathname, screenshot);
-      } else {
-        await submitFeedback(type, message.trim(), location.pathname);
-      }
+      const text = message.trim();
+      const { id } = screenshot
+        ? await submitFeedbackWithScreenshot(type, text, location.pathname, screenshot)
+        : await submitFeedback(type, text, location.pathname);
+      // Saved on our server; also hand it to the error monitor (a no-op when it is off).
+      void monitoring.reportFeedback({ message: text, category: type, feedbackId: id, page: location.pathname, screenshot });
       setState("sent");
       setMessage("");
       removeScreenshot();

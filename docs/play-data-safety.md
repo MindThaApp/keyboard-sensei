@@ -29,6 +29,10 @@ acting for us (the email provider, Cloudflare as the network in front) are not
 user data (verified in `apps/api/src/tts.ts`: the request body is the section text
 and model id, with the server's API key).
 
+Crash reports go to Sentry (EU region), a service provider acting for us; they are
+anonymous, not used for ads or analytics and not shared for any other purpose, so
+they are declared as **collected, not shared**.
+
 None of the data below is processed ephemerally; all of it is kept until the user
 deletes their account (backups: up to 14 days more).
 
@@ -43,12 +47,14 @@ deletes their account (backups: up to 14 days more).
 | Audio → **Other audio files** | Yes | No | Optional | App functionality | Instrument sound samples the user uploads |
 | Photos and videos → **Photos** | Yes | No | Optional | App functionality (support) | A screenshot the user chooses to attach to feedback |
 | App info and performance → **Other app performance data** | Yes | No | Optional | App functionality (support) | The browser/WebView user-agent string sent with feedback |
+| App info and performance → **Crash logs** | Yes | No | Optional | Analytics (diagnostics), App functionality | Anonymous crash reports from the app (error, stack trace, app version, device model and OS, internal account id). The Android app asks on first launch and the choice is in Settings. Emails, names, IPs and tokens are stripped before sending. Kept 90 days |
+| App info and performance → **Diagnostics** | Yes | No | Optional | Analytics (diagnostics) | The technical context attached to crash reports: OS version, memory and battery state, the steps (breadcrumbs) before the crash |
 
 Not collected (answer **No**): Location (approximate or precise), Financial info,
 Health and fitness, Messages, Photos other than feedback screenshots, Videos, Voice
 or sound recordings (the app never uses the microphone), Files and docs, Calendar,
 Contacts, Web browsing history, Search history (the song search runs on the
-device), Installed apps, Crash logs, Diagnostics, Device or other IDs,
+device), Installed apps, Device or other IDs,
 Race/ethnicity, Political or religious beliefs, Sexual orientation, Other info.
 
 Judgement calls, so they can be revisited:

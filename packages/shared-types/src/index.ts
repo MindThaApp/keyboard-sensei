@@ -91,3 +91,4 @@ export interface QuizAnswerResponse { correct: boolean; explanation?: string; co
 export interface AttemptSummary { id: string; exerciseId: string; lessonId: string; lessonTitle: string; score: number; createdAt: string }
 export interface AttemptsResponse { attempts: AttemptSummary[] }
 export interface ApiErrorResponse { error: { code: string; message: string; details?: unknown } }
+export * from "./sentry.js";

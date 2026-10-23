@@ -55,6 +55,16 @@ export const env = z
           .map((item) => item.trim())
           .filter(Boolean),
       ),
+    // Error monitoring (Sentry, EU region). Off without SENTRY_DSN. instrument.ts reads
+    // the first group straight from process.env because it runs before this module.
+    SENTRY_DSN: z.string().url().optional(),
+    SENTRY_ENVIRONMENT: z.string().optional(),
+    SENTRY_RELEASE: z.string().optional(),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
+    GIT_SHA: z.string().optional(),
+    // Comma-separated DSNs of the projects the web and Android apps report to. The only
+    // destinations POST /sentry-tunnel will forward to; unset = the tunnel answers 404.
+    SENTRY_TUNNEL_DSNS: z.string().optional(),
   })
   // Empty values count as unset, so compose files can pass optional settings as ${VAR:-}.
   .parse(Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== "")));

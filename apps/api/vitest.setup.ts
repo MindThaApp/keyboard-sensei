@@ -19,3 +19,6 @@ process.env.ELEVENLABS_API_KEY ??= "test-elevenlabs-key";
 if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 }
+
+// Tests must never send events (or relay them): no monitoring configuration in the test process.
+for (const name of ["SENTRY_DSN", "SENTRY_TUNNEL_DSNS", "SENTRY_RELEASE", "SENTRY_ENVIRONMENT"]) delete process.env[name];
