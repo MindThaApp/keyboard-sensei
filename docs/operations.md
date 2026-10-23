@@ -195,6 +195,14 @@ The server's secrets live in `~/apps/keyboard-sensei/.env.deploy`, read by
 | `GOOGLE_CLIENT_IDS` | optional | Comma-separated Google OAuth client IDs (Web, Android) accepted by `POST /auth/google`. Unset = Google sign-in off |
 | `VITE_GOOGLE_CLIENT_ID` | `.env.deploy` (build arg), `apps/web/.env` | The Web client ID, baked into the web build. Unset = no Google button |
 | `CLOUDFLARE_TUNNEL_TOKEN` | `.env.deploy` | Only for the `public` compose profile (Cloudflare Tunnel) |
+| `SENTRY_DSN` | API env | DSN of the **api** Sentry project. Unset = API error reporting off |
+| `SENTRY_TUNNEL_DSNS` | API env | Comma-separated DSNs of the **web** and **android** projects. The only destinations `POST /sentry-tunnel` forwards to (host, project id and key must match). Unset = the tunnel answers 404 |
+| `SENTRY_TRACES_SAMPLE_RATE`, `VITE_SENTRY_TRACES_SAMPLE_RATE` | optional | 0..1, default `0` (tracing off) |
+| `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` | API env, optional | Defaults: `production` when `NODE_ENV=production` else `development`; `keyboard-sensei@<version>+<git sha>` |
+| `GIT_SHA` | `.env.deploy` / build arg | Full or short commit hash for the release name. The deploy rsyncs without `.git`, so pass it: `GIT_SHA=$(git rev-parse HEAD)` in the `docker compose` command (CI passes `github.sha`) |
+| `VITE_SENTRY_DSN` | `.env.deploy` (build arg), `apps/web/.env` | DSN of the **web** project, baked into the web build. Unset = no monitoring in the website |
+| `VITE_SENTRY_DSN_ANDROID` | Android build env | DSN of the **android** project; falls back to `VITE_SENTRY_DSN` |
+| `SENTRY_AUTH_TOKEN`, `SENTRY_PROJECT`, `SENTRY_ORG`, `SENTRY_URL` | build env / build args | Source-map upload (see "Error monitoring"). Only when `SENTRY_AUTH_TOKEN` is set; org defaults to `mindtheapp`, URL to `https://de.sentry.io` |
 | `RCLONE_REMOTE`, `RCLONE_KEEP_DAYS` | crontab | Off-box backup destination and its retention (default 14 days) |
 
 Local development uses `apps/api/.env` and `apps/web/.env`, copied from their
@@ -362,6 +370,72 @@ Also consider before launch:
   from the shared ElevenLabs quota; the monthly pool caps the total spend.
 - Cloudflare in front means Cloudflare sees visitors' IP addresses; the privacy
   policy says so.
+
+## Error monitoring (Sentry)
+
+Sentry SaaS, **EU region**, organisation `mindtheapp`, three projects: **web**,
+**api**, **android**. Everything is off unless a DSN is configured; tests and CI
+never send events (the test setups clear the variables, and the web code ignores
+`VITE_SENTRY_DSN` when `MODE=test`).
+
+How it fits together:
+
+- **Release** is `keyboard-sensei@<version>+<git sha>` (12 chars), identical in the
+  Vite plugin, `Sentry.init` and the API. **Environment** is `development`,
+  `production` or `android`.
+- **Privacy.** `sendDefaultPii: false`, no session replay, no session tracking,
+  tracing off. Every event, breadcrumb and feedback event goes through one
+  redactor (`packages/shared-types/src/sentry.ts`) that removes emails, JWTs and
+  bearer tokens, secret query parameters, auth headers and cookies, request
+  bodies, home-directory paths and host names. The only user field kept is the
+  internal account id.
+- **Consent** is per device: Ask / Always / Never (Settings → Account → Crash
+  reports). The website defaults to Always, the Android app asks once on first
+  launch. The SDK is not even loaded until the choice is Always.
+- **Tunnel.** The apps post envelopes to `POST /sentry-tunnel` on the API
+  (`/api/sentry-tunnel` behind nginx, 5 MB limit, 60 per IP per minute), which
+  forwards them to the EU ingest host. Ad blockers don't see it and Sentry never
+  sees the user's IP. It only forwards envelopes whose DSN (host, project id and
+  public key) is in `SENTRY_TUNNEL_DSNS`, and builds the destination from that
+  configuration, never from the request.
+- **API.** `@sentry/node`, initialised first (`src/instrument.ts`). Only 5xx errors
+  from the central error handler are reported; 4xx are not. Events are flushed on
+  shutdown.
+- **Feedback.** The existing feedback form still saves to our database. After a
+  successful save it also sends one Sentry feedback event (message, category,
+  our feedback id as a tag, `associatedEventId` when an error happened in the last
+  5 minutes, the screenshot only if the user attached one).
+- **Source maps.** With `SENTRY_AUTH_TOKEN` set the web build is made with
+  `sourcemap: "hidden"`, uploaded by `@sentry/vite-plugin` and then deleted from
+  `dist`, so no map is ever served. Without the token no maps are produced and the
+  build is unchanged. Remember: `vite.config.ts` only, never a `vite.config.js`.
+
+CI settings (all optional; builds succeed without them):
+
+| Where | Name | Kind |
+|---|---|---|
+| GitHub | `SENTRY_AUTH_TOKEN` | secret (org auth token with `project:releases`) |
+| GitHub | `VITE_SENTRY_DSN` | variable (web DSN) |
+| GitHub | `SENTRY_PROJECT_WEB`, `SENTRY_PROJECT_ANDROID` | variables (project slugs) |
+| GitHub | `VITE_SENTRY_DSN_ANDROID` | variable (android DSN) |
+
+To turn it on for the server: create the three projects, then in `.env.deploy` set
+`SENTRY_DSN` (api), `SENTRY_TUNNEL_DSNS` (web DSN, android DSN),
+`VITE_SENTRY_DSN` (web), `SENTRY_AUTH_TOKEN` and `SENTRY_PROJECT` (web slug), and
+redeploy with `GIT_SHA=$(git rev-parse HEAD)` in the compose command's environment.
+
+### Settings to enable in each Sentry project
+
+Project Settings → Security & Privacy, and the org-wide equivalents:
+
+- **Data Scrubber**: on. **Use Default Scrubbers**: on.
+- **Prevent Storing of IP Addresses**: on. This also covers the Android app's
+  native crash reports, which go straight to Sentry rather than through the tunnel.
+- **Spike Protection**: on (org Settings → Subscription).
+- **Client Keys → Rate Limits**: set a per-key limit on every project, e.g. web
+  and android 60 events per minute, api 120 per minute, so a crash loop can't
+  burn the quota.
+- Data retention 90 days (matches the privacy policy).
 
 ## Gotchas and lessons learned
 
