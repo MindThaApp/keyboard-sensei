@@ -3,7 +3,11 @@ import react from "@vitejs/plugin-react";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { sentryRelease } from "../../packages/shared-types/src/sentry.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
@@ -122,8 +126,50 @@ function pwaServiceWorkerPlugin() {
   };
 }
 
+/**
+ * `keyboard-sensei@<version>+<git sha>`: baked into the bundle as __APP_RELEASE__ and used
+ * by the Sentry plugin, so the release uploaded with the source maps is the one the app
+ * reports. Docker builds have no .git, so CI passes GIT_SHA instead.
+ */
+function gitSha(): string | undefined {
+  if (process.env.GIT_SHA?.trim()) return process.env.GIT_SHA;
+  try {
+    return execSync("git rev-parse HEAD", { cwd: __dirname, stdio: ["ignore", "pipe", "ignore"] }).toString();
+  } catch {
+    return undefined;
+  }
+}
+const packageVersion = (JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8")) as { version: string }).version;
+const release = sentryRelease(packageVersion, gitSha());
+
+// Source maps are uploaded to Sentry and then deleted from the output: they must never be
+// served publicly. Without SENTRY_AUTH_TOKEN nothing is uploaded, so no maps are made.
+const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN?.trim());
+if (uploadSourceMaps && !process.env.SENTRY_PROJECT?.trim()) {
+  console.warn("SENTRY_AUTH_TOKEN is set but SENTRY_PROJECT is not: source maps will not be uploaded.");
+}
+
 export default defineConfig({
-  plugins: [react(), pwaServiceWorkerPlugin()],
+  define: { __APP_RELEASE__: JSON.stringify(release) },
+  build: { sourcemap: uploadSourceMaps ? "hidden" : false },
+  plugins: [
+    react(),
+    pwaServiceWorkerPlugin(),
+    // Last, so it sees the finished bundle.
+    ...(uploadSourceMaps
+      ? [
+          sentryVitePlugin({
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            org: process.env.SENTRY_ORG || "mindtheapp",
+            project: process.env.SENTRY_PROJECT,
+            url: process.env.SENTRY_URL || "https://de.sentry.io",
+            telemetry: false,
+            release: { name: release },
+            sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
+          }),
+        ]
+      : []),
+  ],
   resolve: {
     // Exact-match patterns: a plain string alias is a PREFIX match, so
     // "@keyboard-sensei/midi-engine" would also swallow "@keyboard-sensei/midi-engine/web".
