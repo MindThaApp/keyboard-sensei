@@ -36,7 +36,7 @@ describe("scrubString", () => {
 
   it("removes account names from file-system paths", () => {
     expect(scrubString("at run (/Users/ada/dev/Keyboard Sensei/apps/api/src/app.ts:12:3)")).not.toContain("ada");
-    expect(scrubString("/home/ramin/apps/keyboard-sensei/server.js")).toBe("/~/apps/keyboard-sensei/server.js");
+    expect(scrubString("/home/ada/apps/keyboard-sensei/server.js")).toBe("/~/apps/keyboard-sensei/server.js");
     expect(scrubString("C:\\Users\\Ada Lovelace\\AppData\\x.js")).toBe("~\\AppData\\x.js");
     expect(scrubString("file:///data/user/0/com.keyboardsensei.app/files/a.mid")).toBe(
       "file:///data/app/files/a.mid",
@@ -58,7 +58,7 @@ describe("scrubEvent", () => {
   const event = {
     event_id: "0123456789abcdef0123456789abcdef",
     message: "Login failed for ada@example.com",
-    server_name: "ramins-macbook.local",
+    server_name: "adas-macbook.local",
     user: { id: "user-1", email: "ada@example.com", username: "ada", ip_address: "203.0.113.9" },
     request: {
       url: `https://ks.example/app?access_token=${JWT}`,
@@ -89,7 +89,7 @@ describe("scrubEvent", () => {
   const text = JSON.stringify(scrubbed);
 
   it("leaves no email, token, password, path user or IP anywhere in the event", () => {
-    for (const secret of ["ada@example.com", "bob@example.org", JWT, "hunter2", "s3cr3t", "203.0.113.9", "ramins-macbook", "/Users/ada", "abc123"]) {
+    for (const secret of ["ada@example.com", "bob@example.org", JWT, "hunter2", "s3cr3t", "203.0.113.9", "adas-macbook", "/Users/ada", "abc123"]) {
       expect(text).not.toContain(secret);
     }
   });
