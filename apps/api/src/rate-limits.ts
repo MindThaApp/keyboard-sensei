@@ -109,3 +109,12 @@ export function allowEmailTo(address: string, now = Date.now()): boolean {
   recentEmailsByAddress.set(key, recent);
   return allowed;
 }
+
+/** Sentry envelopes relayed by POST /sentry-tunnel, per client IP. A crash loop must not become a flood. */
+export const sentryTunnelRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("Too many reports"),
+});

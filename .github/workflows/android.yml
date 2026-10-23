@@ -6,6 +6,8 @@ name: Android release
 # Secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
 #          ANDROID_KEY_PASSWORD
 # API URL: repository variable VITE_API_URL (or a secret of the same name).
+# Optional error monitoring: variable VITE_SENTRY_DSN_ANDROID (or VITE_SENTRY_DSN), variable
+# SENTRY_PROJECT_ANDROID and secret SENTRY_AUTH_TOKEN (source maps). Builds work without them.
 
 on:
   push:
@@ -27,6 +29,11 @@ jobs:
       contents: read
     env:
       VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
+      VITE_SENTRY_DSN_ANDROID: ${{ vars.VITE_SENTRY_DSN_ANDROID }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT_ANDROID }}
+      GIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
