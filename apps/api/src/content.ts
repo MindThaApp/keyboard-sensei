@@ -8,6 +8,7 @@ import { technique2Lessons, technique2Exercises } from "./content/technique2.js"
 import { depthExercises, withPractice } from "./content/depth.js";
 import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
+import { withTier, validateTiers } from "./content/tiers.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
 
 /**
@@ -63,4 +64,7 @@ const modernPath = chainLessons(modernLessons, ["lesson-12"]);
 
 export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath]
   .map(withPractice)
+  .map(withTier)
   .map((lesson) => ({ ...lesson, estimatedMinutes: estimateLessonMinutes(lesson, exerciseById) }));
+
+validateTiers(lessons);

@@ -75,6 +75,8 @@ export async function seedContent(
           path: lesson.path,
           level: lesson.level,
           branch: lesson.branch,
+          tier: lesson.tier,
+          skills: lesson.skills,
           order: index + 1,
           retired_at: null,
         };

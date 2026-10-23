@@ -59,6 +59,9 @@ export const lesson = (
   path: "classical-technical",
   level: n <= 6 ? "foundation" : n <= 12 ? "elementary" : "intermediate",
   branch,
+  // Placeholders: content/tiers.ts assigns the real tier and skills (applied in content.ts).
+  tier: 0,
+  skills: [],
   title,
   // Placeholder: content.ts replaces every estimate with one computed from the lesson's
   // actual material (see estimateLessonMinutes in build.ts).
@@ -93,6 +96,8 @@ export const defineLesson = (input: {
   path: input.path ?? "classical-technical",
   level: input.level,
   branch: input.branch,
+  tier: 0, // placeholder, assigned from content/tiers.ts in content.ts
+  skills: [],
   title: input.title,
   estimatedMinutes: 1, // placeholder, computed in content.ts (see estimateLessonMinutes)
   objectives: input.objectives,
