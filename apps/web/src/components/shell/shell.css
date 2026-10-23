@@ -207,6 +207,10 @@ html[data-focus-mode] .ks-feedback-launcher,
 html[data-focus-mode] .ks-toast-viewport {
   display: none !important;
 }
+/* The Practice page's Songs / Gym / Record switcher is page chrome too. */
+html[data-focus-mode] .ks-seg[aria-label="Practice"] {
+  display: none;
+}
 html[data-focus-mode] .ks-shell-main {
   padding-top: 0;
   padding-bottom: 0;
@@ -221,18 +225,4 @@ html[data-focus-mode] .ks-shell-main {
   color: var(--label);
   font-weight: 600;
   text-decoration: underline;
-}
-
-/* ------------------------------------------------------------ desktop capsule sizing */
-/* The top capsule hugs its tabs instead of splitting a fixed width between them. */
-.ks-tabbar[data-placement="top"] .ks-tabbar__list {
-  flex: none;
-  grid-auto-columns: max-content;
-}
-.ks-tabbar[data-placement="top"] .ks-tab {
-  flex: none;
-  white-space: nowrap;
-}
-.ks-tabbar[data-placement="top"] .ks-tabbar__bar {
-  max-width: none;
 }
