@@ -13,13 +13,18 @@ import {
   type WorkSummary,
 } from "../../services/api";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
-import { Advanced, Button, EmptyState, ErrorState, Skeleton } from "../ui";
+import { useAuth } from "../../contexts/AuthContext";
+import { useServerConfig } from "../../services/serverConfig";
+import { Advanced, Button, Chip, EmptyState, ErrorState, Skeleton } from "../ui";
 import { WorkFilterBar } from "../library/SongFilterBar";
-import { ShelfCard, WorkCard, WorkRow } from "../library/WorkRow";
+import { ShelfCard, TierChip, WorkCard, WorkRow } from "../library/WorkRow";
 import {
+  activeWorkFilterCount,
   firstUnratedIndex,
+  formatDuration,
   hasSeasonalShelf,
   isBrowsing,
+  moreSongs,
   shelvesToLoad,
   songsById,
   uploadedSongs,
@@ -31,6 +36,7 @@ import {
 } from "../../utils/songLibrary";
 
 const PAGE_SIZE = 30;
+const MORE_PAGE_SIZE = 30;
 
 interface ShelfProps {
   id: string;
@@ -109,6 +115,9 @@ export default function SongBrowserPage() {
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [moreShown, setMoreShown] = useState(MORE_PAGE_SIZE);
+  const { user } = useAuth();
+  const serverConfig = useServerConfig();
 
   // Filters live in the URL, so opening a song and pressing Back returns to the same list.
   const [params, setParams] = useSearchParams();
@@ -198,6 +207,16 @@ export default function SongBrowserPage() {
       uploads: uploadedSongs(songs),
     };
   }, [songs, readyIds, recent]);
+
+  // Songs with no catalogue Work (the ADL library, imports, uploads) stay reachable, below the
+  // curated list. A public deployment never serves them, and the narrowing filters only apply
+  // to catalogue Works, so the section steps aside for those too.
+  const showMore = serverConfig !== null && !serverConfig.publicCatalogue && activeWorkFilterCount(filters) === 0;
+  const extraSongs = useMemo(
+    () => (showMore ? moreSongs(songs, { isAdmin: user?.role === "admin", query: filters.query }) : []),
+    [showMore, songs, user?.role, filters.query],
+  );
+  useEffect(() => setMoreShown(MORE_PAGE_SIZE), [filters.query]);
 
   const unratedAt = filters.unrated ? firstUnratedIndex(works) : -1;
   const summary = listState === "ready" && total > 0 ? `${total} ${total === 1 ? "song" : "songs"}` : undefined;
@@ -298,7 +317,53 @@ export default function SongBrowserPage() {
           </Button>
         )}
       </section>
+
+      {extraSongs.length > 0 && (
+        <section aria-labelledby="more-songs" className="space-y-3">
+          <h2 id="more-songs" className="text-title3 text-label">
+            More songs
+            <span className="ml-2 text-subhead font-normal text-label-2a">{extraSongs.length}</span>
+          </h2>
+          <p className="text-footnote text-label-2a">From the wider library. Best-checked files come first.</p>
+          <ul className="ks-list" data-testid="more-songs">
+            {extraSongs.slice(0, moreShown).map((song) => (
+              <SongListItem key={song.id} song={song} stars={stars} bests={bests} />
+            ))}
+          </ul>
+          {extraSongs.length > moreShown && (
+            <Button variant="gray" size="lg" onClick={() => setMoreShown((count) => count + MORE_PAGE_SIZE)}>
+              Show more ({extraSongs.length - moreShown} left)
+            </Button>
+          )}
+        </section>
+      )}
     </div>
+  );
+}
+
+/** One unlinked song: no versions, just a title, artist, tier and length. */
+function SongListItem({ song, stars, bests }: { song: Song; stars: Record<string, SongStars>; bests: Record<string, { score: number }> }) {
+  const best = bests[song.id]?.score;
+  return (
+    <li className="ks-row" data-testid="more-song-row">
+      <Link to={`/play/${song.id}`} className="ks-row__main items-start" aria-label={`${song.title}, ${song.artist}`}>
+        <span className="ks-row__text">
+          <span className="ks-row__title font-medium">{song.title}</span>
+          <span className="ks-row__subtitle truncate">{song.artist}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <TierChip tier={song.quality_tier ?? "unrated"} />
+            {song.quality_tier === "low" && <Chip>Low</Chip>}
+            <Chip>{formatDuration(song.duration_sec)}</Chip>
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+          <span aria-hidden="true" className="text-callout leading-none text-warning">
+            {"★".repeat(stars[song.id]?.best ?? 0)}
+          </span>
+          {best !== undefined && <span className="text-footnote tabular-nums text-label-2a">{Math.round(best)}</span>}
+        </span>
+      </Link>
+    </li>
   );
 }
 
