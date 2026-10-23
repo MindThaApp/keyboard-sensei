@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import {
   CHALLENGE_TIERS,
   TIER_NAMES,
@@ -137,22 +137,20 @@ export async function startAttempt(
   const view = today.tiers.find((item) => item.tier === tier)!;
   if (!view.unlocked) throw new ChallengeError(403, "tier_locked", `${view.name} isn't unlocked yet`);
 
-  // The unique (user, day, tier, attempt) index settles two simultaneous starts: the
-  // loser re-counts and either takes the next number or finds none left.
-  for (let tries = 0; tries < MAX_ATTEMPTS + 1; tries++) {
-    const used = await db.challengeAttempt.count({ where: { user_id: userId, day: today.date, tier } });
-    if (used >= MAX_ATTEMPTS) throw new ChallengeError(409, "no_attempts_left", `All ${MAX_ATTEMPTS} attempts at ${view.name} are used today`);
-    try {
-      const row = await db.challengeAttempt.create({
-        data: { user_id: userId, day: today.date, tier, attempt: used + 1, key: view.key.id, started_at: now },
-        select: { id: true, attempt: true },
-      });
-      return { id: row.id, attempt: row.attempt, attemptsLeft: MAX_ATTEMPTS - row.attempt, key: view.key.id };
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
-    }
-  }
-  throw new ChallengeError(409, "no_attempts_left", "No attempts left");
+  // Simultaneous starts (a double tap, two tabs) are serialised per learner, day and
+  // tier by a transaction-scoped advisory lock, so the count and the insert can't
+  // interleave; the unique (user, day, tier, attempt) index is the backstop.
+  const row = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`challenge:${userId}:${today.date}:${tier}`}))::text`;
+    const used = await tx.challengeAttempt.count({ where: { user_id: userId, day: today.date, tier } });
+    if (used >= MAX_ATTEMPTS) return null;
+    return tx.challengeAttempt.create({
+      data: { user_id: userId, day: today.date, tier, attempt: used + 1, key: view.key.id, started_at: now },
+      select: { id: true, attempt: true },
+    });
+  });
+  if (!row) throw new ChallengeError(409, "no_attempts_left", `All ${MAX_ATTEMPTS} attempts at ${view.name} are used today`);
+  return { id: row.id, attempt: row.attempt, attemptsLeft: MAX_ATTEMPTS - row.attempt, key: view.key.id };
 }
 
 export interface FinishResult {

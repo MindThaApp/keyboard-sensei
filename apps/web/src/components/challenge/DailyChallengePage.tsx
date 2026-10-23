@@ -202,9 +202,11 @@ function TierStage({
     return () => observer.disconnect();
   }, []);
 
-  const defaultRange = useMemo(() => pianoRangeFor(song.pitchMin, song.pitchMax), [song]);
+  // The piece is short and its range known: start on exactly its keys, so they are as
+  // wide as the screen allows (the octave-padded range is the next fit step).
+  const paddedRange = useMemo(() => pianoRangeFor(song.pitchMin, song.pitchMax), [song]);
   const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: song.pitchMin, highestNote: song.pitchMax }), [song]);
-  const sizing = useKeyboardSizing({ defaultRange, tightRange, deviceRange, hasDevice: devices.length > 0, containerWidthPx: stageSize.width });
+  const sizing = useKeyboardSizing({ defaultRange: tightRange, tightRange: paddedRange, deviceRange, hasDevice: devices.length > 0, containerWidthPx: stageSize.width });
   const geometry = sizing.geometry;
   const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
   const { pianoHeightPx, waterfallHeightPx } = stageLayout({
@@ -309,6 +311,8 @@ function TierStage({
   }, [mode, start]);
 
   const begin = (next: Mode) => {
+    // A landscape phone only has room for the stage: go straight to focus mode.
+    if (device === "phone" && window.innerWidth > window.innerHeight) focus.enter();
     setResult(null);
     setPracticeResult(null);
     setSaveError(null);
@@ -418,7 +422,7 @@ function TierStage({
       {result && !running && <ResultCard result={result} clearScore={clearScore} />}
       {practiceResult && !running && (
         <p className="text-subhead text-label-2a" role="status">
-          Practice run done: {Math.round(practiceResult.accuracyPct)}% of notes. Practice isn't scored.
+          Practice run done. Practice isn't scored: start an attempt when you're ready.
         </p>
       )}
 
