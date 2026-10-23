@@ -17,7 +17,21 @@ export interface MidiExerciseSection { type: "midi-exercise"; title: string; ins
 export interface QuizQuestion { id: string; prompt: string; options: string[]; correctIndex?: number; explanation: string }
 export interface QuizSection { type: "quiz"; questions: QuizQuestion[] }
 export type LessonSection = MarkdownSection | TheoryCardSection | NotationSection | MidiExerciseSection | QuizSection;
-export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
+export const SKILL_CHIPS = ["five-finger", "reading-treble", "reading-bass", "rhythm", "scales", "chords", "technique", "ear", "repertoire", "two-hands"] as const;
+export type SkillChip = (typeof SKILL_CHIPS)[number];
+/** Tiered levels on Learn: 0 (first steps) to 7 (advanced). Tiers 6 and 7 hold no lessons yet. */
+export type TierId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export const TIER_NAMES: Record<TierId, string> = {
+  0: "First steps",
+  1: "Basic beginner",
+  2: "Two hands",
+  3: "Elementary",
+  4: "Upper elementary",
+  5: "Intermediate",
+  6: "Upper intermediate",
+  7: "Advanced",
+};
+export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
