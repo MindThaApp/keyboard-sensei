@@ -17,10 +17,11 @@ import { BATCH_A } from "../src/catalogue/packs/batch-a.js";
 import { BATCH_B } from "../src/catalogue/packs/batch-b.js";
 import { BATCH_C } from "../src/catalogue/packs/batch-c.js";
 import { BATCH_D } from "../src/catalogue/packs/batch-d.js";
+import { BATCH_AUTHORED_SACRED } from "../src/catalogue/packs/batch-authored-sacred.js";
 import { importPack, type PieceReport } from "../src/catalogue/packs/import.js";
 import type { Pack } from "../src/catalogue/packs/pack.js";
 
-const PACKS: Record<string, Pack> = { [BATCH_A.id]: BATCH_A, [BATCH_B.id]: BATCH_B, [BATCH_C.id]: BATCH_C, [BATCH_D.id]: BATCH_D };
+const PACKS: Record<string, Pack> = { [BATCH_A.id]: BATCH_A, [BATCH_B.id]: BATCH_B, [BATCH_C.id]: BATCH_C, [BATCH_D.id]: BATCH_D, [BATCH_AUTHORED_SACRED.id]: BATCH_AUTHORED_SACRED };
 
 function describeIncipit(report: PieceReport): string {
   const incipit = report.incipit;
