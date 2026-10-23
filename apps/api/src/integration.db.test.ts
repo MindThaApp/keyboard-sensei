@@ -14,11 +14,15 @@
  *   pnpm --filter @keyboard-sensei/api test
  */
 import type { AddressInfo } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Lesson } from "@keyboard-sensei/shared-types";
+import { Midi } from "@tonejs/midi";
+import bcrypt from "bcryptjs";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const enabled = Boolean(TEST_DATABASE_URL);
@@ -35,6 +39,12 @@ type Modules = {
   content: typeof import("./content.js");
   seedContent: typeof import("./seed-content.js").seedContent;
   tts: typeof import("./tts.js");
+  env: typeof import("./config.js").env;
+  mailer: typeof import("./mailer.js");
+  google: typeof import("./google.js");
+  songs: typeof import("./songs.js");
+  feedback: typeof import("./feedback.js");
+  instruments: typeof import("./instruments.js");
 };
 let m: Modules;
 let server: ReturnType<Modules["app"]["listen"]>;
@@ -85,6 +95,54 @@ async function createUser(): Promise<{ id: string; token: string; email: string 
   const user = await m.prisma.user.create({ data: { email, display_name: "Test user", password_hash: "x" } });
   return { id: user.id, token: m.createAccessToken({ sub: user.id, email }), email };
 }
+
+const PASSWORD = "correct-horse-battery";
+/** Like createUser, with a real password hash (cost 4 keeps the suite fast). */
+async function createUserWithPassword(role: "user" | "admin" = "user"): Promise<{ id: string; token: string; email: string }> {
+  const email = nextEmail();
+  const user = await m.prisma.user.create({
+    data: { email, display_name: "Test user", password_hash: await bcrypt.hash(PASSWORD, 4), role },
+  });
+  return { id: user.id, token: m.createAccessToken({ sub: user.id, email }), email };
+}
+
+/** Captures outgoing email instead of logging it. */
+type Mail = { to: string; subject: string; text: string };
+const outbox: Mail[] = [];
+const captureTransport = { name: "capture", send: async (message: Mail) => void outbox.push(message) };
+async function waitForMail(to: string, subject: RegExp): Promise<Mail> {
+  for (let i = 0; i < 100; i += 1) {
+    const found = outbox.find((mail) => mail.to === to && subject.test(mail.subject));
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`No email "${subject}" to ${to}`);
+}
+const tokenFrom = (text: string): string => text.match(/token=([A-Za-z0-9_-]+)/)![1]!;
+
+/** Every row in any table that references this user, found by column name rather than a hand-kept list. */
+async function rowsReferencing(userId: string): Promise<Record<string, number>> {
+  const columns = await m.prisma.$queryRaw<{ table_name: string; column_name: string }[]>`
+    SELECT table_name, column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name IN ('user_id', 'uploader_id')`;
+  const counts: Record<string, number> = {};
+  for (const { table_name, column_name } of columns) {
+    const [row] = await m.prisma.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM "public"."${table_name}" WHERE "${column_name}" = $1`,
+      userId,
+    );
+    counts[`${table_name}.${column_name}`] = Number(row!.n);
+  }
+  return counts;
+}
+
+const midiBytes = (): Buffer => {
+  const midi = new Midi();
+  const track = midi.addTrack();
+  for (let i = 0; i < 64; i += 1) track.addNote({ midi: 60 + (i % 12), time: i * 0.5, duration: 0.4 });
+  return Buffer.from(midi.toArray());
+};
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
 const statusOf = async (token: string, lessonId: string): Promise<string> => {
   const res = await api("GET", "/lessons", { token });
@@ -142,6 +200,12 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       content: await import("./content.js"),
       seedContent: (await import("./seed-content.js")).seedContent,
       tts: await import("./tts.js"),
+      env: (await import("./config.js")).env,
+      mailer: await import("./mailer.js"),
+      google: await import("./google.js"),
+      songs: await import("./songs.js"),
+      feedback: await import("./feedback.js"),
+      instruments: await import("./instruments.js"),
     };
     await truncateAll();
     server = m.app.listen(0);
@@ -157,6 +221,328 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
   beforeEach(async () => {
     // Every test starts from exactly the shipped content.
     await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
+  });
+
+  describe("public catalogue (PUBLIC_CATALOGUE)", () => {
+    it("serves only Essentials, the beginner pack and the user's own songs; admins see everything", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-catalogue-"));
+      await mkdir(join(dir, "essentials"));
+      const write = async (name: string) => {
+        const file = join(dir, name);
+        await writeFile(file, midiBytes());
+        return file;
+      };
+      const owner = await createUser();
+      const stranger = await createUser();
+      const admin = await createUserWithPassword("admin");
+      const base = { artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8 };
+      const songs = {
+        library: await m.prisma.song.create({ data: { ...base, title: "ADL cover", content_rights: "cover-arrangement", file_path: await write("seed-cover.mid") } }),
+        essentials: await m.prisma.song.create({
+          data: { ...base, id: "essentials-test-piece-full", title: "Essential", content_rights: "cc-by-sa", attribution: "Typeset by someone, CC BY-SA", file_path: await write("essentials/test-piece-full.mid") },
+        }),
+        beginner: await m.prisma.song.create({ data: { ...base, title: "Beginner tune", content_rights: "public-domain", file_path: await write("beginner-test-tune.mid") } }),
+        upload: await m.prisma.song.create({ data: { ...base, title: "Owner upload", content_rights: "user-upload", file_path: await write("upload-owner.mid"), uploader_id: owner.id } }),
+        archive: await m.prisma.song.create({
+          data: { ...base, title: "Owner archive import", content_rights: "archive-import", file_path: await write("archive-owner.mid"), notation_path: await write("archive-owner.mxl"), uploader_id: owner.id },
+        }),
+      };
+      const listed = async (token: string) =>
+        new Set(((await api("GET", "/songs", { token })).body.songs as { id: string }[]).map((song) => song.id));
+      const ids = (...keys: (keyof typeof songs)[]) => new Set(keys.map((key) => songs[key].id));
+      const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
+
+      try {
+        // Off (the default): the LAN behaviour, unchanged.
+        expect(m.env.PUBLIC_CATALOGUE).toBe(false);
+        expect(await listed(stranger.token)).toEqual(ids("library", "essentials", "beginner"));
+        expect((await api("GET", `/songs/${songs.library.id}/file`, { token: stranger.token })).status).toBe(200);
+
+        m.env.PUBLIC_CATALOGUE = true;
+        expect(await listed(stranger.token)).toEqual(ids("essentials", "beginner"));
+        expect(await listed(owner.token)).toEqual(ids("essentials", "beginner", "upload", "archive"));
+        expect(await listed(admin.token)).toEqual(ids("library", "essentials", "beginner", "upload", "archive"));
+
+        // The attribution CC BY-SA requires travels with the song.
+        const listing = (await api("GET", "/songs", { token: stranger.token })).body.songs as { id: string; attribution: string | null }[];
+        expect(listing.find((song) => song.id === songs.essentials.id)?.attribution).toBe("Typeset by someone, CC BY-SA");
+
+        // Hidden library songs are indistinguishable from missing ones.
+        for (const path of [`/songs/${songs.library.id}/file`, `/songs/${songs.library.id}/notation`]) {
+          expect((await api("GET", path, { token: stranger.token })).status, path).toBe(404);
+        }
+        expect((await api("POST", `/songs/${songs.library.id}/attempts`, { token: stranger.token, body: attempt })).status).toBe(404);
+        // Private songs stay private.
+        expect((await api("GET", `/songs/${songs.archive.id}/notation`, { token: stranger.token })).status).toBe(404);
+        expect((await api("GET", `/songs/${songs.upload.id}/file`, { token: stranger.token })).status).toBe(404);
+        // Allowed ones still work.
+        expect((await api("GET", `/songs/${songs.essentials.id}/file`, { token: stranger.token })).status).toBe(200);
+        expect((await api("GET", `/songs/${songs.beginner.id}/file`, { token: stranger.token })).status).toBe(200);
+        expect((await api("POST", `/songs/${songs.essentials.id}/attempts`, { token: stranger.token, body: attempt })).status).toBe(201);
+        expect((await api("GET", `/songs/${songs.archive.id}/notation`, { token: owner.token })).status).toBe(200);
+        expect((await api("GET", `/songs/${songs.library.id}/file`, { token: admin.token })).status).toBe(200);
+
+        // Today, the shelves and achievements read only from what exists, and still answer.
+        for (const path of ["/users/me/today", "/songs/stars/me", "/users/me/progression", "/users/me/summary"]) {
+          expect((await api("GET", path, { token: stranger.token })).status, path).toBe(200);
+        }
+      } finally {
+        m.env.PUBLIC_CATALOGUE = false;
+        const songIds = Object.values(songs).map((song) => song.id);
+        await m.prisma.playAlongAttempt.deleteMany({ where: { song_id: { in: songIds } } });
+        await m.prisma.song.deleteMany({ where: { id: { in: songIds } } });
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("account deletion", () => {
+    /** A user with something in every per-user table, and a file in every data folder. */
+    async function userWithEverything() {
+      const user = await createUserWithPassword();
+      const other = await createUser();
+      // Exercise + quiz attempts, lesson progress, XP and practice days (via rewards).
+      const exerciseId = exerciseIdsOf("lesson-01")[0]!;
+      expect((await api("POST", `/exercises/${exerciseId}/attempts`, { token: user.token, body: { performedNotes: perfectRun(exerciseId) } })).status).toBe(201);
+      const question = quizQuestions("lesson-01")[0] ?? m.content.lessons.flatMap((lesson) => lesson.sections.flatMap((section) => (section.type === "quiz" ? section.questions : [])))[0]!;
+      expect((await api("POST", `/quiz-questions/${question.id}/answer`, { token: user.token, body: { selectedAnswer: 0 } })).status).toBe(200);
+      // An upload (a real file through the real route) that another user has played too.
+      const upload = await fetch(`${baseUrl}/songs/upload?title=Mine&artist=Me`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${user.token}`, "content-type": "application/octet-stream" },
+        body: new Uint8Array(midiBytes()),
+      });
+      expect(upload.status).toBe(201);
+      const uploaded = (await upload.json()) as { id: string };
+      const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
+      expect((await api("POST", `/songs/${uploaded.id}/attempts`, { token: user.token, body: attempt })).status).toBe(201);
+      await m.prisma.playAlongAttempt.create({ data: { user_id: other.id, song_id: uploaded.id, ...attempt } });
+      // An archive import: MIDI + MusicXML on disk.
+      const archive = await m.prisma.song.create({
+        data: { title: "Archive", artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8, content_rights: "archive-import", file_path: "pending", uploader_id: user.id },
+      });
+      const archiveMidi = join(m.songs.MIDI_LIBRARY_DIR, `archive-${archive.id}.mid`);
+      const archiveXml = join(m.songs.MIDI_LIBRARY_DIR, `archive-${archive.id}.mxl`);
+      await writeFile(archiveMidi, midiBytes());
+      await writeFile(archiveXml, "<score/>");
+      await m.prisma.song.update({ where: { id: archive.id }, data: { file_path: archiveMidi, notation_path: archiveXml } });
+      // Feedback with a screenshot, through the real routes.
+      const feedback = await api("POST", "/feedback", { token: user.token, body: { type: "bug", message: "It broke", page_path: "/" } });
+      expect(feedback.status).toBe(201);
+      const shot = await fetch(`${baseUrl}/feedback/${feedback.body.id}/screenshot`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${user.token}`, "content-type": "image/png" },
+        body: new Uint8Array(PNG_BYTES),
+      });
+      expect(shot.status).toBe(201);
+      // An uploaded instrument pack.
+      const instrument = await m.prisma.instrument.create({
+        data: { name: "Mine", description: "x", category: "piano", pack_path: "pending", content_rights: "user-upload", uploader_id: user.id },
+      });
+      const packDir = join(m.instruments.INSTRUMENT_LIBRARY_DIR, `upload-${instrument.id}`);
+      await mkdir(packDir, { recursive: true });
+      await writeFile(join(packDir, "layout.json"), "{}");
+      await m.prisma.instrument.update({ where: { id: instrument.id }, data: { pack_path: packDir } });
+      // The rest of the per-user tables.
+      await m.prisma.userAchievement.upsert({
+        where: { user_id_achievement_key: { user_id: user.id, achievement_key: "test-achievement" } },
+        create: { user_id: user.id, achievement_key: "test-achievement" },
+        update: {},
+      });
+      await m.prisma.ttsUserUsage.create({ data: { user_id: user.id, day: "2026-10-23", charactersUsed: 5 } });
+      await m.prisma.authToken.create({ data: { user_id: user.id, purpose: "password_reset", token_hash: `hash-${user.id}`, expires_at: new Date(Date.now() + 60_000) } });
+
+      const files = [
+        (await m.prisma.song.findUniqueOrThrow({ where: { id: uploaded.id } })).file_path,
+        archiveMidi,
+        archiveXml,
+        join(m.feedback.FEEDBACK_SCREENSHOT_DIR, `feedback-${feedback.body.id}.png`),
+        packDir,
+      ];
+      for (const file of files) expect(existsSync(file), file).toBe(true);
+      const before = await rowsReferencing(user.id);
+      // Every table that can hold this user's data has some, so "zero after" proves something.
+      for (const table of ["ExerciseAttempt", "QuizAttempt", "UserProgress", "XpEvent", "PracticeDay", "UserAchievement", "Song", "Instrument", "PlayAlongAttempt", "Feedback", "TtsUserUsage", "AuthToken"]) {
+        expect(Object.entries(before).some(([key, n]) => key.startsWith(`${table}.`) && n > 0), table).toBe(true);
+      }
+      return { user, other, files, uploadedId: uploaded.id };
+    }
+
+    async function expectGone(subject: Awaited<ReturnType<typeof userWithEverything>>) {
+      expect(await m.prisma.user.findUnique({ where: { id: subject.user.id } })).toBeNull();
+      const after = await rowsReferencing(subject.user.id);
+      expect(Object.values(after).reduce((sum, n) => sum + n, 0), JSON.stringify(after)).toBe(0);
+      // Other users' runs on the deleted upload go with it; the other user is untouched.
+      expect(await m.prisma.playAlongAttempt.count({ where: { song_id: subject.uploadedId } })).toBe(0);
+      expect(await m.prisma.user.findUnique({ where: { id: subject.other.id } })).not.toBeNull();
+      for (const file of subject.files) expect(existsSync(file), file).toBe(false);
+    }
+
+    it("in-app: requires the password, then removes every row and file", async () => {
+      const subject = await userWithEverything();
+      const wrong = await api("DELETE", "/users/me", { token: subject.user.token, body: { password: "not-the-password" } });
+      expect(wrong.status).toBe(401);
+      expect(await m.prisma.user.findUnique({ where: { id: subject.user.id } })).not.toBeNull();
+
+      const res = await api("DELETE", "/users/me", { token: subject.user.token, body: { password: PASSWORD } });
+      expect(res.status).toBe(200);
+      await expectGone(subject);
+    });
+
+    it("signed out (the public page): email + password", async () => {
+      const subject = await userWithEverything();
+      expect((await api("POST", "/auth/delete-account", { body: { email: subject.user.email, password: "wrong-password" } })).status).toBe(401);
+      expect((await api("POST", "/auth/delete-account", { body: { email: "nobody@test.local", password: PASSWORD } })).status).toBe(401);
+      const res = await api("POST", "/auth/delete-account", { body: { email: subject.user.email.toUpperCase(), password: PASSWORD } });
+      expect(res.status).toBe(200);
+      await expectGone(subject);
+    });
+
+    it("refuses to delete the shared demo account", async () => {
+      await m.prisma.user.create({ data: { email: "demo@keyboardsensei.local", display_name: "Demo", password_hash: await bcrypt.hash("demo-password", 4) } });
+      const res = await api("POST", "/auth/delete-account", { body: { email: "demo@keyboardsensei.local", password: "demo-password" } });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("demo_account");
+      expect(await m.prisma.user.count({ where: { email: "demo@keyboardsensei.local" } })).toBe(1);
+      await m.prisma.user.delete({ where: { email: "demo@keyboardsensei.local" } });
+    });
+  });
+
+  describe("password reset and email verification", () => {
+    beforeAll(() => {
+      m.mailer.setMailTransport(captureTransport);
+    });
+
+    it("answers identically for known and unknown addresses, stores only a hash, and the token works once", async () => {
+      const user = await createUserWithPassword();
+      const known = await api("POST", "/auth/forgot-password", { body: { email: user.email } });
+      const unknown = await api("POST", "/auth/forgot-password", { body: { email: "nobody-here@test.local" } });
+      expect(known).toEqual(unknown);
+      expect(known.status).toBe(202);
+
+      const mail = await waitForMail(user.email, /reset/i);
+      expect(outbox.some((item) => item.to === "nobody-here@test.local")).toBe(false);
+      const token = tokenFrom(mail.text);
+      const [row] = await m.prisma.authToken.findMany({ where: { user_id: user.id, purpose: "password_reset" } });
+      expect(row!.token_hash).toBe(createHash("sha256").update(token).digest("hex"));
+      expect(await m.prisma.authToken.count({ where: { token_hash: token } })).toBe(0);
+      const ttl = row!.expires_at.getTime() - row!.created_at.getTime();
+      expect(ttl).toBeGreaterThan(29 * 60_000);
+      expect(ttl).toBeLessThanOrEqual(30 * 60_000 + 1_000);
+
+      expect((await api("POST", "/auth/reset-password", { body: { token, password: "short" } })).status).toBe(400);
+      expect((await api("POST", "/auth/reset-password", { body: { token, password: "a-brand-new-password" } })).status).toBe(200);
+      expect((await api("POST", "/auth/reset-password", { body: { token, password: "another-new-password" } })).status).toBe(400);
+      expect((await api("POST", "/auth/login", { body: { email: user.email, password: "a-brand-new-password" } })).status).toBe(200);
+      // Receiving the email proved the address.
+      expect((await m.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).email_verified_at).not.toBeNull();
+    });
+
+    it("rejects an expired token, and a newer request voids the older link", async () => {
+      const user = await createUserWithPassword();
+      await api("POST", "/auth/forgot-password", { body: { email: user.email } });
+      const first = tokenFrom((await waitForMail(user.email, /reset/i)).text);
+      outbox.length = 0;
+      await api("POST", "/auth/forgot-password", { body: { email: user.email } });
+      const second = tokenFrom((await waitForMail(user.email, /reset/i)).text);
+      expect(second).not.toBe(first);
+      expect((await api("POST", "/auth/reset-password", { body: { token: first, password: "a-brand-new-password" } })).status).toBe(400);
+      await m.prisma.authToken.updateMany({ where: { user_id: user.id }, data: { expires_at: new Date(Date.now() - 1_000) } });
+      expect((await api("POST", "/auth/reset-password", { body: { token: second, password: "a-brand-new-password" } })).status).toBe(400);
+    });
+
+    it("with REQUIRE_EMAIL_VERIFICATION, sign-up waits for the emailed link", async () => {
+      m.env.REQUIRE_EMAIL_VERIFICATION = true;
+      try {
+        const email = nextEmail();
+        const reg = await api("POST", "/auth/register", { body: { email, password: PASSWORD, display_name: "Verifier" } });
+        expect(reg.status).toBe(201);
+        expect(reg.body).toEqual({ verificationRequired: true, email });
+        const blocked = await api("POST", "/auth/login", { body: { email, password: PASSWORD } });
+        expect(blocked.status).toBe(403);
+        expect(blocked.body.error.code).toBe("email_not_verified");
+
+        const token = tokenFrom((await waitForMail(email, /confirm/i)).text);
+        const verified = await api("POST", "/auth/verify-email", { body: { token } });
+        expect(verified.status).toBe(200);
+        expect(verified.body.accessToken).toEqual(expect.any(String));
+        expect((await api("POST", "/auth/verify-email", { body: { token } })).status).toBe(400);
+        expect((await api("POST", "/auth/login", { body: { email, password: PASSWORD } })).status).toBe(200);
+      } finally {
+        m.env.REQUIRE_EMAIL_VERIFICATION = false;
+      }
+    });
+  });
+
+  describe("Google sign-in (mocked verifier)", () => {
+    type Identity = { sub: string; email: string | null; emailVerified: boolean; name: string | null };
+    const identities: Record<string, Identity> = {};
+    let restore: ReturnType<Modules["google"]["setGoogleVerifier"]>;
+    beforeAll(() => {
+      restore = m.google.setGoogleVerifier(async (token) => {
+        const identity = identities[token];
+        if (!identity) throw new m.google.GoogleTokenError("bad token");
+        return identity;
+      });
+    });
+    afterAll(() => {
+      m.google.setGoogleVerifier(restore);
+      m.env.GOOGLE_CLIENT_IDS = [];
+    });
+
+    it("is off until GOOGLE_CLIENT_IDS is set", async () => {
+      m.env.GOOGLE_CLIENT_IDS = [];
+      expect((await api("POST", "/auth/google", { body: { credential: "anything" } })).status).toBe(503);
+    });
+
+    it("creates, then signs in by google_sub; links a verified matching email; refuses unverified and mismatched", async () => {
+      m.env.GOOGLE_CLIENT_IDS = ["web-client.apps.googleusercontent.com", "android-client.apps.googleusercontent.com"];
+      expect((await api("POST", "/auth/google", { body: { credential: "forged" } })).status).toBe(401);
+
+      const newEmail = nextEmail();
+      identities["new"] = { sub: "sub-new", email: newEmail, emailVerified: true, name: "New Pianist" };
+      const created = await api("POST", "/auth/google", { body: { credential: "new" } });
+      expect(created.status).toBe(201);
+      expect(created.body.created).toBe(true);
+      const createdRow = await m.prisma.user.findUniqueOrThrow({ where: { email: newEmail } });
+      expect(createdRow).toMatchObject({ google_sub: "sub-new", display_name: "New Pianist" });
+      expect(createdRow.email_verified_at).not.toBeNull();
+      const me = await api("GET", "/users/me", { token: created.body.accessToken });
+      expect(me.body).toMatchObject({ email: newEmail, google_linked: true });
+      expect(me.body.google_sub).toBeUndefined();
+
+      // Same Google account again (even if its email changed): same user.
+      identities["again"] = { sub: "sub-new", email: "changed@test.local", emailVerified: true, name: null };
+      const again = await api("POST", "/auth/google", { body: { credential: "again" } });
+      expect(again.status).toBe(200);
+      expect(again.body.user.id).toBe(createdRow.id);
+
+      // An existing password account with the same verified email is linked, not duplicated.
+      const existing = await createUserWithPassword();
+      identities["link"] = { sub: "sub-link", email: existing.email, emailVerified: true, name: "Whoever" };
+      const linked = await api("POST", "/auth/google", { body: { credential: "link" } });
+      expect(linked.status).toBe(200);
+      expect(linked.body.user.id).toBe(existing.id);
+      expect((await m.prisma.user.findUniqueOrThrow({ where: { id: existing.id } })).google_sub).toBe("sub-link");
+      expect(await m.prisma.user.count({ where: { email: existing.email } })).toBe(1);
+      // The password still works too.
+      expect((await api("POST", "/auth/login", { body: { email: existing.email, password: PASSWORD } })).status).toBe(200);
+
+      // Unverified Google email: no linking, no account.
+      const victim = await createUserWithPassword();
+      identities["unverified"] = { sub: "sub-unverified", email: victim.email, emailVerified: false, name: null };
+      expect((await api("POST", "/auth/google", { body: { credential: "unverified" } })).status).toBe(403);
+      expect((await m.prisma.user.findUniqueOrThrow({ where: { id: victim.id } })).google_sub).toBeNull();
+
+      // The address is already linked to a different Google account.
+      identities["other"] = { sub: "sub-other", email: existing.email, emailVerified: true, name: null };
+      expect((await api("POST", "/auth/google", { body: { credential: "other" } })).status).toBe(409);
+
+      // A Google-only account can delete itself by confirming with Google (its own account only).
+      expect((await api("DELETE", "/users/me", { token: created.body.accessToken, body: { google_credential: "link" } })).status).toBe(401);
+      expect((await api("DELETE", "/users/me", { token: created.body.accessToken, body: { google_credential: "new" } })).status).toBe(200);
+      expect(await m.prisma.user.findUnique({ where: { id: createdRow.id } })).toBeNull();
+    });
   });
 
   describe("auth", () => {
