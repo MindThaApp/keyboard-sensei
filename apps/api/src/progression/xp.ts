@@ -15,7 +15,7 @@
  * | Daily goal met                 | +30, once per day                                         |
  * | Streak milestone               | 3/7/14/30/60/100 days: +30/70/140/300/600/1000, once each |
  * | Daily challenge cleared (70+)  | +15 / +25 / +40 by tier, once per tier per day            |
- * | Note-reading round             | 1 per 2 correct cards, max 20 a round and 60 a day        |
+ * | Note-reading round             | max 15 a round, 45 a day (set by the games router)         |
  *
  * Repeat factor (anti-farming): the 1st–3rd attempt at the same exercise or song in
  * a day earns full XP, the 4th–6th half, every later one a fifth; and something
@@ -197,30 +197,3 @@ export const dailyChallengeXp = (day: string, tier: 1 | 2 | 3, tierName: string)
   reason: `Daily challenge cleared: ${tierName}`,
   dedupeKey: `daily-challenge:${day}:${tier}`,
 });
-
-export const NOTE_READING_ROUND_CAP = 20;
-export const NOTE_READING_DAILY_CAP = 60;
-
-export interface NoteReadingRoundXpInput {
-  /** The saved round's id (the award's key). */
-  roundId: string;
-  correct: number;
-  cards: number;
-  /** XP note-reading rounds already earned today. */
-  xpToday: number;
-}
-
-/** A finished round of the note-reading game: 1 XP per 2 correct cards, capped per round and per day. */
-export function noteReadingRoundXp(input: NoteReadingRoundXpInput): XpItem[] {
-  const correct = Math.max(0, Math.min(input.correct, input.cards));
-  const amount = Math.min(Math.floor(correct / 2), NOTE_READING_ROUND_CAP, NOTE_READING_DAILY_CAP - input.xpToday);
-  if (amount <= 0) return [];
-  return [
-    {
-      source: "note_reading_round",
-      amount,
-      reason: `Note reading: ${correct} of ${input.cards} right`,
-      dedupeKey: `note_reading_round:${input.roundId}`,
-    },
-  ];
-}

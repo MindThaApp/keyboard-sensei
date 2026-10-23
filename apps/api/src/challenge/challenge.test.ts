@@ -3,7 +3,7 @@ import { generateChallenge, pieceFingerprint } from "@keyboard-sensei/challenge-
 import { lessons } from "../content.js";
 import { ACHIEVEMENTS, achievementStats } from "../progression/achievements.js";
 import type { Snapshot } from "../progression/snapshot.js";
-import { CHALLENGE_XP, NOTE_READING_DAILY_CAP, dailyChallengeXp, noteReadingRoundXp } from "../progression/xp.js";
+import { CHALLENGE_XP, dailyChallengeXp } from "../progression/xp.js";
 import { REQUIRED_LESSON_IDS, challengeAccess } from "./unlocks.js";
 
 const refs = lessons.map((lesson) => ({ id: lesson.id, title: lesson.title }));
@@ -56,23 +56,11 @@ describe("challenge unlocks", () => {
   });
 });
 
-describe("challenge and note-reading XP", () => {
+describe("challenge XP", () => {
   it("pays by tier, once per tier per day", () => {
     expect(dailyChallengeXp("2026-10-23", 1, "Starter")).toMatchObject({ amount: 15, source: "challenge", dedupeKey: "daily-challenge:2026-10-23:1" });
     expect(CHALLENGE_XP).toEqual({ 1: 15, 2: 25, 3: 40 });
     expect(dailyChallengeXp("2026-10-23", 3, "Advanced").dedupeKey).not.toBe(dailyChallengeXp("2026-10-24", 3, "Advanced").dedupeKey);
-  });
-
-  it("note_reading_round: half a point per correct card, capped per round and per day", () => {
-    expect(noteReadingRoundXp({ roundId: "r1", correct: 9, cards: 10, xpToday: 0 })).toEqual([
-      { source: "note_reading_round", amount: 4, reason: "Note reading: 9 of 10 right", dedupeKey: "note_reading_round:r1" },
-    ]);
-    expect(noteReadingRoundXp({ roundId: "r2", correct: 40, cards: 40, xpToday: 0 })[0]!.amount).toBe(20);
-    expect(noteReadingRoundXp({ roundId: "r3", correct: 40, cards: 40, xpToday: NOTE_READING_DAILY_CAP - 5 })[0]!.amount).toBe(5);
-    expect(noteReadingRoundXp({ roundId: "r4", correct: 40, cards: 40, xpToday: NOTE_READING_DAILY_CAP })).toEqual([]);
-    expect(noteReadingRoundXp({ roundId: "r5", correct: 1, cards: 10, xpToday: 0 })).toEqual([]);
-    // More "correct" than cards can't inflate it.
-    expect(noteReadingRoundXp({ roundId: "r6", correct: 99, cards: 10, xpToday: 0 })[0]!.amount).toBe(5);
   });
 });
 
