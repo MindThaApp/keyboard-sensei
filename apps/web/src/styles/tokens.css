@@ -104,6 +104,9 @@ html.dark {
   /* Fill gradient stops, already raised to the readability floor by appearance.ts. */
   --glass-a: 0.78;
   --glass-a2: 0.663;
+  /* The Frosted stops even under Clear: for sheets, toasts and menus that carry paragraphs. */
+  --glass-frosted-a: 0.78;
+  --glass-frosted-a2: 0.663;
   /* Local backing behind text runs (.glass-text); non-zero only for Clear. */
   --glass-scrim-a: 0;
   --glass-input-a: 0.88;
@@ -134,6 +137,8 @@ html.dark {
   --glass-base: 32 32 32;
   --glass-a: 0.9;
   --glass-a2: 0.765;
+  --glass-frosted-a: 0.9;
+  --glass-frosted-a2: 0.765;
   --glass-input-a: 0.97;
   --glass-pane-a: 0.45;
   --glass-lift: 0.05;
@@ -151,6 +156,8 @@ html.dark {
   --glass-base: 20 20 22;
   --glass-a: var(--glass-od-a);
   --glass-a2: var(--glass-od-a2);
+  --glass-frosted-a: var(--glass-od-a);
+  --glass-frosted-a2: var(--glass-od-a2);
   --glass-scrim-a: 0;
   --glass-lift: 0;
   --glass-rim-top: rgb(255 255 255 / 0.4);

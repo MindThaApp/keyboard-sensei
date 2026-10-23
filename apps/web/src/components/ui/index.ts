@@ -1,5 +1,3 @@
-// Temporary token fallbacks; remove together with ui-fallbacks.css once styles/tokens.css lands.
-import "./ui-fallbacks.css";
 import "./ui.css";
 
 export { Advanced, type AdvancedProps } from "./Advanced";
