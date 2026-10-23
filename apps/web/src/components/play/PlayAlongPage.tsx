@@ -26,7 +26,7 @@ import PracticeSettingsSheet from "./PracticeSettingsSheet";
 import { loadRenderer, NOTES_STYLE_FALLBACK_EVENT, styleFallbackToast, type NotesStyleFallback, type WaterfallRenderer } from "./renderers";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout } from "./stageLayout";
-import { usePlayAlongRun } from "./usePlayAlongRun";
+import { isPlayed, usePlayAlongRun } from "./usePlayAlongRun";
 import { usePracticeSong } from "./usePracticeSong";
 import { pianoRangeFor } from "./waterfall";
 import { formatDuration } from "../../utils/songLibrary";
@@ -80,8 +80,6 @@ const HANDS_OPTIONS: { value: PracticeHands; label: string }[] = [
   { value: "right", label: "Right" },
   { value: "both", label: "Both" },
 ];
-
-const isPlayed = (judgment: PlayAlongJudgment | undefined): boolean => judgment !== undefined && judgment !== "miss";
 
 export default function PlayAlongPage() {
   const { songId } = useParams<{ songId: string }>();
@@ -400,6 +398,8 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
 
   const runContextRef = useRef<RunContext>({ level, hands, attemptSongId: sources.baseId });
   const startRunRef = useRef<(tempoPct?: number) => void>(() => undefined);
+  // Set while a Stop press ends the run, so a loop doesn't start its next round.
+  const stoppedByUserRef = useRef(false);
 
   const onFinish = useCallback(
     (result: PlayAlongResult, ran: Settings, ranRun: PracticeRun, liveJudgments: readonly (PlayAlongJudgment | undefined)[]) => {
@@ -455,7 +455,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
           };
         });
         if (outcome.nextTempoPct !== ran.tempoPct) setSettings((s) => ({ ...s, tempoPct: outcome.nextTempoPct }));
-        if (outcome.again) {
+        if (outcome.again && !stoppedByUserRef.current) {
           // Straight into the next time round, count-in first.
           startRunRef.current(outcome.nextTempoPct);
           return;
@@ -486,7 +486,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     paused,
     togglePause,
     start: startRun,
-    cancel: cancelRunState,
+    stopRun,
   } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings, subscribe, onFrame, onFinish, onJudged });
   startRunRef.current = startRun;
 
@@ -527,9 +527,13 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const startAfterChange = () => setStartRequest((n) => n + 1);
 
   const cancelRun = useCallback(() => {
-    cancelRunState();
-    setPhase(finished ? "done" : "ready");
-  }, [cancelRunState, finished]);
+    // Stopping after some notes were judged ends the run with a result; stopping before
+    // any note was played just goes back.
+    stoppedByUserRef.current = true;
+    const ended = stopRun();
+    stoppedByUserRef.current = false;
+    if (!ended) setPhase(finished ? "done" : "ready");
+  }, [stopRun, finished]);
 
   // A calibration prompt lives in the MIDI status in the settings sheet; never let it
   // wait unseen behind a closed sheet.
