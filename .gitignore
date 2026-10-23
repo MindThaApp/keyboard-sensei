@@ -18,3 +18,6 @@ apps/api/scripts/instrument-manifest.json
 
 # Generated on every web build/dev start by apps/web/scripts/third-party-licenses.ts.
 apps/web/public/third-party-licenses.json
+
+# Stray declaration output next to workspace package sources (builds emit to dist/)
+packages/*/src/**/*.d.ts
