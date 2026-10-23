@@ -147,6 +147,9 @@ async function main(){
   const demo=await prisma.user.upsert({where:{email:"demo@keyboardsensei.local"},create:{email:"demo@keyboardsensei.local",display_name:"Demo User",password_hash},update:{display_name:"Demo User",password_hash}});
   const admin_hash=await bcrypt.hash(adminPassword??"admin-sensei-dev",12);
   const admin=await prisma.user.upsert({where:{email:"admin@keyboardsensei.local"},create:{email:"admin@keyboardsensei.local",display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"},update:{display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"}});
+  // The seeded accounts can't receive email (.local addresses), so they count as
+  // verified; otherwise REQUIRE_EMAIL_VERIFICATION would lock them out.
+  await prisma.user.updateMany({where:{id:{in:[demo.id,admin.id]},email_verified_at:null},data:{email_verified_at:new Date()}});
   const content=await seedContent(prisma,lessons,exercises);
   if(content.deletedLessonIds.length>0||content.deletedExerciseIds.length>0)console.log(`Pruned unreferenced content: lessons [${content.deletedLessonIds.join(", ")}], exercises [${content.deletedExerciseIds.join(", ")}]`);
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});

@@ -24,5 +24,36 @@ export const env = z
     // Per-user cap on NEW narration characters per UTC day (cache hits are free), so
     // one account cannot drain the shared monthly ElevenLabs pool (TTS_LIMIT).
     TTS_USER_DAILY_LIMIT: z.coerce.number().int().min(0).default(2_500),
+    // "true" restricts the shared song catalogue to material that may be published:
+    // the Essentials pack and the beginner pack. The ADL-sourced library (which includes
+    // copyrighted pop and film covers) is hidden from everyone but admins. Users' own
+    // uploads and archive imports stay private to them either way. Default keeps the
+    // LAN behaviour (everything visible).
+    PUBLIC_CATALOGUE: booleanFlag("false"),
+    // "true" makes new self-service accounts confirm their email before they can sign in.
+    REQUIRE_EMAIL_VERIFICATION: booleanFlag("false"),
+    // Public web origin used to build links in emails (reset password, verify email).
+    // Falls back to the first CORS_ORIGIN.
+    APP_URL: z.string().url().optional(),
+    // Outgoing email. Without SMTP_HOST, mail is written to the API log (console
+    // transport) — fine for development, not for a public deployment.
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    // "true" for implicit TLS (port 465); otherwise STARTTLS is used when offered.
+    SMTP_SECURE: booleanFlag("false"),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    MAIL_FROM: z.string().default("Keyboard Sensei <no-reply@localhost>"),
+    // Google sign-in: comma-separated OAuth client IDs whose ID tokens are accepted
+    // (the Web client and the Android client). Unset = POST /auth/google answers 503.
+    GOOGLE_CLIENT_IDS: z
+      .string()
+      .optional()
+      .transform((value) =>
+        (value ?? "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
   })
   .parse(process.env);
