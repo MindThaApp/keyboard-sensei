@@ -77,7 +77,7 @@ The API contract is [docs/api-contract.yaml](docs/api-contract.yaml). Shared dom
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, tests, and builds on every push. Pushes to `master` additionally build Docker images and push them to `ghcr.io/ramin-azizi/keyboard-sensei-web` and `ghcr.io/ramin-azizi/keyboard-sensei-api`.
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, tests, and builds on every push. Pushes to `master` additionally build Docker images and push them to `ghcr.io/mindthaapp/keyboard-sensei-web` and `ghcr.io/mindthaapp/keyboard-sensei-api`.
 
 To deploy from those prebuilt images, use `docker-compose.ghcr.yml`. The server needs a one-time `docker login ghcr.io` with a personal access token that has the `read:packages` scope (the repo and images are private).
 
