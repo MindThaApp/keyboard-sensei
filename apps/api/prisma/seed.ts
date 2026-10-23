@@ -13,6 +13,7 @@ import { extractSongMetadata, type SongMetadata } from "../src/midi-metadata.js"
 import { readEssentialsIndex, supersededLibraryIds } from "../src/essentials/replacements.js";
 import { seedEssentials } from "../src/essentials/seed.js";
 import { backfillAll } from "../src/progression/backfill.js";
+import { backfillCatalogue } from "../src/catalogue/backfill.js";
 const prisma=new PrismaClient();
 const json=(value:unknown)=>value as Prisma.InputJsonValue;
 
@@ -160,6 +161,10 @@ async function main(){
   for(const label of essentials.replacements.retired)console.log(`Essentials: retired superseded song ${label}`);
   for(const label of essentials.replacements.restored)console.log(`Essentials: restored ${label} (its replacement is missing)`);
   await remeasurePublicSongs();
+  // Works, composers, sources, licences and quality tiers for every song. Writes only
+  // catalogue columns, never ids or history, and only what changed (src/catalogue/backfill.ts).
+  const catalogue=await backfillCatalogue(prisma);
+  console.log(`Catalogue backfill: ${catalogue.worksCreated} works and ${catalogue.aliasesCreated} aliases created, ${catalogue.songsUpdated} songs updated, ${catalogue.tierOverridesApplied} curated tier overrides${catalogue.unreadable.length>0?`, ${catalogue.unreadable.length} song files unreadable`:""}`);
   await seedInstruments();
   // XP, practice days and achievements for history saved before progression existed.
   // Re-running adds only what is missing (see src/progression/backfill.ts).
