@@ -10,6 +10,8 @@ import type {
   Lesson,
   MidiExercise,
   PerformedNote,
+  SkillChip,
+  TierId,
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
@@ -145,6 +147,13 @@ const sanitizeLesson = (lesson: Lesson): Lesson => ({
       questions: section.questions.map(({ correctIndex: _stripped, ...question }) => question),
     };
   }),
+});
+
+/** The tier and skills columns are authoritative; stored lesson JSON from before they existed lacks them. */
+const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[] }): Lesson => ({
+  ...lesson,
+  tier: row.tier as TierId,
+  skills: row.skills as SkillChip[],
 });
 
 /** Read the `title` out of a stored lesson JSON without requiring a full schema parse. */
@@ -308,7 +317,7 @@ app.get("/lessons", async (req, res, next) => {
     res.json(
       rows.map((row) => {
         const progress = row.progress[0];
-        const lesson = validateLesson(row.lesson_json);
+        const lesson = withTierColumns(validateLesson(row.lesson_json), row);
         return {
           ...sanitizeLesson(lesson),
           order: row.order,
@@ -340,7 +349,7 @@ app.get("/lessons/:id", async (req, res, next) => {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
-    const lesson = validateLesson(row.lesson_json);
+    const lesson = withTierColumns(validateLesson(row.lesson_json), row);
     const [admin, completedIds, exerciseBests] = await Promise.all([
       isAdmin(uid),
       completedLessonIdsFor(uid),

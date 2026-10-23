@@ -380,6 +380,10 @@ model Lesson {
   path          String
   level         String
   branch        String
+  /// Tiered level on Learn, 0 (first steps) to 7 (advanced). Set by the seed from content/tiers.ts.
+  tier          Int            @default(0)
+  /// Skill chips shown on the lesson row (see SKILL_CHIPS in shared-types).
+  skills        String[]       @default([])
   order         Int            @unique
   /// Set by the seed when a lesson leaves the content but user data still references
   /// it: the row is kept (history survives), hidden from the course, and given a
