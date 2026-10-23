@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { MidiExercise as MidiExerciseDef, MidiExerciseSection } from "@keyboard-sensei/shared-types";
 import MidiExercise, { PASS_SCORE } from "../midi/MidiExercise";
 import { firstUnpassedIndex } from "./exerciseRuns";
-import type { FocusMode } from "../midi/useFocusModeShim";
+import type { FocusModeApi } from "../../hooks/useFocusMode";
 
 interface Props {
   lessonId: string;
@@ -16,7 +16,7 @@ interface Props {
   /** Where "Next" leads after the last exercise is passed (the next lesson), when there is one. */
   afterLast?: { label: string; to: string } | null;
   /** Focus mode state shared with the page, so the exercise can offer it and the page can hide its chrome. */
-  focus?: FocusMode;
+  focus?: FocusModeApi;
 }
 
 /**

@@ -7,7 +7,7 @@ import QuizSectionView from "../quiz/QuizSectionView";
 import ExerciseSet from "./ExerciseSet";
 import { groupExerciseRuns } from "./exerciseRuns";
 import MidiStatusBar from "../midi/MidiStatusBar";
-import { useFocusMode } from "../midi/useFocusModeShim";
+import { useFocusMode } from "../../hooks/useFocusMode";
 import { Button, GlassSurface, Sheet } from "../ui";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
