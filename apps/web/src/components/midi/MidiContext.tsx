@@ -10,7 +10,9 @@ import {
 } from "react";
 import type { MidiDeviceInfo, RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { MockMidiAdapter } from "@keyboard-sensei/midi-engine";
-import { WebMidiAdapter, isWebMidiSupported } from "@keyboard-sensei/midi-engine/web";
+import type { NativeBluetoothMidiDevice } from "@keyboard-sensei/midi-engine/capacitor";
+import { createHardwareMidiAdapter, isHardwareMidiSupported, supportsBluetoothMidiScan, type HardwareMidiAdapter } from "../../native/hardwareMidi";
+import { isNativeApp } from "../../native/platform";
 import { pianoSynth } from "../../utils/synth";
 import {
   DEFAULT_RANGE,
@@ -48,8 +50,11 @@ interface MidiContextValue {
   startCalibration: () => void;
   dismissCalibration: () => void;
   sustainPedalDown: boolean;
-  /** Timestamp (Date.now()) of the most recent note-on, for the live activity indicator. */
   connectWebMidi: () => Promise<void>;
+  /** The Android app can find and pair Bluetooth LE MIDI keyboards itself. */
+  bluetoothMidiSupported: boolean;
+  scanBluetoothMidi: () => Promise<NativeBluetoothMidiDevice[]>;
+  connectBluetoothMidi: (address: string) => Promise<void>;
   /** Subscribes to the combined raw event stream from both the virtual keyboard and real hardware. */
   subscribe: (listener: RawMidiListener) => () => void;
   /** Subscribes to control-change events from both MIDI sources. */
@@ -68,8 +73,9 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   // performance.now(): the clock Web MIDI stamps hardware events with, so on-screen
   // and hardware presses land on one timeline.
   if (!mockAdapterRef.current) mockAdapterRef.current = new MockMidiAdapter(() => performance.now());
-  const webAdapterRef = useRef<WebMidiAdapter | null>(null);
-  if (!webAdapterRef.current) webAdapterRef.current = new WebMidiAdapter();
+  // Web MIDI in a browser; the native android.media.midi plugin in the Android app.
+  const webAdapterRef = useRef<HardwareMidiAdapter | null>(null);
+  if (!webAdapterRef.current) webAdapterRef.current = createHardwareMidiAdapter();
 
   const listenersRef = useRef<Set<RawMidiListener>>(new Set());
   const controlChangeListenersRef = useRef<Set<ControlChangeListener>>(new Set());
@@ -86,7 +92,8 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const calibrationRef = useRef<CalibrationState>(calibration);
   const [sustainPedalDown, setSustainPedalDown] = useState(false);
 
-  const webMidiSupported = useMemo(() => isWebMidiSupported(), []);
+  const webMidiSupported = useMemo(() => isHardwareMidiSupported(), []);
+  const bluetoothMidiSupported = useMemo(() => supportsBluetoothMidiScan(webAdapterRef.current!), []);
 
   const setCalibrationState = useCallback((next: CalibrationState) => {
     calibrationRef.current = next;
@@ -268,7 +275,9 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         // hardware attached (e.g. a keyboard plugged into its USB-to-DEVICE port
         // instead of USB-to-HOST, so the OS never exposes it as a MIDI input).
         setWebMidiConnected(false);
-        setWebMidiError("MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
+        setWebMidiError(isNativeApp()
+          ? "No MIDI keyboard found. Plug one in over USB (most phones need a USB-C OTG adapter), or search for a Bluetooth keyboard."
+          : "MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
         syncDevices([]);
         return;
       }
@@ -289,6 +298,11 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   // never hit with an unprompted permission dialog — they connect via MidiStatusBar.
   useEffect(() => {
     if (!webMidiSupported) return;
+    // The Android app needs no permission for USB MIDI, so it always connects.
+    if (isNativeApp()) {
+      void connectWebMidi();
+      return;
+    }
     void (async () => {
       try {
         const status = await navigator.permissions.query({ name: "midi" } as unknown as PermissionDescriptor);
@@ -299,6 +313,20 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       }
     })();
   }, [webMidiSupported, connectWebMidi]);
+
+  const scanBluetoothMidi = useCallback(async () => {
+    const adapter = webAdapterRef.current!;
+    if (!supportsBluetoothMidiScan(adapter)) return [];
+    return adapter.scanBluetooth();
+  }, []);
+
+  const connectBluetoothMidi = useCallback(async (address: string) => {
+    const adapter = webAdapterRef.current!;
+    if (!supportsBluetoothMidiScan(adapter)) return;
+    // The plugin opens the device; its devicesChanged event then flows through
+    // onStateChange like a USB hot-plug.
+    await adapter.connectBluetooth(address);
+  }, []);
 
   const subscribe = useCallback((listener: RawMidiListener) => {
     listenersRef.current.add(listener);
@@ -331,10 +359,13 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       dismissCalibration,
       sustainPedalDown,
       connectWebMidi,
+      bluetoothMidiSupported,
+      scanBluetoothMidi,
+      connectBluetoothMidi,
       subscribe,
       subscribeControlChange,
     }),
-    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, currentDeviceKey, calibration, startCalibration, dismissCalibration, sustainPedalDown, connectWebMidi, subscribe, subscribeControlChange],
+    [webMidiSupported, webMidiConnected, webMidiError, devices, deviceRange, setDeviceRange, deviceRangePreference, setDeviceRangePreference, currentDeviceKey, calibration, startCalibration, dismissCalibration, sustainPedalDown, connectWebMidi, bluetoothMidiSupported, scanBluetoothMidi, connectBluetoothMidi, subscribe, subscribeControlChange],
   );
 
   return <MidiContext.Provider value={value}>{children}</MidiContext.Provider>;

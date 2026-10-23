@@ -86,3 +86,7 @@ The alternative is building on the server itself with `docker-compose.deploy.yml
 ## Operations
 
 [docs/operations.md](docs/operations.md) covers the live server: the deploy procedure (always from a clean worktree at `HEAD`), the server-side asset fetch/generate commands (library songs, beginner tunes, Essentials pack, instruments), backups and restore, LAN HTTPS and CA trust for Web MIDI, environment variables, and a table of gotchas and lessons learned from past bugs. Read the gotchas before changing notation rendering, timing/tempo code, or the play-along render loop.
+
+## Android app
+
+`apps/mobile` wraps the web app in a Capacitor shell with native USB and Bluetooth MIDI. [docs/android.md](docs/android.md) covers the toolchain, local and CI builds, release signing, and the Play Console steps.

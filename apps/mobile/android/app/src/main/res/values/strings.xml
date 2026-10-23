@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Keyboard Sensei</string>
+    <string name="title_activity_main">Keyboard Sensei</string>
+    <string name="package_name">com.keyboardsensei.app</string>
+    <string name="custom_url_scheme">com.keyboardsensei.app</string>
+</resources>
