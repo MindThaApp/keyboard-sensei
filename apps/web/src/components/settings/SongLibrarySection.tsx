@@ -32,6 +32,7 @@ import {
 } from "../../utils/songLibrary";
 import SongFilterBar from "../library/SongFilterBar";
 import Pagination from "../library/Pagination";
+import ScanSheetMusicDialog, { BetaBadge } from "./ScanSheetMusicDialog";
 
 const PAGE_SIZE = 50;
 
@@ -492,12 +493,13 @@ export default function SongLibrarySection() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<SongFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
-  const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
+  const [uploading, setUploading] = useState<"file" | "url" | "archive" | "scan" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
   // A public deployment can't redistribute the (non-commercial) archive: no entry point.
   const serverConfig = useServerConfig();
   const archiveAvailable = serverConfig !== null && !serverConfig.publicCatalogue;
+  const scanAvailable = serverConfig?.sheetMusicRecognition === true;
 
   useEffect(() => {
     getSongs()
@@ -538,6 +540,11 @@ export default function SongLibrarySection() {
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "url" ? null : "url")); }}>
             Import from URL
           </button>
+          {scanAvailable && (
+            <button className="secondary-button inline-flex items-center gap-2 text-sm" onClick={() => { setUploading((v) => (v === "scan" ? null : "scan")); }}>
+              Photo or PDF of sheet music <BetaBadge />
+            </button>
+          )}
           {archiveAvailable && (
             <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "archive" ? null : "archive")); }}>
               Browse Archive
@@ -554,6 +561,12 @@ export default function SongLibrarySection() {
       )}
       {uploading === "url" && (
         <ImportFromUrlDialog
+          onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(null); }}
+          onCancel={() => setUploading(null)}
+        />
+      )}
+      {uploading === "scan" && scanAvailable && (
+        <ScanSheetMusicDialog
           onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); setUploading(null); }}
           onCancel={() => setUploading(null)}
         />

@@ -82,6 +82,15 @@ describe("filterSongs", () => {
     expect(filterSongs(songs, { ...DEFAULT_FILTERS, source: "library" }).map((s) => s.id)).toEqual(["lib"]);
   });
 
+  it("counts imported and recognised scores as uploads", () => {
+    const withScores = [
+      ...songs,
+      song({ id: "score", mine: true, content_rights: "user-score-upload" }),
+      song({ id: "scan", mine: true, content_rights: "user-score-scan" }),
+    ];
+    expect(filterSongs(withScores, { ...DEFAULT_FILTERS, source: "uploads" }).map((s) => s.id)).toEqual(["up", "score", "scan"]);
+  });
+
   it("knows when any filter is active (sort alone is not a filter)", () => {
     expect(hasActiveFilters(DEFAULT_FILTERS)).toBe(false);
     expect(hasActiveFilters({ ...DEFAULT_FILTERS, sort: "title" })).toBe(false);
