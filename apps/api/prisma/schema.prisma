@@ -50,6 +50,7 @@ model User {
   xp_events          XpEvent[]
   practice_days      PracticeDay[]
   auth_tokens        AuthToken[]
+  game_rounds        GameRound[]
 }
 
 /// Single-use emailed tokens (password reset, email verification). Only the SHA-256
@@ -447,4 +448,22 @@ model UserProgress {
   lesson       Lesson         @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, lesson_id])
+}
+
+/// One finished round of a practice game (note reading today). `slowest` is the learner's
+/// slowest notes that round, [{ note, medianMs }], which feeds "Practise these".
+model GameRound {
+  id         String   @id @default(cuid())
+  user_id    String
+  game       String
+  correct    Int
+  total      Int
+  median_ms  Int
+  seconds    Int
+  config     Json
+  slowest    Json
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, game, created_at])
 }
