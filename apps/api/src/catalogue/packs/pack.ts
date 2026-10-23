@@ -75,6 +75,12 @@ export interface PackPiece {
   era: Era;
   /** Editorial difficulty 1-5; sets the approximate grade band. */
   level: 1 | 2 | 3 | 4 | 5;
+  /**
+   * First publication, where public-domain status depends on it (a composer
+   * who died 1926-1955 is public domain in the US and EU only if the piece
+   * came out before 1931).
+   */
+  publishedYear?: number;
   tags?: MoodTagId[];
   aliases?: AliasSeed[];
   primary: PianoMidiDeSource | MutopiaPrimarySource;
@@ -84,6 +90,8 @@ export interface PackPiece {
 export interface Pack {
   id: string;
   name: string;
+  /** Collection tag every piece carries. Default: Midiano classics (batch A's); null for none. */
+  collection?: "midiano" | null;
   pieces: PackPiece[];
 }
 

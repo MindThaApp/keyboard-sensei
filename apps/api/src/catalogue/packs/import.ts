@@ -194,7 +194,7 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
     curated: true,
     incipitCheck: incipit.result,
     fileLicence: licenceFamily(fileLicence),
-    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatus({ traditional: false, died: composer.died, publishedYear: null }, year)),
+    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatus({ traditional: false, died: composer.died, publishedYear: piece.publishedYear ?? null }, year)),
     metadata: "complete",
     reviewerApproved: false,
   });
@@ -252,7 +252,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   const signals = quality.signals
     ? { ...storedSignals(quality.signals), incipitCheck: checked.incipit.result, incipitSource: checked.incipit.note }
     : null;
-  const pd = pdStatus({ traditional: false, died: composer.died, publishedYear: null }, options.year);
+  const pd = pdStatus({ traditional: false, died: composer.died, publishedYear: piece.publishedYear ?? null }, options.year);
   const pinned = {
     difficulty: checked.meta.difficulty,
     duration_sec: checked.meta.durationSec,
@@ -295,7 +295,8 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   }
 
   const moodTags = (piece.tags ?? []) as MoodTagId[];
-  const tags = [COLLECTION_TAGS.midiano, ...moodTags.map((id) => MOOD_TAGS[id])];
+  const collectionTags = pack.collection === null ? [] : [COLLECTION_TAGS.midiano];
+  const tags = [...collectionTags, ...moodTags.map((id) => MOOD_TAGS[id])];
   const aliases = [...(piece.aliases ?? [])].sort((a, b) => a.alias.localeCompare(b.alias));
 
   await prisma.$transaction(async (tx) => {
@@ -312,6 +313,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
           era: piece.era,
           genre: piece.genre,
           pd_status: pd,
+          published_year: piece.publishedYear ?? null,
           // After the 100 Essentials, in pack order.
           recognisability: 100 + piece.rank,
           curation_status: "draft",
