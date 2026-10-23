@@ -1,7 +1,11 @@
 import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { MidiExercise as MidiExerciseDef, ScoringResult } from "@keyboard-sensei/shared-types";
+import { useExperience } from "../../contexts/ExperienceContext";
 import MidiExercise from "../midi/MidiExercise";
 import MidiStatusBar from "../midi/MidiStatusBar";
+import { Button, Card } from "../ui";
+import { experienceFor, parseSourceParam, type OnboardingDevice, type PlayedBefore } from "./onboardingParams";
 
 const base = {
   tempoBpm: 60,
@@ -61,12 +65,60 @@ const prompts: { title: string; instructions: string; exercise: MidiExerciseDef 
   },
 ];
 
+type Stage = "played" | "device" | "intro" | "tasks";
+
+interface Choice<T extends string> {
+  value: T;
+  title: string;
+  hint: string;
+}
+
+const PLAYED_CHOICES: Choice<PlayedBefore>[] = [
+  { value: "never", title: "Never, or just a little", hint: "We'll start with a few guided steps." },
+  { value: "yes", title: "Yes, I can already play", hint: "We'll check where to start you." },
+];
+
+const DEVICE_CHOICES: Choice<OnboardingDevice>[] = [
+  { value: "screen", title: "The on-screen keyboard", hint: "Tap or click the keys." },
+  { value: "plugged", title: "A keyboard plugged in", hint: "A digital piano or keyboard on a USB cable." },
+  { value: "bluetooth", title: "A keyboard over Bluetooth", hint: "Paired wirelessly." },
+];
+
+/** One question with big tappable answers. */
+function Question<T extends string>({
+  id,
+  heading,
+  choices,
+  onPick,
+}: {
+  id: string;
+  heading: string;
+  choices: Choice<T>[];
+  onPick(value: T): void;
+}) {
+  return (
+    <section aria-labelledby={id} className="mx-auto max-w-xl space-y-4 py-4">
+      <h1 id={id} className="font-display text-2xl font-semibold">
+        {heading}
+      </h1>
+      <div role="group" aria-labelledby={id} className="grid gap-3">
+        {choices.map((choice) => (
+          <Card key={choice.value} as="button" interactive className="w-full text-left" onClick={() => onPick(choice.value)}>
+            <span className="block text-base font-semibold">{choice.title}</span>
+            <span className="mt-0.5 block text-sm text-slate-600 dark:text-slate-300">{choice.hint}</span>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** "Prompt N of 3" plus three dots: brass = done, felt = current, slate = still to come. */
 function StepIndicator({ index, currentDone }: { index: number; currentDone: boolean }) {
   return (
     <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
       <span className="tabular-nums">
-        Prompt {index + 1} of {prompts.length}
+        Task {index + 1} of {prompts.length}
       </span>
       <span className="flex items-center gap-1.5" aria-hidden="true">
         {prompts.map((_, i) => {
@@ -86,6 +138,11 @@ function StepIndicator({ index, currentDone }: { index: number; currentDone: boo
   );
 }
 
+/**
+ * The first screens after sign-up or "Try it without an account": two questions that set
+ * Simple or Advanced and route the learner. New players go to the guided first steps;
+ * players who say they can already play get the optional three-task check.
+ */
 export default function SkillAssessmentPage({
   onFinish,
   onSkip,
@@ -93,6 +150,67 @@ export default function SkillAssessmentPage({
   onFinish(scores: number[]): void;
   onSkip(): void;
 }) {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const source = parseSourceParam(params.get("from"));
+  const { setExperience } = useExperience();
+  const [stage, setStage] = useState<Stage>("played");
+  const [played, setPlayed] = useState<PlayedBefore>("never");
+  const [device, setDevice] = useState<OnboardingDevice>("screen");
+
+  const goToFirstSteps = (chosen: OnboardingDevice) =>
+    navigate(`/welcome/first-steps?from=${source}&device=${chosen}`, { replace: true });
+
+  const answerPlayed = (answer: PlayedBefore) => {
+    setPlayed(answer);
+    setExperience(experienceFor(answer));
+    setStage("device");
+  };
+
+  const answerDevice = (answer: OnboardingDevice) => {
+    setDevice(answer);
+    if (played === "never") goToFirstSteps(answer);
+    else setStage("intro");
+  };
+
+  if (stage === "played") {
+    return <Question id="q-played" heading="Have you played piano before?" choices={PLAYED_CHOICES} onPick={answerPlayed} />;
+  }
+  if (stage === "device") {
+    return <Question id="q-device" heading="What will you play on?" choices={DEVICE_CHOICES} onPick={answerDevice} />;
+  }
+  if (stage === "intro") {
+    return (
+      <section className="mx-auto max-w-xl space-y-4 py-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
+            Quick check (optional)
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            3 short tasks. Strong, consistent results unlock the first four lessons; otherwise you start at lesson 1.
+          </p>
+        </div>
+        <Button variant="filled" size="lg" onClick={() => setStage("tasks")}>
+          Start
+        </Button>
+        <button
+          type="button"
+          className="block min-h-[44px] w-full text-center text-sm text-felt-700 underline dark:text-felt-300"
+          onClick={() => {
+            setExperience("simple");
+            goToFirstSteps(device);
+          }}
+        >
+          I'm new — skip this
+        </button>
+      </section>
+    );
+  }
+  return <AssessmentTasks onFinish={onFinish} onSkip={onSkip} />;
+}
+
+function AssessmentTasks({ onFinish, onSkip }: { onFinish(scores: number[]): void; onSkip(): void }) {
   const [index, setIndex] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
   const [result, setResult] = useState<ScoringResult | null>(null);
@@ -119,20 +237,18 @@ export default function SkillAssessmentPage({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-              Optional skill assessment
+              Quick check (optional)
             </p>
             <StepIndicator index={index} currentDone={result !== null} />
           </div>
           <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Three short prompts. Strong, consistent results unlock the first four lessons; otherwise you start at
-            lesson 1.
-          </p>
         </div>
-        {/* Up top, not below the exercise: a beginner shouldn't have to scroll past a
-            keyboard test to find the way out of it. */}
-        <button className="primary-button shrink-0" onClick={onSkip}>
-          Skip — I’m new to piano
+        <button
+          type="button"
+          className="min-h-[44px] shrink-0 text-sm text-felt-700 underline dark:text-felt-300"
+          onClick={onSkip}
+        >
+          Skip the check
         </button>
       </div>
       <MidiStatusBar />
@@ -145,9 +261,9 @@ export default function SkillAssessmentPage({
         onCompleted={completed}
       />
       {result && (
-        <button className="primary-button" onClick={next}>
-          {index === prompts.length - 1 ? "See placement" : "Next prompt"}
-        </button>
+        <Button variant="filled" onClick={next}>
+          {index === prompts.length - 1 ? "See placement" : "Next task"}
+        </Button>
       )}
     </div>
   );
