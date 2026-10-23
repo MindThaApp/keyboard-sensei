@@ -40,7 +40,7 @@ const STEAL_FADE_S = 0.015;
 const IMMEDIATE_RELEASE_S = 0.02;
 
 /** Output level of the loudest touch. Tuned so the voice sits at the loudness of the other piano voices. */
-export const OUTPUT_GAIN = 0.9;
+export const OUTPUT_GAIN = 0.22;
 const MIN_TOUCH_LEVEL = 0.04;
 const TOUCH_CURVE = 1.7;
 
