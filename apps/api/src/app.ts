@@ -20,7 +20,7 @@ import {
   validateLesson,
   validateMidiExercise,
 } from "@keyboard-sensei/lesson-engine";
-import { isAdmin, requireAuth } from "./auth.js";
+import { createAccessToken, isAdmin, requireAuth } from "./auth.js";
 import { authRouter } from "./auth-routes.js";
 import { prisma } from "./db.js";
 import { env } from "./config.js";
@@ -259,8 +259,12 @@ app.post("/users/me/password", async (req, res, next) => {
       return;
     }
     const password_hash = await bcrypt.hash(input.newPassword, 12);
-    await prisma.user.update({ where: { id: uid }, data: { password_hash } });
-    res.json({ ok: true });
+    // Bumping token_version signs out every other session; this device gets a fresh token.
+    const updated = await prisma.user.update({
+      where: { id: uid },
+      data: { password_hash, token_version: { increment: 1 } },
+    });
+    res.json({ ok: true, accessToken: createAccessToken({ sub: updated.id, email: updated.email, tv: updated.token_version }) });
   } catch (e) {
     next(e);
   }
