@@ -87,6 +87,10 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "wolfgang-amadeus-mozart", name: "Wolfgang Amadeus Mozart", sort_name: "Mozart, Wolfgang Amadeus", born: 1756, died: 1791, aliases: ["Mozart", "W. A. Mozart"], era: "classical-era" },
   { id: "william-croft", name: "William Croft", sort_name: "Croft, William", born: 1678, died: 1727, aliases: ["Croft"], era: "baroque" },
   { id: "william-h-monk", name: "William H. Monk", sort_name: "Monk, William H.", born: 1823, died: 1889, aliases: ["William Henry Monk"], era: "romantic" },
+  { id: "tom-turpin", name: "Tom Turpin", sort_name: "Turpin, Tom", born: null, died: 1922, aliases: ["Thomas Turpin", "Thomas Million Turpin"], era: "ragtime" },
+  { id: "john-field", name: "John Field", sort_name: "Field, John", born: 1782, died: 1837, aliases: ["Field"], era: "romantic" },
+  { id: "jean-philippe-rameau", name: "Jean-Philippe Rameau", sort_name: "Rameau, Jean-Philippe", born: 1683, died: 1764, aliases: ["Rameau"], era: "baroque" },
+  { id: "domenico-scarlatti", name: "Domenico Scarlatti", sort_name: "Scarlatti, Domenico", born: 1685, died: 1757, aliases: ["Scarlatti"], era: "baroque" },
 ];
 
 /**
