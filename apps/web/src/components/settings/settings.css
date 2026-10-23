@@ -1,0 +1,91 @@
+/* Settings screens: rows that carry a full-width control under their title. */
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--ui-row-pad-y) var(--ui-row-pad-x);
+  color: var(--label);
+}
+.settings-row__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ui-gap);
+}
+.settings-row__title {
+  font: 400 var(--ui-fs-body) / var(--ui-lh-body) var(--font-text);
+}
+.settings-row__hint {
+  color: var(--label-2a);
+  font: 400 var(--ui-fs-foot) / var(--ui-lh-foot) var(--font-text);
+}
+.settings-row__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-row__body > * {
+  min-width: 0;
+}
+
+.settings-tints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.settings-tint {
+  position: relative;
+  width: var(--hit-min);
+  height: var(--hit-min);
+  border: 0;
+  border-radius: 50%;
+  background-clip: content-box;
+  padding: 7px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings-tint::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  pointer-events: none;
+}
+.settings-tint[data-selected="true"]::after {
+  border-color: var(--label);
+}
+.settings-tint:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 1px;
+}
+
+.settings-field {
+  width: 100%;
+  min-height: var(--hit-min);
+  padding: 8px 12px;
+  border: 0.5px solid var(--separator);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--label);
+  font: inherit;
+}
+.settings-field:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 1px;
+}
+
+.settings-tabs {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.settings-status {
+  color: var(--success);
+  font: 400 var(--ui-fs-foot) / var(--ui-lh-foot) var(--font-text);
+}
+.settings-error {
+  color: var(--danger);
+  font: 400 var(--ui-fs-foot) / var(--ui-lh-foot) var(--font-text);
+}
