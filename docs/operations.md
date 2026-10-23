@@ -453,6 +453,14 @@ Project Settings → Security & Privacy, and the org-wide equivalents:
   burn the quota.
 - Data retention 90 days (matches the privacy policy).
 
+## Performance budget in tests
+
+`apps/api/src/catalogue/search.db.test.ts` measures catalogue search latency over 5,000 seeded Works and always logs the p95. The 50 ms p95 budget is asserted only when `PERF_ASSERT=1` is set, because the number is meaningless on a loaded machine. Run it on an idle machine before changing the search query or its indexes:
+
+```sh
+PERF_ASSERT=1 TEST_DATABASE_URL=postgresql://$(whoami)@localhost:5432/<test db> pnpm --filter @keyboard-sensei/api exec vitest run src/catalogue/search.db.test.ts
+```
+
 ## Gotchas and lessons learned
 
 | Issue | Cause | Prevention now in place |
