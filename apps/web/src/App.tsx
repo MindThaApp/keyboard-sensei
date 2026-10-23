@@ -5,6 +5,7 @@ import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
 import ProgressPage from "./components/progress/ProgressPage";
 import TodayPage from "./components/today/TodayPage";
 import PracticePage from "./components/practice/PracticePage";
+import NoteReadingGame from "./components/games/NoteReadingGame";
 import DailyGoalPage from "./components/auth/DailyGoalPage";
 import FirstStepsPage from "./components/auth/FirstStepsPage";
 import SettingsPage from "./components/settings/SettingsPage";
@@ -194,6 +195,7 @@ function AppShell() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
           {/* New screens: register their routes here, above the redirects. */}
+          <Route path="/practice/notes" element={<NoteReadingGame />} />
           {KitPreview && (
             <Route
               path="/dev/kit"
