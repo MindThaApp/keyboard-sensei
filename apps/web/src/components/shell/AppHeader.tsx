@@ -1,89 +1,105 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useDailySummary } from "../../state/useDailySummary";
-import { GoalRing } from "../progress/ProgressBits";
+import { GlassSurface } from "../ui/GlassSurface";
+import { ProgressRing } from "../ui/ProgressRing";
+import { TabBar, type TabBarItem } from "../ui/TabBar";
+import "./shell.css";
 
-/**
- * Four destinations. Settings and Admin live behind the account menu. From the `nav`
- * breakpoint (900px) up they are inline links in the header; below it they move to a
- * bottom tab bar (four fits a phone comfortably), so the header never needs a menu.
- */
-export const NAV_ITEMS: { to: string; label: string; end?: boolean; icon: ReactNode; matches?: string[] }[] = [
+const icon = (path: string): ReactNode => (
+  <svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24">
+    <path d={path} />
+  </svg>
+);
+
+/** The four destinations. Settings and Admin live behind the account menu. */
+export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/",
     label: "Today",
     end: true,
-    icon: <path d="M10 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 2a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H3Zm13 0a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2h-1ZM10 15a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1ZM4.9 4.9a1 1 0 0 1 1.4 0l.7.7A1 1 0 0 1 5.6 7l-.7-.7a1 1 0 0 1 0-1.4Zm9.5 9.5a1 1 0 0 1 1.4 0l.7.7a1 1 0 0 1-1.4 1.4l-.7-.7a1 1 0 0 1 0-1.4Zm1.4-9.5a1 1 0 0 1 0 1.4l-.7.7A1 1 0 0 1 13.7 5.6l.7-.7a1 1 0 0 1 1.4 0ZM6.3 14.4a1 1 0 0 1 0 1.4l-.7.7a1 1 0 0 1-1.4-1.4l.7-.7a1 1 0 0 1 1.4 0Z" />,
+    icon: icon(
+      "M10 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 2a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H3Zm13 0a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2h-1ZM10 15a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1ZM4.9 4.9a1 1 0 0 1 1.4 0l.7.7A1 1 0 0 1 5.6 7l-.7-.7a1 1 0 0 1 0-1.4Zm9.5 9.5a1 1 0 0 1 1.4 0l.7.7a1 1 0 0 1-1.4 1.4l-.7-.7a1 1 0 0 1 0-1.4Zm1.4-9.5a1 1 0 0 1 0 1.4l-.7.7A1 1 0 0 1 13.7 5.6l.7-.7a1 1 0 0 1 1.4 0ZM6.3 14.4a1 1 0 0 1 0 1.4l-.7.7a1 1 0 0 1-1.4-1.4l.7-.7a1 1 0 0 1 1.4 0Z",
+    ),
   },
   {
     to: "/learn",
     label: "Learn",
-    matches: ["/lessons/"],
-    icon: <path d="M9 4.8C7.6 3.9 5.6 3.5 3.5 3.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1c2 0 3.8.4 5.5 1.4V4.8Zm2 12.1c1.7-1 3.5-1.4 5.5-1.4a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1c-2.1 0-4.1.4-5.5 1.3v12.1Z" />,
+    icon: icon(
+      "M9 4.8C7.6 3.9 5.6 3.5 3.5 3.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1c2 0 3.8.4 5.5 1.4V4.8Zm2 12.1c1.7-1 3.5-1.4 5.5-1.4a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1c-2.1 0-4.1.4-5.5 1.3v12.1Z",
+    ),
   },
   {
     to: "/practice",
     label: "Practice",
-    matches: ["/play/"],
-    icon: <path d="M15.3 2.3a1 1 0 0 1 .7 1v10.2a2.5 2.5 0 1 1-2-2.45V6.2l-6 1.5v7.8A2.5 2.5 0 1 1 6 13.05V5a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .54.27Z" />,
+    icon: icon(
+      "M15.3 2.3a1 1 0 0 1 .7 1v10.2a2.5 2.5 0 1 1-2-2.45V6.2l-6 1.5v7.8A2.5 2.5 0 1 1 6 13.05V5a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .54.27Z",
+    ),
   },
   {
     to: "/progress",
     label: "Progress",
-    icon: <path d="M3 16a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm1-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1H4v-1Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v5H9V8Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v9h-3V4Z" />,
+    icon: icon(
+      "M3 16a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm1-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1H4v-1Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v5H9V8Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v9h-3V4Z",
+    ),
   },
 ];
 
-const isActiveFor = (item: (typeof NAV_ITEMS)[number], pathname: string): boolean =>
-  item.end ? pathname === item.to : pathname.startsWith(item.to) || (item.matches ?? []).some((prefix) => pathname.startsWith(prefix));
+/** True once the page has scrolled down past the top and is still heading down. */
+export function useCondensedOnScroll(): boolean {
+  const [condensed, setCondensed] = useState(false);
+  const location = useLocation();
 
-function desktopLinkClasses(active: boolean): string {
-  return `rounded-md px-3 py-1.5 transition-colors ${
-    active
-      ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-  }`;
+  useEffect(() => {
+    setCondensed(false);
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y < 24) setCondensed(false);
+      else if (y > last + 6) setCondensed(true);
+      else if (y < last - 6) setCondensed(false);
+      last = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [location.pathname]);
+
+  return condensed;
 }
 
-const menuItemClasses =
-  "block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800";
-
-interface AppHeaderProps {
-  isAdmin: boolean;
-  displayName: string | null;
-  onLogout(): void;
-  /** Rendered only on pages that hide the floating Feedback launcher (the Play-Along stage). */
-  onOpenFeedback?: () => void;
-  /** Tailwind classes that constrain the header's inner row — matches the page width below it. */
-  widthClassName: string;
-}
-
-/** Today's goal at a glance: ring + streak, linking to Today. */
-function GoalChip() {
+/** Today's goal at a glance: ring, minutes and streak, linking to Today. */
+function GoalChip({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const summary = useDailySummary(user?.daily_goal_minutes);
   if (!summary) return null;
   const { minutesToday, goalMinutes, met } = summary.dailyGoal;
+  const minutes = Math.floor(minutesToday);
   return (
     <Link
       to="/"
-      className="flex items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-      aria-label={`Daily goal: ${Math.floor(minutesToday)} of ${goalMinutes} minutes${met ? ", met" : ""}. Streak: ${summary.streak.current} days`}
+      className="ks-goal-chip"
+      aria-label={`Daily goal: ${minutes} of ${goalMinutes} minutes${met ? ", met" : ""}. Streak: ${summary.streak.current} days`}
       data-testid="header-goal"
     >
-      <GoalRing minutes={minutesToday} goal={goalMinutes} size={28} stroke={3.5} />
-      <span className="tabular-nums" aria-hidden>
-        {Math.floor(minutesToday)}/{goalMinutes}m
-      </span>
-      <span className="tabular-nums" aria-hidden title="Goal streak">
-        🔥{summary.streak.current}
+      <ProgressRing value={goalMinutes > 0 ? minutesToday / goalMinutes : 0} size={28} stroke={4} aria-label="Daily goal" />
+      <span className="ks-goal-chip__text glass-text" aria-hidden="true">
+        {compact ? `${minutes}/${goalMinutes}` : `${minutes} of ${goalMinutes} min today`}
+        {summary.streak.current > 0 && <span className="ks-goal-chip__streak"> {"🔥"}{summary.streak.current}</span>}
       </span>
     </Link>
   );
 }
 
-function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Omit<AppHeaderProps, "widthClassName">) {
+interface AccountMenuProps {
+  isAdmin: boolean;
+  displayName: string | null;
+  onLogout(): void;
+  onOpenFeedback(): void;
+}
+
+function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const location = useLocation();
@@ -109,44 +125,39 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Omit<Ap
 
   const initial = (displayName?.trim()[0] ?? "?").toUpperCase();
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="ks-account">
       <button
         type="button"
         aria-label="Account menu"
         aria-expanded={open}
-        aria-controls={menuId}
+        aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-felt-600 text-sm font-semibold text-white hover:bg-felt-500"
+        className="ks-account__button"
       >
         {initial}
       </button>
       {open && (
-        <div
-          id={menuId}
-          className="absolute right-0 top-11 z-50 w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-        >
-          {displayName && <p className="truncate px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300">{displayName}</p>}
-          <Link to="/settings" className={menuItemClasses}>
+        <div id={menuId} className="ks-menu" role="group" aria-label="Account">
+          {displayName && <p className="ks-menu__name">{displayName}</p>}
+          <Link to="/settings" className="ks-menu__item">
             Settings
           </Link>
           {isAdmin && (
-            <Link to="/admin/users" className={menuItemClasses}>
+            <Link to="/admin/users" className="ks-menu__item">
               Admin
             </Link>
           )}
-          {onOpenFeedback && (
-            <button
-              type="button"
-              className={menuItemClasses}
-              onClick={() => {
-                setOpen(false);
-                onOpenFeedback();
-              }}
-            >
-              Feedback
-            </button>
-          )}
-          <button type="button" className={menuItemClasses} onClick={onLogout}>
+          <button
+            type="button"
+            className="ks-menu__item"
+            onClick={() => {
+              setOpen(false);
+              onOpenFeedback();
+            }}
+          >
+            Send feedback
+          </button>
+          <button type="button" className="ks-menu__item" onClick={onLogout}>
             Log out
           </button>
         </div>
@@ -155,67 +166,57 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Omit<Ap
   );
 }
 
-export default function AppHeader({ isAdmin, displayName, onLogout, onOpenFeedback, widthClassName }: AppHeaderProps) {
-  const location = useLocation();
-  return (
-    <header className="border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-      <div className={`mx-auto flex items-center justify-between gap-3 px-4 py-2.5 ${widthClassName}`}>
-        <Link to="/" className="shrink-0 font-display text-lg font-semibold tracking-tight">
-          Keyboard <span className="text-felt-600 dark:text-felt-400">Sensei</span>
-        </Link>
-
-        <nav aria-label="Main" className="hidden items-center gap-1 text-sm nav:flex">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              aria-current={isActiveFor(item, location.pathname) ? "page" : undefined}
-              className={desktopLinkClasses(isActiveFor(item, location.pathname))}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <GoalChip />
-          <AccountMenu isAdmin={isAdmin} displayName={displayName} onLogout={onLogout} onOpenFeedback={onOpenFeedback} />
-        </div>
-      </div>
-      <div className="felt-strip" />
-    </header>
-  );
+export interface AppNavigationProps extends AccountMenuProps {
+  /** The Play-Along stage owns the whole screen: only a way back is shown. */
+  performanceView: boolean;
 }
 
-/** Phone and tablet navigation: the same four destinations, at the bottom of the screen. */
-export function BottomTabBar() {
-  const location = useLocation();
+/**
+ * Floating navigation, laid out by device class. Phone and tablet get a bottom pill
+ * with the goal and account at the top right; a laptop gets one capsule at the top
+ * with the goal and account at its right end.
+ */
+export default function AppNavigation({ performanceView, ...account }: AppNavigationProps) {
+  const { device } = useDeviceClass();
+  const condensed = useCondensedOnScroll();
+
+  if (performanceView) {
+    return (
+      <GlassSurface as="div" variant="clear-dark" className="ks-back-circle">
+        <Link to="/practice" aria-label="Back to Practice">
+          <span aria-hidden="true">{"‹"}</span>
+        </Link>
+      </GlassSurface>
+    );
+  }
+
+  if (device === "desktop") {
+    return (
+      <>
+        <div className="edge-top ks-edge ks-edge--top" aria-hidden="true" />
+        <TabBar
+          items={NAV_ITEMS}
+          placement="top"
+          trailing={
+            <div className="ks-tabbar-trailing">
+              <GoalChip />
+              <AccountMenu {...account} />
+            </div>
+          }
+        />
+      </>
+    );
+  }
+
   return (
-    <nav
-      aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur nav:hidden dark:border-slate-800 dark:bg-slate-900/95"
-    >
-      <ul className="mx-auto grid max-w-lg grid-cols-4">
-        {NAV_ITEMS.map((item) => {
-          const active = isActiveFor(item, location.pathname);
-          return (
-            <li key={item.to}>
-              <Link
-                to={item.to}
-                aria-current={active ? "page" : undefined}
-                className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-xs font-medium ${
-                  active ? "text-felt-700 dark:text-felt-300" : "text-slate-600 dark:text-slate-300"
-                }`}
-              >
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden>
-                  {item.icon}
-                </svg>
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <>
+      <div className="edge-top ks-edge ks-edge--top" aria-hidden="true" />
+      <div className="edge-bottom ks-edge ks-edge--bottom" aria-hidden="true" />
+      <GlassSurface className="ks-float-cluster" data-device={device}>
+        <GoalChip compact={device === "phone"} />
+        <AccountMenu {...account} />
+      </GlassSurface>
+      <TabBar items={NAV_ITEMS} placement="bottom" condensed={condensed} />
+    </>
   );
 }

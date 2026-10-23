@@ -1,28 +1,24 @@
+import { useEffect } from "react";
 import { dismissAudioNotice, useAudioNotices } from "../../audio/audioNotices";
+import { useFocusMode } from "../../hooks/useFocusMode";
+import { useToast } from "../ui/Toast";
 
-/** Small dismissible notices for audio problems, e.g. an instrument that failed to load. */
+/**
+ * Audio problems (e.g. an instrument that failed to load) shown as info toasts. They
+ * wait in the notice store while focus mode is on and appear when it ends.
+ */
 export default function AudioNoticeToasts() {
   const notices = useAudioNotices();
-  if (notices.length === 0) return null;
-  return (
-    <div className="pointer-events-none fixed bottom-20 left-4 z-50 flex max-w-sm nav:bottom-4 flex-col gap-2" aria-live="polite">
-      {notices.map((notice) => (
-        <div
-          key={notice.id}
-          role="status"
-          className="pointer-events-auto flex items-start gap-3 rounded-lg border border-brass-400/60 bg-white px-3 py-2 text-sm text-slate-700 shadow-lg dark:border-brass-600/50 dark:bg-slate-900 dark:text-slate-200"
-        >
-          <span className="flex-1">{notice.message}</span>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
-            onClick={() => dismissAudioNotice(notice.id)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+  const toast = useToast();
+  const { active: focused } = useFocusMode();
+
+  useEffect(() => {
+    if (focused) return;
+    for (const notice of notices) {
+      dismissAudioNotice(notice.id);
+      toast.show({ tone: "info", title: notice.message, duration: 7000 });
+    }
+  }, [notices, focused, toast]);
+
+  return null;
 }

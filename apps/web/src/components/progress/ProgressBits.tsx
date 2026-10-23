@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LevelInfo } from "../../services/api";
+import { addDays } from "../../utils/dates";
 
 /** Small pieces of progression UI shared by Today, Progress, the header and song lists. */
 
@@ -80,7 +81,81 @@ export function LevelBar({ level, className = "" }: { level: LevelInfo; classNam
   );
 }
 
+/**
+ * Minutes as the header chip counts them: whole minutes, rounded down. Anything under a
+ * minute reads "under 1 min" so it never rounds up to "1 min" while the chip says 0.
+ */
 export const formatMinutes = (minutes: number): string => {
+  if (minutes > 0 && minutes < 1) return "under 1 min";
   const whole = Math.floor(minutes);
   return whole >= 60 ? `${Math.floor(whole / 60)}h ${whole % 60}m` : `${whole} min`;
 };
+
+export type DayState = "met" | "frozen" | "practised" | "none";
+
+export interface WeekDay {
+  day: string;
+  state: DayState;
+  minutes: number;
+  isToday: boolean;
+  isFuture: boolean;
+}
+
+const describeDay = (day: WeekDay): string => {
+  const date = new Date(`${day.day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+  if (day.isFuture) return `${date}: upcoming`;
+  if (day.state === "met") return `${date}: goal met (${formatMinutes(day.minutes)})`;
+  if (day.state === "frozen") return `${date}: missed, covered by a streak freeze`;
+  if (day.state === "practised") return `${date}: ${formatMinutes(day.minutes)}, goal not met`;
+  return `${date}: no practice`;
+};
+
+/** Seven labelled dots for the current week, Monday first. */
+export function WeekDots({ days }: { days: WeekDay[] }) {
+  return (
+    <ol className="flex justify-between gap-1" aria-label="This week">
+      {days.map((day) => {
+        const letter = new Date(`${day.day}T12:00:00`).toLocaleDateString(undefined, { weekday: "narrow" });
+        const dot =
+          day.state === "met"
+            ? "bg-tint-fill text-on-tint"
+            : day.state === "frozen"
+              ? "bg-fill-strong text-label"
+              : day.state === "practised"
+                ? "bg-tint/30 text-label"
+                : "bg-fill text-label-2a";
+        return (
+          <li key={day.day} className="flex min-w-0 flex-1 flex-col items-center gap-1.5" aria-label={describeDay(day)} title={describeDay(day)}>
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-footnote font-semibold ${dot} ${day.isFuture ? "opacity-50" : ""} ${day.isToday ? "ring-2 ring-tint ring-offset-2 ring-offset-cell" : ""}`}
+              aria-hidden
+            >
+              {day.state === "met" ? "✓" : day.state === "frozen" ? "❄" : ""}
+            </span>
+            <span className={`text-caption ${day.isToday ? "font-semibold text-label" : "text-label-2a"}`} aria-hidden>
+              {letter}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** The current week (Monday first) from the API's calendar, for `WeekDots`. */
+export function buildWeek(
+  today: string,
+  calendar: { day: string; minutes: number; goalMet: boolean }[],
+  frozenDays: string[],
+): WeekDay[] {
+  const byDay = new Map(calendar.map((entry) => [entry.day, entry]));
+  const frozen = new Set(frozenDays);
+  const weekday = new Date(`${today}T12:00:00`).getDay();
+  const sinceMonday = (weekday + 6) % 7;
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = addDays(today, index - sinceMonday);
+    const entry = byDay.get(day);
+    const state: DayState = entry?.goalMet ? "met" : frozen.has(day) ? "frozen" : entry && entry.minutes > 0 ? "practised" : "none";
+    return { day, state, minutes: entry?.minutes ?? 0, isToday: day === today, isFuture: day > today };
+  });
+}
