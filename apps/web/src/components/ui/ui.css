@@ -28,7 +28,7 @@
 :root,
 [data-density="regular"] {
   --ui-btn-pad-x: 20px;
-  --ui-seg-h: 36px;
+  --ui-seg-h: var(--hit-min);
   --ui-seg-pad-x: 14px;
   --ui-row-pad-y: 11px;
   --ui-row-pad-x: 16px;
@@ -43,7 +43,6 @@
   :root,
   [data-density] {
     --ui-btn-sm-h: var(--hit-min);
-    --ui-seg-h: var(--hit-min);
   }
 }
 
