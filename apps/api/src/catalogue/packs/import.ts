@@ -194,7 +194,7 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
     curated: true,
     incipitCheck: incipit.result,
     fileLicence: licenceFamily(fileLicence),
-    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(workPdStatus(composer, year)),
+    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(workPdStatus(composer, year, piece.publishedYear)),
     metadata: "complete",
     reviewerApproved: false,
   });
@@ -202,8 +202,8 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
 }
 
 /** A Work's public-domain status: unattributed and traditional pieces are old enough by nature. */
-const workPdStatus = (composer: ComposerSeed, year: number) =>
-  pdStatus({ traditional: composer.id === TRADITIONAL || composer.id === ANONYMOUS, died: composer.died, publishedYear: null }, year);
+const workPdStatus = (composer: ComposerSeed, year: number, publishedYear?: number | null) =>
+  pdStatus({ traditional: composer.id === TRADITIONAL || composer.id === ANONYMOUS, died: composer.died, publishedYear: publishedYear ?? null }, year);
 
 /**
  * Equality for stored columns. A double read back from Postgres keeps 15
@@ -256,7 +256,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   const signals = quality.signals
     ? { ...storedSignals(quality.signals), incipitCheck: checked.incipit.result, incipitSource: checked.incipit.note }
     : null;
-  const pd = workPdStatus(composer, options.year);
+  const pd = workPdStatus(composer, options.year, piece.publishedYear);
   const pinned = {
     difficulty: checked.meta.difficulty,
     duration_sec: checked.meta.durationSec,
@@ -299,7 +299,8 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   }
 
   const moodTags = (piece.tags ?? []) as MoodTagId[];
-  const tags = [COLLECTION_TAGS.midiano, ...moodTags.map((id) => MOOD_TAGS[id])];
+  const collectionTags = pack.collection === null ? [] : [COLLECTION_TAGS.midiano];
+  const tags = [...collectionTags, ...moodTags.map((id) => MOOD_TAGS[id])];
   const aliases = [...(piece.aliases ?? [])].sort((a, b) => a.alias.localeCompare(b.alias));
 
   await prisma.$transaction(async (tx) => {
@@ -316,6 +317,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
           era: piece.era,
           genre: piece.genre,
           pd_status: pd,
+          published_year: piece.publishedYear ?? null,
           // After the 100 Essentials, in pack order.
           recognisability: 100 + piece.rank,
           curation_status: "draft",

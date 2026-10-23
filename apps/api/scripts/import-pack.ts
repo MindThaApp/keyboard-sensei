@@ -14,10 +14,11 @@ import "dotenv/config";
 import { prisma } from "../src/db.js";
 import { BATCH_A } from "../src/catalogue/packs/batch-a.js";
 import { BATCH_B } from "../src/catalogue/packs/batch-b.js";
+import { BATCH_C } from "../src/catalogue/packs/batch-c.js";
 import { importPack, type PieceReport } from "../src/catalogue/packs/import.js";
 import type { Pack } from "../src/catalogue/packs/pack.js";
 
-const PACKS: Record<string, Pack> = { [BATCH_A.id]: BATCH_A, [BATCH_B.id]: BATCH_B };
+const PACKS: Record<string, Pack> = { [BATCH_A.id]: BATCH_A, [BATCH_B.id]: BATCH_B, [BATCH_C.id]: BATCH_C };
 
 function describeIncipit(report: PieceReport): string {
   const incipit = report.incipit;
