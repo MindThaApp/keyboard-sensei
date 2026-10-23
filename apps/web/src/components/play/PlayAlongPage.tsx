@@ -1,144 +1,59 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import {
-  difficultyMultiplier,
   finalScore,
-  handsMultiplier,
-  lookaheadMultiplier,
-  MAX_SCORE_MULTIPLIER,
   practiceMultiplier,
-  PRACTICE_LEVELS,
-  tempoMultiplier,
+  type PlayAlongJudgment,
+  type PlayAlongNote,
   type PlayAlongResult,
   type PracticeHands,
   type PracticeLevel,
 } from "@keyboard-sensei/midi-engine";
-import { getMyPlayAlongAttempts, getSongNotationFile, submitPlayAlongAttempt, type PlayAlongBest } from "../../services/api";
-import { arrangeForPractice, buildPracticeRun, type AccompanimentMute, type LoopRange, type PlayAlongEngine, type PracticeRun } from "@keyboard-sensei/playalong-core";
-import { CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
-import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
+import { arrangeForPractice, buildPracticeRun, type LoopRange, type PlayAlongEngine, type PracticeRun } from "@keyboard-sensei/playalong-core";
+import { getSongNotationFile, submitPlayAlongAttempt } from "../../services/api";
+import { useAppearance, useDeviceClass } from "../../contexts/AppearanceContext";
+import { enterFocusMode, useFocusMode } from "../../hooks/useFocusMode";
+import { useReducedMotion } from "../../utils/motion";
 import { useMidiContext } from "../midi/MidiContext";
-import MidiStatusBar from "../midi/MidiStatusBar";
-import { useTheme } from "../../contexts/ThemeContext";
-import { KeyboardSizingControls } from "../piano/VirtualPiano";
-import { useKeyboardSizing, snapRangeToWhiteKeys } from "../piano/useKeyboardSizing";
-import {
-  drawWaterfall,
-  pianoRangeFor,
-  WATERFALL_COLORS_DARK,
-  WATERFALL_COLORS_LIGHT,
-} from "./waterfall";
+import { snapRangeToWhiteKeys, useKeyboardSizing } from "../piano/useKeyboardSizing";
+import SongStars from "../progress/SongStars";
+import { Button, ErrorState, GlassSurface, SegmentedControl, Toast, Toggle } from "../ui";
+import { useExperienceMode } from "../ui/useExperienceMode";
+import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
+import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
+import PracticeResultSheet, { type FinishedRun } from "./PracticeResultSheet";
+import PracticeSettingsSheet from "./PracticeSettingsSheet";
+import { loadRenderer, type WaterfallRenderer } from "./renderers";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
-import { stageLayout, type VisibilityMode } from "./stageLayout";
-import { formatDuration } from "../../utils/songLibrary";
-import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano } from "./PlayAlongLive";
+import { stageLayout } from "./stageLayout";
 import { usePlayAlongRun } from "./usePlayAlongRun";
 import { usePracticeSong } from "./usePracticeSong";
-import LoopBarStrip from "./LoopBarStrip";
-import SongStars from "../progress/SongStars";
+import { pianoRangeFor } from "./waterfall";
+import { formatDuration } from "../../utils/songLibrary";
 import {
   afterLoop,
-  HANDS_LABELS,
-  LEVEL_DESCRIPTIONS,
+  applyRung,
+  ladderPosition,
+  ladderStep,
   LEVEL_LABELS,
+  loadSongMemory,
   parsePracticePreset,
+  PRACTICE_LADDER,
   practiceSummary,
-  stepLevel,
-  type LoopOptions,
+  runStars,
+  saveSongMemory,
+  simpleStart,
+  type LadderState,
 } from "./practiceSession";
+import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, type Settings } from "./practiceSettings";
+import "./practice.css";
 
-// Continuous, replacing the old 4 discrete buttons. Bounds are set by what the
-// engine and API accept: tempoMultiplier = sqrt(rate) and lookaheadMultiplier are
-// clamped, and their product is capped at 1.5 so a fast run can't exceed the API's
-// score ceiling of 160.
-const TEMPO_MIN_PCT = 25;
-const TEMPO_MAX_PCT = 200;
-const LOOKAHEAD_MIN_S = 1;
-const LOOKAHEAD_MAX_S = 8;
-const SETTINGS_KEY = "ks-playalong-settings";
-/** Choices for where auto speed-up starts, and what accuracy counts as clean. */
-const SPEED_UP_START_OPTIONS = [25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
-const CLEAN_ACCURACY_OPTIONS = [50, 60, 70, 75, 80, 85, 90, 95, 100];
 /** A loop starts out this long when switched on with no preset. */
 const DEFAULT_LOOP_BARS = 4;
 
-// "Sheet music" IS the scrolling ribbon. There used to be a separate "Scrolling
-// score" mode alongside a static rolling-window "Sheet music", but they were two
-// answers to the same question and the ribbon is strictly the better one — it
-// shows more, never page-turns, and keeps the sounding note under your eye.
-type ViewMode = "falling" | "notation" | "both";
-const VIEW_MODES: ViewMode[] = ["falling", "notation", "both"];
-
-const VISIBILITY_MODES: VisibilityMode[] = ["note-size", "window-size"];
-
-interface Settings extends LoopOptions {
-  tempoPct: number;
-  lookaheadS: number;
-  waitMode: boolean;
-  guideAudio: boolean;
-  viewMode: ViewMode;
-  metronome: boolean;
-  metronomeSound: MetronomeSound;
-  clickLevel: ClickLevel;
-  metronomeVolume: number;
-  visibilityMode: VisibilityMode;
-  accompanimentMute: AccompanimentMute;
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  tempoPct: 100,
-  lookaheadS: 4,
-  waitMode: false,
-  guideAudio: true,
-  viewMode: "both",
-  metronome: false,
-  metronomeSound: "click",
-  clickLevel: "beat",
-  metronomeVolume: 0.7,
-  visibilityMode: "note-size",
-  accompanimentMute: { otherHand: false, removed: false },
-  untilClean: false,
-  autoSpeedUp: false,
-  speedUpStartPct: 60,
-  cleanAccuracyPct: 90,
-};
-
-const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
-  typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
-
-function loadSettings(): Settings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    return {
-      tempoPct: clampNum(parsed.tempoPct, TEMPO_MIN_PCT, TEMPO_MAX_PCT, 100),
-      lookaheadS: clampNum(parsed.lookaheadS, LOOKAHEAD_MIN_S, LOOKAHEAD_MAX_S, 4),
-      waitMode: Boolean(parsed.waitMode),
-      guideAudio: parsed.guideAudio !== false,
-      viewMode: VIEW_MODES.includes(parsed.viewMode as ViewMode) ? (parsed.viewMode as ViewMode) : "both",
-      metronome: Boolean(parsed.metronome),
-      metronomeSound: METRONOME_SOUNDS.some((s) => s.value === parsed.metronomeSound) ? (parsed.metronomeSound as MetronomeSound) : "click",
-      clickLevel: CLICK_LEVELS.some((c) => c.value === parsed.clickLevel) ? (parsed.clickLevel as ClickLevel) : "beat",
-      metronomeVolume: typeof parsed.metronomeVolume === "number" ? parsed.metronomeVolume : 0.7,
-      visibilityMode: VISIBILITY_MODES.includes(parsed.visibilityMode as VisibilityMode) ? (parsed.visibilityMode as VisibilityMode) : "note-size",
-      accompanimentMute: {
-        otherHand: Boolean(parsed.accompanimentMute?.otherHand),
-        removed: Boolean(parsed.accompanimentMute?.removed),
-      },
-      untilClean: Boolean(parsed.untilClean),
-      autoSpeedUp: Boolean(parsed.autoSpeedUp),
-      speedUpStartPct: clampNum(parsed.speedUpStartPct, TEMPO_MIN_PCT, 95, 60),
-      cleanAccuracyPct: clampNum(parsed.cleanAccuracyPct, 50, 100, 90),
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
 // The letter grades how well you played (accuracy), so a clean run on easier settings
 // still earns an A; the difficulty bonus shows up in the score number instead. "S" is
-// kept for near-perfect runs at full difficulty or harder.
+// kept for near-perfect runs at full difficulty or harder. Advanced mode only.
 const gradeFor = (accuracyPct: number, score: number): string =>
   accuracyPct >= 95 && score >= 100 ? "S" : accuracyPct >= 90 ? "A" : accuracyPct >= 75 ? "B" : accuracyPct >= 60 ? "C" : "D";
 
@@ -158,11 +73,43 @@ interface LoopStatus {
   lastClean: boolean;
 }
 
-const HANDS_OPTIONS: { value: PracticeHands; short: string }[] = [
-  { value: "both", short: "Both" },
-  { value: "right", short: "Right" },
-  { value: "left", short: "Left" },
+const HANDS_OPTIONS: { value: PracticeHands; label: string }[] = [
+  { value: "left", label: "Left" },
+  { value: "right", label: "Right" },
+  { value: "both", label: "Both" },
 ];
+
+const isPlayed = (judgment: PlayAlongJudgment | undefined): boolean => judgment !== undefined && judgment !== "miss";
+
+export default function PlayAlongPage() {
+  const { songId } = useParams<{ songId: string }>();
+  const { data: practiceSong, error } = usePracticeSong(songId);
+
+  if (error) {
+    return (
+      <div className="ks-practice ks-practice--message" data-surface="practice">
+        <ErrorState
+          title="Couldn't load this song"
+          message={error}
+          action={
+            <Link to="/practice" className="ks-btn ks-btn--gray ks-btn--md">
+              Back to songs
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+  if (!practiceSong || !songId) {
+    return (
+      <div className="ks-practice ks-practice--message" data-surface="practice" role="status">
+        Loading song…
+      </div>
+    );
+  }
+  // Keyed by song, so every piece of practice state starts fresh with the song.
+  return <SongPractice key={songId} practiceSong={practiceSong} />;
+}
 
 /**
  * The credit line a song's edition licence requires (CC BY / CC BY-SA Mutopia editions in
@@ -174,13 +121,13 @@ function SongCredit({ attribution, simplified }: { attribution: string; simplifi
   const text = match ? match[1] : attribution;
   const url = match?.[2];
   return (
-    <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400" aria-label="Credit">
+    <p className="ks-practice-credit glass-text" aria-label="Credit">
       {simplified ? "Simplified from: " : "Edition: "}
       {text}
       {url && (
         <>
           {" "}
-          <a href={url} target="_blank" rel="noreferrer" className="underline hover:text-slate-700 dark:hover:text-slate-200">
+          <a href={url} target="_blank" rel="noreferrer">
             Source
           </a>
         </>
@@ -189,48 +136,45 @@ function SongCredit({ attribution, simplified }: { attribution: string; simplifi
   );
 }
 
-export default function PlayAlongPage() {
-  const { songId } = useParams<{ songId: string }>();
-  const { data: practiceSong, error } = usePracticeSong(songId);
-
-  if (error) {
-    return (
-      <div className="card mx-auto w-full max-w-2xl space-y-3 p-6">
-        <h1 className="font-display text-xl font-semibold">Couldn't load this song</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{error}</p>
-        <p className="text-sm text-slate-500">If this keeps happening, tell us with the Feedback button.</p>
-        <Link to="/play" className="secondary-button inline-block text-sm">Back to library</Link>
-      </div>
-    );
-  }
-  if (!practiceSong || !songId) return <p className="text-sm text-slate-500">Loading song…</p>;
-  // Keyed by song, so every piece of practice state starts fresh with the song.
-  return <SongPractice key={songId} songId={songId} practiceSong={practiceSong} />;
-}
-
-function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: NonNullable<ReturnType<typeof usePracticeSong>["data"]> }) {
+function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<typeof usePracticeSong>["data"]> }) {
   const { song, sources, base: parsed, authored } = practiceSong;
   const { subscribe, devices, deviceRange, calibration } = useMidiContext();
-  const { theme } = useTheme();
+  const { scheme } = useAppearance();
+  const { device, orientation } = useDeviceClass();
+  const experience = useExperienceMode();
+  const reducedMotion = useReducedMotion();
+  const focus = useFocusMode({ hotkey: true });
   const location = useLocation();
   const preset = useMemo(() => parsePracticePreset(location.search), [location.search]);
   const barCount = Math.max(1, parsed.grid.bars.length);
 
+  // Where the song opens. A link's preset (from the Gym) wins; otherwise Simple mode
+  // starts a beginner gently and one rung up after a pass, and Advanced mode keeps the
+  // settings carried over from the last song.
+  const [initial] = useState(() => {
+    const saved = loadSettings(experience);
+    const opened = preset.level ?? sources.openedLevel;
+    // Just the tune has no left hand: a left-hand preset gets the easiest level that has one.
+    const level: PracticeLevel = opened === "melody" && preset.hands === "left" ? "easy" : opened;
+    const hands: PracticeHands = preset.hands ?? "both";
+    const hasPreset = preset.level !== undefined || preset.hands !== undefined || preset.loop !== undefined;
+    if (experience === "simple" && !hasPreset) {
+      const start = simpleStart(loadSongMemory(sources.baseId), { level, hands, tempoPct: saved.tempoPct, waitMode: saved.waitMode });
+      return { settings: { ...saved, tempoPct: start.tempoPct, waitMode: start.waitMode }, level: start.level, hands: start.hands };
+    }
+    return { settings: saved, level, hands };
+  });
+
   const [phase, setPhase] = useState<Phase>("ready");
-  const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [result, setResult] = useState<PlayAlongResult | null>(null);
-  const [resultContext, setResultContext] = useState<{ tempoPct: number; lookaheadS: number; level: PracticeLevel; hands: PracticeHands } | null>(null);
-  const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [settings, setSettings] = useState<Settings>(initial.settings);
+  const [level, setLevel] = useState<PracticeLevel>(initial.level);
+  const [hands, setHands] = useState<PracticeHands>(initial.hands);
+  const [finished, setFinished] = useState<FinishedRun | null>(null);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed" | "skipped">("idle");
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [bestsByLevel, setBestsByLevel] = useState<Partial<Record<PracticeLevel, PlayAlongBest>>>({});
-
-  const [hands, setHands] = useState<PracticeHands>(preset.hands ?? "both");
-  const [level, setLevel] = useState<PracticeLevel>(() => {
-    const opened = preset.level ?? sources.openedLevel;
-    // Melody only has no left hand: a left-hand preset (from the Gym) gets the easiest level that has one.
-    return opened === "melody" && preset.hands === "left" ? "easy" : opened;
-  });
+  const [toast, setToast] = useState<{ id: number; title: string; body: string } | null>(null);
   const [loopOn, setLoopOn] = useState(preset.loop !== undefined);
   const [loopRange, setLoopRange] = useState<LoopRange>(() => {
     const start = Math.min(preset.loop?.startBar ?? 0, barCount - 1);
@@ -239,43 +183,23 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
   });
   const [loopStatus, setLoopStatus] = useState<LoopStatus | null>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const rendererRef = useRef<WaterfallRenderer | null>(null);
+  const [rendererReady, setRendererReady] = useState(0);
   const scrollingScoreRef = useRef<ScrollingScoreHandle | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageWidth, setStageWidth] = useState(0);
   const [stageHeight, setStageHeight] = useState(0);
 
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settings]);
+  useEffect(() => saveSettings(settings), [settings]);
 
-  // Personal bests for this piece, per level (every version of a graded piece counts).
-  const groupIdsKey = sources.groupIds.join(",");
-  const refreshBests = useCallback(() => {
-    const ids = groupIdsKey.split(",");
-    getMyPlayAlongAttempts()
-      .then((response) => {
-        const merged: Partial<Record<PracticeLevel, PlayAlongBest>> = {};
-        for (const id of ids) {
-          for (const [lvl, best] of Object.entries(response.bests_by_level?.[id] ?? {}) as [PracticeLevel, PlayAlongBest][]) {
-            if (!merged[lvl] || best.score > merged[lvl]!.score) merged[lvl] = best;
-          }
-        }
-        setBestsByLevel(merged);
-      })
-      .catch(() => undefined);
-  }, [groupIdsKey]);
-  useEffect(refreshBests, [refreshBests]);
-
-  // Fetch real MusicXML/.mxl notation for archive-imported songs, when
-  // available (song.notation_path is a presence indicator, not a real path
-  // -- see songListItem() server-side). Falls back to ScrollingScore
-  // (below) for direct uploads/URL imports, which never have notation.
+  // Fetch real MusicXML/.mxl notation for archive-imported songs when there is some
+  // (notation_path is a presence flag). Everything else uses ScrollingScore below.
   useEffect(() => {
     setNotationBytes(null);
     if (!song?.notation_path) return;
     let cancelled = false;
-    getSongNotationFile(songId)
+    getSongNotationFile(song.id)
       .then((bytes) => {
         if (!cancelled) setNotationBytes(bytes);
       })
@@ -283,12 +207,11 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     return () => {
       cancelled = true;
     };
-  }, [songId, song?.notation_path]);
+  }, [song?.id, song?.notation_path]);
 
-  // Track the stage size so the keyboard and waterfall fill the space the page actually
-  // has. Observe the OUTER element, never one whose size we set from the observation —
-  // that's a ResizeObserver feedback loop. The stage is absolutely positioned inside a
-  // flex-1 box, so its size comes from the page layout and never from the canvas inside.
+  // Track the stage size so the keyboard and waterfall fill the space the page has.
+  // Observe the OUTER element, never one whose size is set from the observation (a
+  // ResizeObserver feedback loop): the lane is absolutely positioned in a flex-1 box.
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return;
@@ -302,8 +225,8 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     return () => observer.disconnect();
   }, []);
 
-  // The notes to play at this level. Only a level change re-arranges (and so
-  // re-engraves the notation); hands and loops only slice the result below.
+  // The notes to play at this level. Only a level change re-arranges (and so re-engraves
+  // the notation); hands and loops only slice the result below.
   const arrangement = useMemo(() => arrangeForPractice(parsed, level, authored[level] ?? null), [parsed, level, authored]);
   const run = useMemo(
     () => buildPracticeRun(parsed, arrangement, { hands, loop: loopOn ? loopRange : null }),
@@ -322,129 +245,127 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     }
     return { min, max };
   }, [parsed, arrangement]);
-
   const notationVerticalRange = useMemo(() => ({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
-  // The song's octave-padded range is the "default" step; its exact range, snapped to
-  // white-key edges, is the "tight fit" step.
   const defaultRange = useMemo(() => pianoRangeFor(pitchSpan.min, pitchSpan.max), [pitchSpan]);
   const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
-  // Single source of truth for both the piano and the falling-note canvas below — they
-  // read the exact same geometry, so resizing one resizes the other in lock-step and
-  // they can never drift apart (see useKeyboardSizing). No persistenceKey/onDeviceRangeChange: nothing here should
-  // carry over between songs or leak into another page's saved zoom for this device.
-  const sizing = useKeyboardSizing({
-    defaultRange,
-    tightRange,
-    deviceRange,
-    hasDevice: devices.length > 0,
-    containerWidthPx: stageWidth,
-  });
+  // One geometry for the keys and the falling notes, so they can never drift apart.
+  const sizing = useKeyboardSizing({ defaultRange, tightRange, deviceRange, hasDevice: devices.length > 0, containerWidthPx: stageWidth });
   const geometry = sizing.geometry;
-  const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
-  // Recomputed every render (cheap arithmetic) from the measured stage and the settings.
-  // The rAF loop reads it through layoutRef, so a resize or a settings-panel toggle while
-  // paused can't leave the running loop drawing with a stale geometry or height.
+
+  // Which hand each pitch belongs to, for the key tint when it is played.
+  const handByNote = useMemo(() => {
+    const map: Record<number, "left" | "right"> = {};
+    for (const note of arrangement.notes) map[note.midi] = note.hand === "left" ? "left" : "right";
+    return map;
+  }, [arrangement]);
+  const handsInRun = useMemo(() => ({ right: run.notes.some((n) => n.hand !== "left"), left: run.notes.some((n) => n.hand === "left") }), [run]);
+
+  const playing = phase === "playing";
+  const stageTone = stageToneFor({ scheme, style: settings.notesStyle, playing });
+  const palette = notePalette(stageTone);
   const { pianoHeightPx, waterfallHeightPx: heightPx } = stageLayout({
     stageHeightPx: stageHeight,
     whiteKeyWidthPx: geometry.whiteKeyWidthPx,
     visibilityMode: settings.visibilityMode,
     lookaheadS: settings.lookaheadS,
   });
-  const layoutRef = useRef({ geometry, heightPx, colors });
-  layoutRef.current = { geometry, heightPx, colors };
+  // The rAF loop reads these through a ref, so a resize or a settings change while
+  // paused can't leave it drawing with a stale geometry, height or palette.
+  const layoutRef = useRef({ geometry, heightPx, palette, reducedMotion });
+  layoutRef.current = { geometry, heightPx, palette, reducedMotion };
 
-  // Static preview frame before Play: the run's first notes at run time 0. Purely a
-  // paint — never touches engine/scoring state.
+  // Phone landscape has no height to spare: falling notes only.
+  const notationFits = !(device === "phone" && orientation === "landscape");
+  const showNotation = settings.viewMode !== "falling" && notationFits;
+  const showFalling = settings.viewMode !== "notation" || !notationFits;
+
+  // The notes style: Classic is built in; other styles load on demand.
   useEffect(() => {
-    if (phase === "playing") return;
-    if (settings.viewMode === "notation") return; // canvas isn't rendered in this view mode
-    const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    // canvas.width/height are integer setters, so an unrounded comparison against a
-    // fractional target is never equal and reallocates the canvas every time.
-    const targetWidth = Math.round(geometry.widthPx * dpr);
-    const targetHeight = Math.round(heightPx * dpr);
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawWaterfall(ctx, {
-      notes: run.notes,
-      judgments: [],
-      songTimeS: 0,
-      lookaheadS: settings.lookaheadS,
-      geometry,
-      heightPx,
-      colors,
-      bars: run.bars,
+    let cancelled = false;
+    void loadRenderer(settings.notesStyle).then((renderer) => {
+      if (cancelled) {
+        renderer.dispose();
+        return;
+      }
+      rendererRef.current?.dispose();
+      renderer.mount(canvas);
+      rendererRef.current = renderer;
+      setRendererReady((n) => n + 1);
     });
-  }, [phase, run, geometry, settings.viewMode, settings.lookaheadS, heightPx, colors]);
+    return () => {
+      cancelled = true;
+    };
+  }, [canvas, settings.notesStyle]);
+  useEffect(
+    () => () => {
+      rendererRef.current?.dispose();
+      rendererRef.current = null;
+    },
+    [],
+  );
+
+  const paint = useCallback((notes: readonly PlayAlongNote[], judgments: readonly (PlayAlongJudgment | undefined)[], runTime: number, lookaheadS: number, bars: PracticeRun["bars"], waitingPitches?: readonly number[]) => {
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    const { geometry, heightPx, palette, reducedMotion } = layoutRef.current;
+    renderer.resize(geometry, heightPx, window.devicePixelRatio || 1);
+    renderer.draw({ notes, judgments, songTimeS: runTime, lookaheadS, geometry, heightPx, palette, bars, waitingPitches, reducedMotion });
+  }, []);
+
+  // Static preview frame before Play: the run's first notes at run time 0.
+  useEffect(() => {
+    if (playing || !showFalling) return;
+    paint(run.notes, [], 0, settings.lookaheadS, run.bars);
+  }, [playing, showFalling, run, geometry, heightPx, palette, settings.lookaheadS, paint, rendererReady]);
 
   // Static preview for the scrolling score: the cursor at the start of the run.
   useEffect(() => {
-    if (phase === "playing") return;
-    if (settings.viewMode === "falling") return;
+    if (playing || !showNotation) return;
     scrollingScoreRef.current?.setSongTime(run.offsetS);
-  }, [phase, settings.viewMode, run.offsetS, arrangement]);
+  }, [playing, showNotation, run.offsetS, arrangement]);
 
-  const onFrame = useCallback((engine: PlayAlongEngine, runTime: number, live: Settings) => {
-    const current = runRef.current;
-    // Runs every frame and mutates the ribbon's DOM transform directly via refs
-    // inside ScrollingScore — never a setState, so this can't cause a 60fps React
-    // re-render (see docs/operations.md). The score is in song time.
-    scrollingScoreRef.current?.setSongTime(runTime + current.offsetS);
+  const onFrame = useCallback(
+    (engine: PlayAlongEngine, runTime: number, live: Settings) => {
+      const current = runRef.current;
+      // Runs every frame and only touches refs and DOM transforms, never React state,
+      // so it can't cause a 60fps re-render (see docs/operations.md).
+      scrollingScoreRef.current?.setSongTime(runTime + current.offsetS);
+      paint(current.notes, engine.judgments, runTime, live.lookaheadS, current.bars, engine.isWaiting ? engine.waitingMidis : undefined);
+    },
+    [paint],
+  );
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    const { geometry, heightPx, colors } = layoutRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    // Round before comparing: canvas.width is an integer setter, so once
-    // whiteKeyWidthPx is fractional (which fit-to-width makes it), an
-    // unrounded comparison is NEVER equal — the canvas would be reallocated
-    // and its context reset on every single frame, at 60fps.
-    const targetWidth = Math.round(geometry.widthPx * dpr);
-    const targetHeight = Math.round(heightPx * dpr);
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawWaterfall(ctx, {
-      notes: current.notes,
-      judgments: engine.judgments,
-      songTimeS: runTime,
-      lookaheadS: live.lookaheadS,
-      geometry,
-      heightPx,
-      colors,
-      bars: current.bars,
-    });
+  const onJudged = useCallback((index: number, judgment: PlayAlongJudgment, note: PlayAlongNote) => {
+    rendererRef.current?.onJudgement(index, judgment, note);
   }, []);
 
   const runContextRef = useRef<RunContext>({ level, hands, attemptSongId: sources.baseId });
   const startRunRef = useRef<(tempoPct?: number) => void>(() => undefined);
 
   const onFinish = useCallback(
-    (finished: PlayAlongResult, ran: Settings, ranRun: PracticeRun) => {
+    (result: PlayAlongResult, ran: Settings, ranRun: PracticeRun, liveJudgments: readonly (PlayAlongJudgment | undefined)[]) => {
       const context = runContextRef.current;
       const rate = ran.tempoPct / 100;
       const practice = { level: context.level, hands: context.hands };
       const multiplier = practiceMultiplier({ rate, lookaheadS: ran.lookaheadS, ...practice });
+      const score = finalScore(result, rate, ran.lookaheadS, practice);
+      const judgments = ran.waitMode ? liveJudgments : result.judgments;
+      const played = judgments.filter(isPlayed).length;
 
-      // Wait mode is unscored practice, so it is never saved (as before).
-      if (!ran.waitMode) {
+      // A run where no note was played is not a run: nothing is saved.
+      if (played === 0) {
+        setSubmitState("skipped");
+      } else {
         setSubmitState("saving");
+        // Wait for me is unscored, but its minutes count: it is saved with no score, so it
+        // earns practice time and never stars, points or a best.
         submitPlayAlongAttempt(context.attemptSongId, {
-          score: finalScore(finished, rate, ran.lookaheadS, practice),
-          accuracy: finished.accuracyPct,
+          score: ran.waitMode ? 0 : score,
+          accuracy: ran.waitMode ? 0 : result.accuracyPct,
           tempo_pct: ran.tempoPct,
           lookahead_s: ran.lookaheadS,
-          wait_mode: false,
+          wait_mode: ran.waitMode,
           arrangement_level: context.level,
           hands: context.hands,
           loop_start_bar: ranRun.loop ? ranRun.loop.startBar + 1 : null,
@@ -452,33 +373,55 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
           multiplier: Math.round(multiplier * 1000) / 1000,
           is_loop: ranRun.loop !== null,
         })
-          .then(() => {
-            setSubmitState("saved");
-            if (!ranRun.loop) refreshBests();
-          })
+          .then(() => setSubmitState("saved"))
           .catch(() => setSubmitState("failed"));
       }
 
-      setResult(finished);
-      setResultContext({ tempoPct: ran.tempoPct, lookaheadS: ran.lookaheadS, ...practice });
+      // Remember where this song got to, so Simple mode opens it one rung up after a pass.
+      if (!ranRun.loop && played > 0) {
+        const ladder: LadderState = { ...practice, tempoPct: ran.tempoPct, waitMode: ran.waitMode };
+        const passed = ran.waitMode ? played === ranRun.notes.length : runStars(result.accuracyPct, { ...practice, isLoop: false }) >= 1;
+        saveSongMemory(sources.baseId, { rung: Math.max(0, ladderPosition(ladder).index), passed });
+      }
 
+      let loopNote: string | null = null;
       if (ranRun.loop) {
-        const outcome = afterLoop(finished.accuracyPct, ran.tempoPct, ran, ran.waitMode);
-        setLoopStatus((status) => ({
-          round: (status?.round ?? 1) + (outcome.again ? 1 : 0),
-          lastAccuracyPct: ran.waitMode ? null : finished.accuracyPct,
-          lastClean: outcome.clean,
-        }));
+        const outcome = afterLoop(result.accuracyPct, ran.tempoPct, ran, ran.waitMode);
+        let round = 1;
+        setLoopStatus((status) => {
+          round = status?.round ?? 1;
+          return {
+            round: round + (outcome.again ? 1 : 0),
+            lastAccuracyPct: ran.waitMode ? null : result.accuracyPct,
+            lastClean: outcome.clean,
+          };
+        });
         if (outcome.nextTempoPct !== ran.tempoPct) setSettings((s) => ({ ...s, tempoPct: outcome.nextTempoPct }));
         if (outcome.again) {
           // Straight into the next time round, count-in first.
           startRunRef.current(outcome.nextTempoPct);
           return;
         }
+        if (outcome.clean) loopNote = "Right this time!";
       }
+
+      setFinished({
+        result,
+        liveJudgments: [...liveJudgments],
+        run: ranRun,
+        waitMode: ran.waitMode,
+        level: context.level,
+        hands: context.hands,
+        tempoPct: ran.tempoPct,
+        score,
+        grade: gradeFor(result.accuracyPct, score),
+        multiplier,
+        loopNote,
+      });
+      setResultOpen(true);
       setPhase("done");
     },
-    [refreshBests],
+    [sources.baseId],
   );
 
   const {
@@ -486,16 +429,20 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     togglePause,
     start: startRun,
     cancel: cancelRunState,
-  } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings, subscribe, onFrame, onFinish });
+  } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings, subscribe, onFrame, onFinish, onJudged });
   startRunRef.current = startRun;
 
+  const nothingToPlay = run.notes.length === 0;
+
   const start = useCallback(() => {
-    if (run.notes.length === 0) return;
-    setResult(null);
+    if (runRef.current.notes.length === 0) return;
+    setResultOpen(false);
+    setSettingsOpen(false);
     setSubmitState("idle");
+    rendererRef.current?.reset();
     runContextRef.current = { level, hands, attemptSongId: authored[level] ? sources.authoredId[level]! : sources.baseId };
     let tempoPct: number | undefined;
-    if (run.loop) {
+    if (runRef.current.loop) {
       setLoopStatus({ round: 1, lastAccuracyPct: null, lastClean: false });
       if (settings.autoSpeedUp) {
         tempoPct = settings.speedUpStartPct;
@@ -504,554 +451,320 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
     } else {
       setLoopStatus(null);
     }
+    // Phone landscape is the main Android posture: the first Play goes into focus so the
+    // stage and keyboard have the whole screen.
+    if (experience === "simple" && device === "phone" && orientation === "landscape") enterFocusMode();
     startRun(tempoPct);
     setPhase("playing");
-  }, [run, level, hands, authored, sources, settings.autoSpeedUp, settings.speedUpStartPct, startRun]);
+  }, [level, hands, authored, sources, settings.autoSpeedUp, settings.speedUpStartPct, startRun, experience, device, orientation]);
 
-  // A calibration prompt lives in the MIDI status bar inside the settings panel; never
-  // let it wait unseen behind a closed panel.
-  const calibrating = calibration.status === "awaitingLow" || calibration.status === "awaitingHigh";
-  const showSettings = settingsOpen || calibrating;
+  // Some actions change the settings and then play: start once React has rebuilt the
+  // run with them (the state updates and this request land in the same render).
+  const [startRequest, setStartRequest] = useState(0);
+  const startLatestRef = useRef(start);
+  startLatestRef.current = start;
+  useEffect(() => {
+    if (startRequest > 0) startLatestRef.current();
+  }, [startRequest]);
+  const startAfterChange = () => setStartRequest((n) => n + 1);
 
   const cancelRun = useCallback(() => {
     cancelRunState();
-    setPhase(result ? "done" : "ready");
-  }, [cancelRunState, result]);
+    setPhase(finished ? "done" : "ready");
+  }, [cancelRunState, finished]);
 
-  const settingsLocked = phase === "playing" && !paused;
-  // Level, hands and the loop shape the run itself, so they can't change mid-run.
-  const practiceLocked = phase === "playing";
-  const rate = settings.tempoPct / 100;
-  const scoreBonus = practiceMultiplier({ rate, lookaheadS: settings.lookaheadS, level, hands });
-  const uncappedBonus = tempoMultiplier(rate) * lookaheadMultiplier(settings.lookaheadS) * difficultyMultiplier(level) * handsMultiplier(hands);
-  const summary = practiceSummary({ hands, loop: loopOn ? run.loop : null, tempoPct: settings.tempoPct, level, waitMode: settings.waitMode });
-  const nothingToPlay = run.notes.length === 0;
-  const resultScore = result && resultContext ? finalScore(result, resultContext.tempoPct / 100, resultContext.lookaheadS, resultContext) : 0;
-  const loopLabel =
-    phase === "playing" && loopStatus
-      ? `Loop ${loopStatus.round}${loopStatus.lastAccuracyPct !== null ? ` · last time ${Math.round(loopStatus.lastAccuracyPct)}%${loopStatus.lastClean ? " ✓" : ""}` : ""}`
-      : null;
-  const bestEntries = PRACTICE_LEVELS.filter((lvl) => bestsByLevel[lvl]);
+  // A calibration prompt lives in the MIDI status in the settings sheet; never let it
+  // wait unseen behind a closed sheet.
+  const calibrating = calibration.status === "awaitingLow" || calibration.status === "awaitingHigh";
+  const settingsLocked = playing && !paused;
+  const practiceLocked = playing;
 
-  const segmentClasses = (selected: boolean) =>
-    `rounded-md px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
-      selected
-        ? "bg-felt-600 font-medium text-white"
-        : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-    }`;
-  const smallButton =
-    "rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
-
-  const toggleLoop = () => {
-    setLoopOn((on) => !on);
+  const ladderState: LadderState = { level, hands, tempoPct: settings.tempoPct, waitMode: settings.waitMode };
+  const easierRung = ladderStep(ladderState, -1);
+  const harderRung = ladderStep(ladderState, 1);
+  const goToRung = (rungIndex: number, direction: 1 | -1) => {
+    const next = applyRung(ladderState, rungIndex);
+    const rung = PRACTICE_LADDER[rungIndex]!;
+    setLevel(next.level);
+    setHands(next.hands);
+    setSettings((s) => ({ ...s, tempoPct: next.tempoPct, waitMode: next.waitMode }));
+    setToast({ id: Date.now(), title: `${direction === 1 ? "Harder" : "Easier"}: ${rung.label}`, body: rung.detail });
   };
 
+  const loopBars = (range: LoopRange) => {
+    setResultOpen(false);
+    setLoopRange(range);
+    setLoopOn(true);
+    setSettings((s) => ({ ...s, untilClean: true }));
+    startAfterChange();
+  };
+
+  const resetSettings = () => {
+    const defaults = experience === "simple" ? defaultSettingsFor("simple") : DEFAULT_SETTINGS;
+    setSettings((s) => ({ ...defaults, notesStyle: s.notesStyle }));
+    setLoopOn(false);
+  };
+
+  const summary = practiceSummary({ hands, loop: loopOn ? run.loop : null, tempoPct: settings.tempoPct, level, waitMode: settings.waitMode });
+  const loopLabel =
+    playing && loopStatus
+      ? `Loop ${loopStatus.round}${loopStatus.lastAccuracyPct !== null ? ` · last time ${Math.round(loopStatus.lastAccuracyPct)}%${loopStatus.lastClean ? " ✓" : ""}` : ""}`
+      : null;
+  const nothingMessage =
+    level === "melody" && hands === "left"
+      ? "Just the tune has no left-hand part: pick Right or Both, or another version."
+      : `There are no ${hands === "both" ? "" : `${hands}-hand `}notes to play here: pick other bars or hands.`;
+
+  const stageStyle = notePaletteCssVars(palette) as CSSProperties;
+  const playButtonLabel = paused ? "Resume" : "Pause";
+
   return (
-    // The performance view: the app shell gives this page the full width and exactly the
-    // viewport height left under the header. The stage (falling notes + keyboard) takes
-    // whatever the title row, settings and notation don't, so the whole keyboard is
-    // always on screen without scrolling the page.
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1 basis-48">
-          <h1 className="truncate font-display text-xl font-semibold">{song?.title ?? "Play along"}</h1>
-          <p className="truncate text-xs text-slate-500">
-            {song?.artist} · {formatDuration(parsed.durationS)} · {run.notes.length} notes to play
-          </p>
-          <SongStars songId={sources.baseId} level={level} />
-          <p className="truncate text-xs font-medium text-brass-700 dark:text-brass-300" aria-label="Practice mode">
-            {summary}
-          </p>
-          {song?.attribution && <SongCredit attribution={song.attribution} simplified={song.arrangement_level !== "full" || level !== "full"} />}
-        </div>
+    <div
+      className="ks-practice"
+      data-surface="practice"
+      data-stage={stageTone}
+      data-phase={phase}
+      data-device={device}
+      data-orientation={orientation}
+      data-focus={focus.active || undefined}
+      style={stageStyle}
+    >
+      <h1 className="sr-only">{song?.title ?? "Practice"}</h1>
 
-        {/* The most-used practice controls, next to Start. */}
-        <div className="flex flex-wrap items-center gap-2" aria-label="Quick practice controls">
-          <div className="flex items-center gap-0.5" role="radiogroup" aria-label="Hands">
-            {HANDS_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={hands === option.value}
-                disabled={practiceLocked}
-                onClick={() => setHands(option.value)}
-                className={segmentClasses(hands === option.value)}
-              >
-                {option.short}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-0.5" aria-label="Make it easier">
-            <button type="button" className={smallButton} disabled={practiceLocked || level === "full"} onClick={() => setLevel((l) => stepLevel(l, -1))} aria-label="Harder">
-              −
-            </button>
-            <span className="min-w-[5.5rem] text-center text-xs font-medium" title={LEVEL_DESCRIPTIONS[level]}>
-              {LEVEL_LABELS[level]}
-            </span>
-            <button type="button" className={smallButton} disabled={practiceLocked || level === "melody"} onClick={() => setLevel((l) => stepLevel(l, 1))} aria-label="Make it easier">
-              +
-            </button>
-          </div>
-          <button type="button" className={segmentClasses(loopOn)} aria-pressed={loopOn} disabled={practiceLocked} onClick={toggleLoop}>
-            ⟲ Loop
-          </button>
-          <button
-            type="button"
-            className={segmentClasses(settings.waitMode)}
-            aria-pressed={settings.waitMode}
-            disabled={settingsLocked}
-            onClick={() => setSettings((s) => ({ ...s, waitMode: !s.waitMode }))}
-          >
-            Wait
-          </button>
+      {showNotation && (
+        <div className="ks-practice__notation">
+          {notationBytes && level === "full" ? (
+            // Archive-imported songs ship real MusicXML: render that rather than a
+            // reconstruction from the MIDI, as long as the full piece is being played.
+            <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`} className="ks-practice__osmd">
+              <LiveOsmdNotation notationBytes={notationBytes} />
+            </div>
+          ) : (
+            <div role="img" aria-label={`Scrolling sheet music: ${song?.title ?? "this song"} (${LEVEL_LABELS[level]})`}>
+              <ScrollingScore
+                ref={scrollingScoreRef}
+                notes={arrangement.notes}
+                grid={parsed.grid}
+                timeSignatureSegments={parsed.timeSignatureSegments}
+                keys={parsed.keys}
+                verticalRange={notationVerticalRange}
+              />
+            </div>
+          )}
         </div>
+      )}
 
-        {(phase === "ready" || phase === "done") && (
-          <button className="primary-button px-5 disabled:opacity-50" onClick={start} disabled={nothingToPlay}>
-            {phase === "done" ? "▶ Play again" : "▶ Start"}
-          </button>
-        )}
-        {phase === "playing" && (
-          <>
-            <button className="primary-button" onClick={togglePause}>{paused ? "▶ Resume" : "❚❚ Pause"}</button>
-            <button className="secondary-button" onClick={cancelRun}>Stop</button>
-          </>
-        )}
-        <button
-          type="button"
-          className="secondary-button"
-          aria-expanded={showSettings}
-          aria-controls="playalong-settings"
-          onClick={() => setSettingsOpen((open) => !open)}
-        >
-          Settings {showSettings ? "▴" : "▾"}
-        </button>
-        <Link to="/play" className="secondary-button">← Library</Link>
+      {/* The stage: falling notes directly above the keyboard. The outer box takes the
+          remaining height; the inner one is absolutely positioned so its measured size
+          comes from the page, never from the canvas drawn inside it. ONE horizontal
+          scroll context wraps both the canvas and the keys, so they cannot detach. */}
+      <div className="ks-practice__stage">
+        <div ref={stageRef} className="ks-practice__lane">
+          <div className="ks-practice__instrument" style={{ width: geometry.widthPx }}>
+            {showFalling && (
+              <canvas ref={setCanvas} className="ks-practice__canvas" style={{ width: geometry.widthPx, height: heightPx }} aria-label="Falling notes" />
+            )}
+            <PlayAlongPiano
+              sizing={sizing}
+              scrollable={false}
+              showControls={false}
+              showHint={false}
+              showLabels={settings.showLabels}
+              handByNote={handByNote}
+              maxWhiteKeyHeightPx={pianoHeightPx}
+            />
+          </div>
+        </div>
       </div>
 
-      {nothingToPlay && (
-        <p className="text-xs text-rose-700 dark:text-rose-300" role="alert">
-          {level === "melody" && hands === "left"
-            ? "Melody only has no left-hand part: pick Right or Both, or a harder level."
-            : `There are no ${hands === "both" ? "" : `${hands}-hand `}notes to play here: pick other bars or hands.`}
-        </p>
-      )}
-
-      {phase === "playing" && (
-        <PlayAlongHud
-          waitMode={settings.waitMode}
-          tempoPct={settings.tempoPct}
-          lookaheadS={settings.lookaheadS}
-          level={level}
-          hands={hands}
-          paused={paused}
-          loopLabel={loopLabel}
-        />
-      )}
-
-      <div className="relative flex min-h-0 flex-1 flex-col gap-2">
-        {/* A drawer over the top of the stage rather than a block above it: opening it
-            never pushes the keyboard down off-screen, and the falling notes stay visible
-            underneath while look-ahead etc. are adjusted. */}
-        <section
-          id="playalong-settings"
-          aria-label="Play-along settings"
-          hidden={!showSettings}
-          className="card absolute inset-x-0 top-0 z-20 max-h-[calc(100%-2rem)] space-y-3 overflow-y-auto p-3 text-sm shadow-lg"
-        >
-          <MidiStatusBar />
-
-          {/* Practice: hands, level, loop. */}
-          <div className="grid gap-3 md:grid-cols-2">
-            <fieldset className="space-y-1.5" disabled={practiceLocked}>
-              <legend className="text-xs font-semibold text-slate-700 dark:text-slate-200">Hands</legend>
-              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Hands to play">
-                {HANDS_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={hands === option.value}
-                    onClick={() => setHands(option.value)}
-                    className={segmentClasses(hands === option.value)}
-                  >
-                    {HANDS_LABELS[option.value]}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={!settings.accompanimentMute.otherHand}
-                  disabled={hands === "both"}
-                  onChange={(e) => setSettings((s) => ({ ...s, accompanimentMute: { ...s.accompanimentMute, otherHand: !e.target.checked } }))}
-                />
-                Play the other hand for me
-              </label>
-            </fieldset>
-
-            <fieldset className="space-y-1.5" disabled={practiceLocked}>
-              <legend className="text-xs font-semibold text-slate-700 dark:text-slate-200">Make it easier</legend>
-              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Arrangement level">
-                {PRACTICE_LEVELS.map((lvl) => (
-                  <button
-                    key={lvl}
-                    type="button"
-                    role="radio"
-                    aria-checked={level === lvl}
-                    onClick={() => setLevel(lvl)}
-                    className={segmentClasses(level === lvl)}
-                  >
-                    {LEVEL_LABELS[lvl]}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-slate-500">
-                {LEVEL_DESCRIPTIONS[level]}
-                {arrangement.source === "authored" && " This piece has a hand-checked version for this level."}
+      {/* Floating modules. Translucent clear-dark fills with no blur: nothing blurs the
+          animating canvas, and none of them moves the stage when Play is pressed. */}
+      <div className="ks-practice__top">
+        {focus.active ? (
+          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--round">
+            <button type="button" className="ks-practice-iconbtn" onClick={focus.exit} aria-label="Exit focus mode">
+              <span aria-hidden="true">✕</span>
+            </button>
+          </GlassSurface>
+        ) : (
+          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--title">
+            <Link to="/practice" className="ks-practice-iconbtn" aria-label="Back to songs">
+              <span aria-hidden="true">‹</span>
+            </Link>
+            <div className="ks-practice-title">
+              <p className="ks-practice-title__name glass-text">{song?.title ?? "Practice"}</p>
+              <p className="ks-practice-title__meta glass-text">
+                {song?.artist ? `${song.artist} · ` : ""}
+                {summary}
               </p>
-              <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={!settings.accompanimentMute.removed}
-                  disabled={level === "full"}
-                  onChange={(e) => setSettings((s) => ({ ...s, accompanimentMute: { ...s.accompanimentMute, removed: !e.target.checked } }))}
-                />
-                Play the left-out notes quietly, so the song still sounds full
-              </label>
-            </fieldset>
-          </div>
-
-          <fieldset className="space-y-1.5" disabled={practiceLocked}>
-            <legend className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
-              <label className="flex items-center gap-1.5">
-                <input type="checkbox" checked={loopOn} onChange={toggleLoop} />
-                Loop a section
-              </label>
-              <span className="font-normal text-slate-500">(counts you in each time round)</span>
-            </legend>
-            {loopOn && (
-              <>
-                <LoopBarStrip barCount={barCount} range={loopRange} onChange={setLoopRange} disabled={practiceLocked} />
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-700 dark:text-slate-200">
-                  <label className="flex items-center gap-1.5">
-                    <input type="checkbox" checked={settings.untilClean} onChange={(e) => setSettings((s) => ({ ...s, untilClean: e.target.checked }))} />
-                    Loop until clean
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input type="checkbox" checked={settings.autoSpeedUp} onChange={(e) => setSettings((s) => ({ ...s, autoSpeedUp: e.target.checked }))} />
-                    Auto speed-up: start at
-                    <select
-                      value={settings.speedUpStartPct}
-                      disabled={!settings.autoSpeedUp}
-                      onChange={(e) => setSettings((s) => ({ ...s, speedUpStartPct: Number(e.target.value) }))}
-                      className="rounded-md border border-slate-300 bg-white px-1 py-0.5 tabular-nums disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
-                      aria-label="Auto speed-up starting speed, percent"
-                    >
-                      {SPEED_UP_START_OPTIONS.map((pct) => (
-                        <option key={pct} value={pct}>{pct}</option>
-                      ))}
-                    </select>
-                    %, +5% after each clean time round, up to 100%
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    Clean means at least
-                    <select
-                      value={settings.cleanAccuracyPct}
-                      onChange={(e) => setSettings((s) => ({ ...s, cleanAccuracyPct: Number(e.target.value) }))}
-                      className="rounded-md border border-slate-300 bg-white px-1 py-0.5 tabular-nums dark:border-slate-600 dark:bg-slate-900"
-                      aria-label="Accuracy that counts as clean, percent"
-                    >
-                      {CLEAN_ACCURACY_OPTIONS.map((pct) => (
-                        <option key={pct} value={pct}>{pct}</option>
-                      ))}
-                    </select>
-                    % accuracy
-                  </label>
-                </div>
-                {settings.waitMode && (settings.untilClean || settings.autoSpeedUp) && (
-                  <p className="text-xs text-slate-500">Wait mode has no accuracy, so a loop just repeats: turn it off for clean runs and speed-ups.</p>
-                )}
-              </>
-            )}
-          </fieldset>
-
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-            {/* Speed is a PERCENTAGE here, not BPM: Song has no bpm column, and BPM is
-                derived from the MIDI's first tempo event — a fiction for the rubato
-                performance recordings in the library. Show a real BPM only when the
-                song genuinely has one stable tempo (grid.steadyBpm). */}
-            <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-              <span>Speed</span>
-              <input
-                type="range"
-                min={TEMPO_MIN_PCT}
-                max={TEMPO_MAX_PCT}
-                step={1}
-                value={settings.tempoPct}
-                disabled={settingsLocked}
-                aria-label="Playback speed, percent of the song's written speed"
-                onChange={(e) => setSettings((s) => ({ ...s, tempoPct: Number(e.target.value) }))}
-                className="w-32 disabled:opacity-50"
-              />
-              <span className="tabular-nums font-medium">
-                {settings.tempoPct}%
-                {parsed.grid.steadyBpm !== null && (
-                  <span className="ml-1 font-normal text-slate-500">
-                    (about {Math.round((parsed.grid.steadyBpm * settings.tempoPct) / 100)} beats per minute)
-                  </span>
-                )}
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-              <span>Look-ahead</span>
-              <input
-                type="range"
-                min={LOOKAHEAD_MIN_S}
-                max={LOOKAHEAD_MAX_S}
-                step={0.1}
-                value={settings.lookaheadS}
-                disabled={settingsLocked}
-                aria-label="Look-ahead: how many seconds of upcoming notes you can see"
-                onChange={(e) => setSettings((s) => ({ ...s, lookaheadS: Number(e.target.value) }))}
-                className="w-28 disabled:opacity-50"
-              />
-              <span className="tabular-nums font-medium">
-                {settings.lookaheadS.toFixed(1)} s
-                <span className="ml-1 font-normal text-slate-500">(longer = easier, smaller score bonus)</span>
-              </span>
-            </label>
-
-            <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="When you lengthen the look-ahead">
-              <span className="mr-1 text-xs text-slate-700 dark:text-slate-200">Longer look-ahead makes</span>
-              {([
-                { value: "note-size" as const, label: "Notes smaller" },
-                { value: "window-size" as const, label: "Note area taller" },
-              ]).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={settings.visibilityMode === option.value}
-                  disabled={settingsLocked}
-                  onClick={() => setSettings((s) => ({ ...s, visibilityMode: option.value }))}
-                  className={segmentClasses(settings.visibilityMode === option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
             </div>
-
-            <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="View">
-              <span className="mr-1 text-xs text-slate-700 dark:text-slate-200">Show</span>
-              {([
-                { value: "falling" as const, label: "Falling notes" },
-                { value: "notation" as const, label: "Sheet music" },
-                { value: "both" as const, label: "Both" },
-              ]).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={settings.viewMode === option.value}
-                  onClick={() => setSettings((s) => ({ ...s, viewMode: option.value }))}
-                  className={segmentClasses(settings.viewMode === option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={settings.waitMode}
-                disabled={settingsLocked}
-                onChange={(e) => setSettings((s) => ({ ...s, waitMode: e.target.checked }))}
-              />
-              Wait for me <span className="text-slate-500">(the song pauses until you play the right key — practice only, not scored)</span>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={settings.guideAudio}
-                disabled={settingsLocked}
-                onChange={(e) => setSettings((s) => ({ ...s, guideAudio: e.target.checked }))}
-              />
-              Play my part along with me
-            </label>
-
-            {/* Metronome. The click follows the song's own beat grid (from its tempo
-                map), so it stays locked to the music and to the speed slider. */}
-            <label
-              className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200"
-              title={parsed.grid.clickSafe ? undefined : "This recording's tempo shifts constantly — a click would lurch along with it rather than keep time."}
-            >
-              <input
-                type="checkbox"
-                checked={settings.metronome && parsed.grid.clickSafe}
-                disabled={!parsed.grid.clickSafe}
-                onChange={(e) => setSettings((s) => ({ ...s, metronome: e.target.checked }))}
-              />
-              Metronome
-              {!parsed.grid.clickSafe && <span className="text-slate-500">(off — this recording's tempo drifts too much)</span>}
-            </label>
-
-            {settings.metronome && parsed.grid.clickSafe && (
-              <>
-                <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                  Click on
-                  <select
-                    className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-900"
-                    value={settings.clickLevel}
-                    onChange={(e) => setSettings((s) => ({ ...s, clickLevel: e.target.value as ClickLevel }))}
-                    title={CLICK_LEVELS.find((c) => c.value === settings.clickLevel)?.description}
-                  >
-                    {CLICK_LEVELS.map((option) => (
-                      <option key={option.value} value={option.value} title={option.description}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                  Sound
-                  <select
-                    className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-900"
-                    value={settings.metronomeSound}
-                    onChange={(e) => setSettings((s) => ({ ...s, metronomeSound: e.target.value as MetronomeSound }))}
-                    title={METRONOME_SOUNDS.find((m) => m.value === settings.metronomeSound)?.description}
-                  >
-                    {METRONOME_SOUNDS.map((option) => (
-                      <option key={option.value} value={option.value} title={option.description}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
-          </div>
-
-          <div className="space-y-0.5 text-xs text-slate-600 dark:text-slate-300" aria-label="Score bonus">
-            <p>
-              Score bonus with these settings: <strong className="tabular-nums">×{scoreBonus.toFixed(2)}</strong>
-              {settings.waitMode && <span className="text-slate-500"> (wait mode isn't scored)</span>}
-            </p>
-            <p className="tabular-nums text-slate-500">
-              speed ×{tempoMultiplier(rate).toFixed(2)} · look-ahead ×{lookaheadMultiplier(settings.lookaheadS).toFixed(2)} · {LEVEL_LABELS[level]} ×
-              {difficultyMultiplier(level).toFixed(1)} · {hands === "both" ? "both hands" : "one hand"} ×{handsMultiplier(hands).toFixed(1)}
-              {uncappedBonus > MAX_SCORE_MULTIPLIER && ` (capped at ×${MAX_SCORE_MULTIPLIER})`}
-            </p>
-            <p className="text-slate-500">
-              Faster and a shorter look-ahead earn more; easier settings (a simpler level, one hand) earn a smaller bonus. Looped sections are saved as practice, not as your best for the song.
-            </p>
-          </div>
-
-          <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
-            <KeyboardSizingControls sizing={sizing} />
-          </div>
-        </section>
-
-        {/* End screen */}
-        {phase === "done" && result && resultContext && (
-          <section aria-label="Result" className="card shrink-0 p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="font-display text-5xl font-semibold text-felt-600 dark:text-felt-400">{gradeFor(result.accuracyPct, resultScore)}</span>
-              <div>
-                <p className="text-2xl font-semibold tabular-nums">{resultScore}</p>
-                <p className="text-xs text-slate-500">
-                  {result.baseScore} × bonus {practiceMultiplier({ rate: resultContext.tempoPct / 100, ...resultContext }).toFixed(2)} ({LEVEL_LABELS[resultContext.level]},{" "}
-                  {HANDS_LABELS[resultContext.hands].toLowerCase()}, {resultContext.tempoPct}%)
-                </p>
-                {loopStatus?.lastClean && (
-                  <p className="text-xs text-brass-700 dark:text-brass-300">
-                    Clean after {loopStatus.round} {loopStatus.round === 1 ? "go" : "goes"} ✓
-                  </p>
-                )}
-              </div>
-              <div className="ml-auto text-right text-xs text-slate-500">
-                <p>Accuracy {result.accuracyPct}%</p>
-                <p>Best combo {result.maxCombo}</p>
-                <p>{result.wrongPressCount} stray notes</p>
-                <p>
-                  {submitState === "saved" && (loopStatus ? "Saved as practice ✓" : "Saved to history ✓")}
-                  {submitState === "saving" && "Saving…"}
-                  {submitState === "failed" && "Could not save attempt"}
-                </p>
-              </div>
-            </div>
-          </section>
+          </GlassSurface>
         )}
 
-        {bestEntries.length > 0 && phase !== "playing" && (
-          <p className="shrink-0 text-xs text-slate-500" aria-label="Your bests per level">
-            Your bests:{" "}
-            {bestEntries.map((lvl, i) => (
-              <span key={lvl} className={lvl === level ? "font-semibold text-slate-700 dark:text-slate-200" : undefined}>
-                {i > 0 && " · "}
-                {LEVEL_LABELS[lvl]} {Math.round(bestsByLevel[lvl]!.score)}
+        {!playing && !focus.active && (handsInRun.left || handsInRun.right) && (
+          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-legend" aria-label="Hand colours">
+            {handsInRun.right && (
+              <span className="ks-practice-legend__item glass-text">
+                Right hand <span className="ks-practice-legend__chip" data-hand="right" aria-hidden="true" />
               </span>
-            ))}
-          </p>
-        )}
-
-        {settings.viewMode !== "falling" && (
-          <div className="shrink-0">
-            {notationBytes && level === "full" ? (
-              // Archive-imported songs ship real MusicXML — render that rather than a
-              // reconstruction from the MIDI, as long as the full piece is being played.
-              <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`} className="max-h-[35vh] overflow-y-auto">
-                <LiveOsmdNotation notationBytes={notationBytes} />
-              </div>
-            ) : (
-              <div role="img" aria-label={`Scrolling sheet music: ${song?.title ?? "this song"} (${LEVEL_LABELS[level]})`}>
-                <ScrollingScore
-                  ref={scrollingScoreRef}
-                  notes={arrangement.notes}
-                  grid={parsed.grid}
-                  timeSignatureSegments={parsed.timeSignatureSegments}
-                  keys={parsed.keys}
-                  verticalRange={notationVerticalRange}
-                />
-              </div>
             )}
-          </div>
+            {handsInRun.left && (
+              <span className="ks-practice-legend__item glass-text">
+                Left hand <span className="ks-practice-legend__chip" data-hand="left" aria-hidden="true" />
+              </span>
+            )}
+          </GlassSurface>
         )}
 
-        {/* The stage: falling notes directly above the keyboard. The outer box takes the
-            remaining height; the inner one is absolutely positioned so its measured size
-            comes from the page, never from the canvas drawn inside it. ONE horizontal
-            scroll context wraps both the canvas and the piano — if VirtualPiano scrolled
-            on its own, the keys could detach from the falling bars. */}
-        <div className="relative min-h-[200px] flex-1">
-          <div
-            ref={stageRef}
-            className="absolute inset-0 flex flex-col overflow-auto rounded-lg border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40"
-          >
-            <div className="mx-auto mt-auto" style={{ width: geometry.widthPx }}>
-              {settings.viewMode !== "notation" && (
-                <canvas
-                  ref={canvasRef}
-                  style={{ width: geometry.widthPx, height: heightPx, display: "block" }}
-                  aria-label="Falling notes"
-                />
-              )}
-              <PlayAlongPiano
-                sizing={sizing}
-                scrollable={false}
-                showControls={false}
-                showHint={false}
-                maxWhiteKeyHeightPx={pianoHeightPx}
-              />
-            </div>
-          </div>
-        </div>
+        {playing ? (
+          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--live">
+            <PlayAlongHud
+              waitMode={settings.waitMode}
+              tempoPct={settings.tempoPct}
+              lookaheadS={settings.lookaheadS}
+              level={level}
+              hands={hands}
+              paused={paused}
+              loopLabel={loopLabel}
+              detailed={experience === "advanced"}
+            />
+            <Button variant="gray" onClick={togglePause} aria-label={playButtonLabel}>
+              {paused ? "▶" : "❚❚"}
+            </Button>
+            {!focus.active && (
+              <Button variant="gray" onClick={cancelRun}>
+                Stop
+              </Button>
+            )}
+            {paused && !focus.active && (
+              <button type="button" className="ks-practice-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Practice settings">
+                <span aria-hidden="true">⚙</span>
+              </button>
+            )}
+          </GlassSurface>
+        ) : (
+          !focus.active && (
+            <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--tools">
+              <SegmentedControl aria-label="Hands" options={HANDS_OPTIONS} value={hands} onChange={setHands} />
+              <button type="button" className="ks-practice-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Practice settings">
+                <span aria-hidden="true">⚙</span>
+              </button>
+              <button type="button" className="ks-practice-iconbtn" onClick={focus.enter} aria-label="Focus mode (F)" title="Focus mode (F)">
+                <span aria-hidden="true">⤢</span>
+              </button>
+            </GlassSurface>
+          )
+        )}
       </div>
+
+      {!playing && (
+        <div className="ks-practice__transport" style={{ bottom: pianoHeightPx + 16 }}>
+          {nothingToPlay && (
+            <p className="ks-practice-alert glass-text" role="alert">
+              {nothingMessage}
+            </p>
+          )}
+          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--transport" role="group" aria-label="Play controls">
+            {!focus.active && (
+              <Button
+                variant="gray"
+                disabled={easierRung === null}
+                title={easierRung === null ? "This is the easiest setting" : PRACTICE_LADDER[easierRung]!.detail}
+                onClick={() => easierRung !== null && goToRung(easierRung, -1)}
+              >
+                Easier
+              </Button>
+            )}
+            <button type="button" className="ks-practice-play" onClick={start} disabled={nothingToPlay} aria-label={phase === "done" ? "Play again" : "Play"}>
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+                <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
+              </svg>
+            </button>
+            {!focus.active && (
+              <>
+                <Button
+                  variant="gray"
+                  disabled={harderRung === null}
+                  title={harderRung === null ? "This is the hardest setting" : PRACTICE_LADDER[harderRung]!.detail}
+                  onClick={() => harderRung !== null && goToRung(harderRung, 1)}
+                >
+                  Harder
+                </Button>
+                <span className="ks-practice-transport__divider" aria-hidden="true" />
+                <Toggle label="Wait for me" checked={settings.waitMode} onChange={(on) => setSettings((s) => ({ ...s, waitMode: on }))} className="ks-practice-wait" />
+                {finished && (
+                  <Button variant="plain" onClick={() => setResultOpen(true)}>
+                    Result
+                  </Button>
+                )}
+              </>
+            )}
+          </GlassSurface>
+        </div>
+      )}
+
+      {toast && !playing && (
+        <div className="ks-practice__toast">
+          <Toast key={toast.id} tone="info" title={toast.title} body={toast.body} onDismiss={() => setToast(null)} duration={3500} />
+        </div>
+      )}
+
+      {playing && settings.waitMode && <WaitAnnouncer />}
+
+      <PracticeSettingsSheet
+        open={(settingsOpen || calibrating) && !settingsLocked}
+        onClose={() => setSettingsOpen(false)}
+        onReset={resetSettings}
+        settings={settings}
+        setSettings={setSettings}
+        level={level}
+        onLevel={setLevel}
+        hands={hands}
+        practiceLocked={practiceLocked}
+        settingsLocked={settingsLocked}
+        authoredLevel={arrangement.source === "authored"}
+        steadyBpm={parsed.grid.steadyBpm}
+        clickSafe={parsed.grid.clickSafe}
+        barCount={barCount}
+        loopOn={loopOn}
+        onLoopOn={setLoopOn}
+        loopRange={loopRange}
+        onLoopRange={setLoopRange}
+        sizing={sizing}
+        notationFits={notationFits}
+        header={
+          <>
+            <SongStars songId={sources.baseId} level={level} />
+            <p className="ks-practice-sheet__meta">
+              {formatDuration(parsed.durationS)} · {run.notes.length} notes to play
+            </p>
+            {song?.attribution && <SongCredit attribution={song.attribution} simplified={song.arrangement_level !== "full" || level !== "full"} />}
+          </>
+        }
+      />
+
+      <PracticeResultSheet
+        open={resultOpen && phase === "done"}
+        onClose={() => setResultOpen(false)}
+        finished={finished}
+        submitState={submitState}
+        harderRung={finished ? ladderStep({ level: finished.level, hands: finished.hands, tempoPct: finished.tempoPct, waitMode: false }, 1) : null}
+        easierRung={finished ? ladderStep({ level: finished.level, hands: finished.hands, tempoPct: finished.tempoPct, waitMode: false }, -1) : null}
+        onPlayAgain={start}
+        onPlayForStars={() => {
+          setSettings((s) => ({ ...s, waitMode: false }));
+          startAfterChange();
+        }}
+        onTryWait={() => {
+          setSettings((s) => ({ ...s, waitMode: true }));
+          startAfterChange();
+        }}
+        onStepLadder={(rung) => {
+          setResultOpen(false);
+          goToRung(rung, rung > ladderPosition(ladderState).index ? 1 : -1);
+        }}
+        onLoopBars={loopBars}
+      />
     </div>
   );
 }

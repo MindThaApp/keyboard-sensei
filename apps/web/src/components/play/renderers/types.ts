@@ -22,6 +22,8 @@ export interface WaterfallFrame {
   waitingPitches?: readonly number[];
   /** performance.now() of this frame, for judgement animations. Defaults to now. */
   nowMs?: number;
+  /** prefers-reduced-motion: no bursts or pulses, only static marks. */
+  reducedMotion?: boolean;
 }
 
 /** What a judgement looks like on the stage; never colour alone. */

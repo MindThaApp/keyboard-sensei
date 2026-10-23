@@ -146,7 +146,7 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
   const { notes, judgments, songTimeS, lookaheadS, geometry, heightPx, palette } = frame;
   const width = geometry.widthPx;
   const nowMs = frame.nowMs ?? performance.now();
-  const motion = noteMotion(options.reducedMotion ?? false);
+  const motion = noteMotion(frame.reducedMotion ?? options.reducedMotion ?? false);
   ctx.clearRect(0, 0, width, heightPx);
 
   // Octave lane guides on the C lines.
@@ -341,7 +341,6 @@ export class ClassicRenderer implements WaterfallRenderer {
   private lastSongTimeS = 0;
   private hatch: CanvasPattern | null = null;
   private hatchFor: NotePalette | null = null;
-  reducedMotion = false;
 
   mount(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -376,7 +375,7 @@ export class ClassicRenderer implements WaterfallRenderer {
     }
     this.effects.length = kept;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    drawWaterfall(ctx, { ...frame, nowMs }, { effects: this.effects, hatch: this.hatch, reducedMotion: this.reducedMotion });
+    drawWaterfall(ctx, { ...frame, nowMs }, { effects: this.effects, hatch: this.hatch });
   }
 
   onJudgement(_index: number, judgement: PlayAlongJudgment, note: PlayAlongNote): void {
