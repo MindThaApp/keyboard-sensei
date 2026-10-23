@@ -49,6 +49,12 @@ services:
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       GIT_SHA: ${GIT_SHA:-}
+      # Sheet music from a photo or PDF (beta). Set to http://omr:8090 and start the
+      # "omr" profile (below) to turn it on; empty = feature off. docs/operations.md, "Sheet-music recognition".
+      OMR_SERVICE_URL: ${OMR_SERVICE_URL:-}
+    networks:
+      - default
+      - omr
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
@@ -91,6 +97,31 @@ services:
     restart: unless-stopped
     profiles: ["public"]
 
+  # Sheet-music recognition (beta, off by default): homr (AGPL-3.0) as a separate program
+  # in its own container, reachable only by the API over the internal "omr" network, which
+  # has no route out. One recognition at a time; the API queues the rest. Start with:
+  #   docker compose --env-file .env.deploy -f docker-compose.deploy.yml --profile omr up -d
+  # and set OMR_SERVICE_URL=http://omr:8090 in .env.deploy. docs/operations.md, "Sheet-music recognition".
+  omr:
+    build:
+      context: services/omr
+    networks:
+      - omr
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+      - /home/omr:size=64m
+    cpus: 2
+    mem_limit: 2560m
+    memswap_limit: 2560m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    profiles: ["omr"]
+
   # HTTPS on the LAN so Web MIDI (navigator.requestMIDIAccess) works — browsers only
   # allow it in a "secure context", which plain http://<lan-ip> never satisfies. Uses
   # Caddy's own internal CA (not mkcert, not a public CA) since this is LAN-only, not
@@ -107,6 +138,12 @@ services:
     depends_on:
       - web
     restart: unless-stopped
+
+networks:
+  default:
+  # API <-> OMR only: no gateway, so the recognition service can't reach anything else.
+  omr:
+    internal: true
 
 volumes:
   keyboard-sensei-postgres-data:
