@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import express, { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { env } from "./config.js";
+import { isPubliclyEligible, listableSongWhere, type EligibilityFields } from "./catalogue/eligibility.js";
 import { requireAdmin } from "./auth.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
@@ -86,27 +86,17 @@ export const songCollection = (song: { file_path: string; uploader_id: string | 
 };
 
 /**
- * May this song be shown to everyone on this deployment? With PUBLIC_CATALOGUE on, only
- * the curated packs whose rights are cleared for publication: Essentials (public domain
- * or CC, credited via `attribution`) and the authored beginner pack. The ADL-sourced
- * library has no licence covering redistribution (see docs/operations.md), so it is
- * hidden. Uploads are never public; see songVisibleTo.
- */
-export const isPubliclyServable = (song: { file_path: string; uploader_id: string | null }): boolean =>
-  !song.uploader_id && (!env.PUBLIC_CATALOGUE || songCollection(song) !== null);
-
-/**
  * Who sees a song: the uploader and admins see uploads and archive imports (private to
  * the user who added them); everyone sees the shared catalogue; admins see everything.
  * A song you can't see is indistinguishable from a missing one (404), so ids can't be probed.
  */
 export const canSeeSong = (
-  song: { file_path: string; uploader_id: string | null },
+  song: EligibilityFields,
   userId: string,
   admin: boolean,
-): boolean => admin || song.uploader_id === userId || isPubliclyServable(song);
+): boolean => admin || song.uploader_id === userId || isPubliclyEligible(song);
 
-const songVisibleTo = async (song: { file_path: string; uploader_id: string | null }, userId: string): Promise<boolean> =>
+const songVisibleTo = async (song: EligibilityFields, userId: string): Promise<boolean> =>
   canSeeSong(song, userId, false) || (await isAdminUser(userId));
 
 const songListItem = (song: {
@@ -159,14 +149,13 @@ songsRouter.get("/songs", async (req, res, next) => {
     const userId = uid(req);
     const admin = await isAdminUser(userId);
     const rows = await prisma.song.findMany({
-      // Seeded songs (no uploader) are public; uploads are private to their
-      // owner, except admins see everything.
+      // Shared songs (no uploader; only the public-eligible ones when PUBLIC_CATALOGUE
+      // is on) plus the user's own uploads; admins see everything.
       // Retired songs (superseded by an Essentials version) stay out of the list.
-      where: admin ? { retired_at: null } : { retired_at: null, OR: [{ uploader_id: null }, { uploader_id: userId }] },
+      where: listableSongWhere(userId, admin),
       orderBy: [{ artist: "asc" }, { title: "asc" }],
     });
-    // The public-catalogue rule lives in one predicate (canSeeSong), shared with the
-    // file, notation and attempt routes, rather than being re-expressed as a query.
+    // canSeeSong repeats the query's rule as the guard used by the single-song routes.
     const visible = rows.filter((row) => canSeeSong(row, userId, admin));
     res.json({ songs: visible.map((row) => songListItem(row, userId)) });
   } catch (e) {
@@ -282,7 +271,7 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
     const userId = uid(req);
     const songId = z.string().parse(req.params.id);
     const input = attemptSchema.parse(req.body);
-    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true, uploader_id: true, file_path: true } });
+    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true, uploader_id: true, public_eligible: true } });
     // Same visibility rule as GET /songs/:id/file: another user's private upload is
     // indistinguishable from a missing song, so its id can't be probed or polluted.
     if (!song || !(await songVisibleTo(song, userId))) {
