@@ -185,7 +185,7 @@ function PlayAlongHistory() {
       <div className="grid grid-cols-3 gap-3">
         <StatTile label="Runs" value={String(stats.runs)} />
         <StatTile label="Best" value={stats.best === null ? "–" : String(stats.best)} />
-        <StatTile label="Accuracy" value={stats.averageAccuracy === null ? "–" : `${stats.averageAccuracy}%`} />
+        <StatTile label="Notes hit" value={stats.averageAccuracy === null ? "–" : `${stats.averageAccuracy}%`} />
       </div>
       <ListGroup aria-label="Play-along runs">
         {recent.map((attempt) => (
@@ -196,7 +196,7 @@ function PlayAlongHistory() {
             title={attempt.title}
             subtitle={[
               attempt.artist,
-              attempt.tempo_bpm ? `${Math.round(attempt.tempo_bpm)} BPM` : `${Math.round(attempt.tempo_pct)}% tempo`,
+              attempt.tempo_bpm ? `Speed ${Math.round(attempt.tempo_bpm)}` : `${Math.round(attempt.tempo_pct)}% tempo`,
               attempt.wait_mode ? null : `accuracy ${Math.round(attempt.accuracy)}%`,
               new Date(attempt.created_at).toLocaleString(),
             ].filter(Boolean).join(" · ")}

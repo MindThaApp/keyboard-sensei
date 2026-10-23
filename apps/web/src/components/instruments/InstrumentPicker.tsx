@@ -86,7 +86,7 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
     void pianoSynth.useInstrument(id);
   }
 
-  const buttonLabel = selected?.name ?? "Built-in synth";
+  const buttonLabel = selected?.name ?? "Piano (basic)";
 
   return (
     <div ref={rootRef} className="relative">
@@ -102,7 +102,7 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
         aria-expanded={open}
         title="Change instrument"
       >
-        {compact ? `Voice: ${buttonLabel}` : buttonLabel}
+        {compact ? `Sound: ${buttonLabel}` : buttonLabel}
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -116,8 +116,8 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
               onClick={() => selectInstrument(null)}
               className={`w-full rounded px-2 py-1.5 text-left ${selectedId === null ? "bg-felt-50 dark:bg-felt-900/40" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
             >
-              <span className="block text-sm font-medium">Built-in synth</span>
-              <span className="block text-xs text-slate-500 dark:text-slate-400">The default voice; no download required.</span>
+              <span className="block text-sm font-medium">Piano (basic)</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">The default sound; no download needed.</span>
             </button>
             {(["piano", "keys"] as const).map((category) => (
               <div key={category} className="mt-2">

@@ -398,9 +398,9 @@ function MidiSection() {
   return (
     <div className="space-y-6">
       <ListGroup
-        header="MIDI device"
-        footer="Connect a real MIDI keyboard, or test with the on-screen piano below. Both work the same way in every lesson."
-        aria-label="MIDI device"
+        header="Keyboard connection"
+        footer="Connect a real keyboard, or test with the on-screen piano below. Both work the same way in every lesson."
+        aria-label="Keyboard connection"
       >
         <SettingsRow value={<>Last note: {lastNote ?? "none yet"}</>}>
           <MidiStatusBar />
@@ -408,17 +408,17 @@ function MidiSection() {
       </ListGroup>
 
       <ListGroup
-        header="My MIDI keyboard"
+        header="My keyboard"
         footer={
           devices[0]?.name
             ? `${devices[0].name}: ${midiNoteToName(deviceRange.lowestNote)}-${midiNoteToName(deviceRange.highestNote)} (${deviceRangePreference.mode}; ${currentDeviceKey ?? "unknown device key"})${sustainPedalDown ? ". Sustain pedal down." : ""}`
-            : "Connect a MIDI keyboard to save this preference for that device."
+            : "Connect a keyboard to save this preference for that device."
         }
-        aria-label="My MIDI keyboard"
+        aria-label="My keyboard"
       >
         <SettingsRow title="Keyboard size">
           <select
-            aria-label="My MIDI keyboard"
+            aria-label="My keyboard"
             value={deviceRangePreference.mode === "explicit" ? String(deviceRangePreference.keys) : "auto"}
             onChange={(e) => {
               if (e.target.value === "auto") setDeviceRangePreference(autoRangePreference(deviceRange));
@@ -459,7 +459,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
   { value: "appearance", label: "Appearance" },
   { value: "account", label: "Account" },
   { value: "instruments", label: "Instruments" },
-  { value: "midi", label: "MIDI" },
+  { value: "midi", label: "Keyboard" },
   { value: "narration", label: "Narration" },
   { value: "library", label: "Library" },
 ];

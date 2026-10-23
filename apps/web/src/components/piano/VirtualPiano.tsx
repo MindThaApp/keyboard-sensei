@@ -527,7 +527,7 @@ function VirtualPiano({
       )}
       {(showHint ?? (!flat && finePointer)) && !disabled && (
         <p className="mt-2 text-center text-xs text-slate-500">
-          No MIDI keyboard? Use your computer keyboard: A S D F G H J K (white keys), W E T Y U (black keys).
+          No keyboard connected? Use your computer keyboard: A S D F G H J K (white keys), W E T Y U (black keys).
         </p>
       )}
     </div>

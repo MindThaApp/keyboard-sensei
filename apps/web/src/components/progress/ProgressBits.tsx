@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LevelInfo } from "../../services/api";
+import { levelTitle } from "../ui/glossary";
 import { addDays } from "../../utils/dates";
 
 /** Small pieces of progression UI shared by Today, Progress, the header and song lists. */
@@ -62,15 +63,15 @@ export function LevelBar({ level, className = "" }: { level: LevelInfo; classNam
   return (
     <div className={className}>
       <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="font-semibold text-slate-900 dark:text-slate-100">{level.title}</span>
+        <span className="font-semibold text-slate-900 dark:text-slate-100">{levelTitle(level.level, level.tier)}</span>
         <span className="tabular-nums text-xs text-slate-600 dark:text-slate-300">
-          {level.xpIntoLevel} / {level.xpForNextLevel} XP to level {level.level + 1}
+          {level.xpIntoLevel} / {level.xpForNextLevel} points to level {level.level + 1}
         </span>
       </div>
       <div
         className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
         role="progressbar"
-        aria-label="XP towards the next level"
+        aria-label="Points towards the next level"
         aria-valuemin={0}
         aria-valuemax={level.xpForNextLevel}
         aria-valuenow={level.xpIntoLevel}
@@ -105,7 +106,7 @@ const describeDay = (day: WeekDay): string => {
   const date = new Date(`${day.day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
   if (day.isFuture) return `${date}: upcoming`;
   if (day.state === "met") return `${date}: goal met (${formatMinutes(day.minutes)})`;
-  if (day.state === "frozen") return `${date}: missed, covered by a streak freeze`;
+  if (day.state === "frozen") return `${date}: missed, covered by a day-off pass`;
   if (day.state === "practised") return `${date}: ${formatMinutes(day.minutes)}, goal not met`;
   return `${date}: no practice`;
 };

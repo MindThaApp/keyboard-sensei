@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { getSongStars, type PracticeLevel, type SongStars as SongStarsData } from "../../services/api";
 import { useRewardsVersion } from "../../state/rewards";
+import { LEVEL_LABELS } from "../play/practiceSession";
 import { StarRating } from "./ProgressBits";
 
-const LEVEL_NAME: Record<PracticeLevel, string> = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" };
 const LEVEL_CAP: Record<PracticeLevel, number> = { full: 3, simplified: 2, easy: 1, melody: 1 };
 
 /**
@@ -39,11 +39,11 @@ export default function SongStars({ songId, level, className = "" }: { songId: s
       </span>
       {levels.length > 1 && (
         <span className="text-xs text-slate-600 dark:text-slate-300">
-          {levels.map((key) => `${LEVEL_NAME[key]} ${data.byLevel[key]}★`).join(" · ")}
+          {levels.map((key) => `${LEVEL_LABELS[key]} ${data.byLevel[key]}★`).join(" · ")}
         </span>
       )}
       {level && level !== "full" && (
-        <span className="text-xs text-slate-600 dark:text-slate-300">{LEVEL_NAME[level]} earns up to {LEVEL_CAP[level]}★</span>
+        <span className="text-xs text-slate-600 dark:text-slate-300">{LEVEL_LABELS[level]} earns up to {LEVEL_CAP[level]}★</span>
       )}
     </div>
   );
