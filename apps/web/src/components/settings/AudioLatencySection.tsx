@@ -48,7 +48,7 @@ export default function AudioLatencySection() {
       </div>
 
       <label className="flex flex-wrap items-center gap-3 text-sm">
-        <span>Audio delay</span>
+        <span>Sound timing fix</span>
         <input
           type="range"
           min={LATENCY_MIN_MS}
@@ -56,7 +56,7 @@ export default function AudioLatencySection() {
           step={1}
           value={effective}
           onChange={(e) => setLatencyOffsetMs(Number(e.target.value))}
-          aria-label="Audio delay in milliseconds"
+          aria-label="Sound timing fix in milliseconds"
           className="w-48"
         />
         <strong className="tabular-nums" data-testid="latency-offset">{effective} ms</strong>
@@ -149,7 +149,7 @@ function LatencyCalibration() {
     >
       <p className="font-medium">Measure it</p>
       <p className="text-slate-600 dark:text-slate-300">
-        Press Start, then tap any key — your MIDI keyboard, the space bar, or the button below — exactly in time with
+        Press Start, then tap any key — your keyboard, the space bar, or the button below — exactly in time with
         the clicks you hear. The first {WARMUP_CLICKS} clicks are a warm-up; {CLICK_COUNT - WARMUP_CLICKS} more follow.
       </p>
       <div className="flex flex-wrap items-center gap-3">

@@ -589,7 +589,7 @@ export default function NoteReadingGame() {
       <MidiStatusBar />
       <div>
         <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Note reading</h1>
-        <p className="text-sm text-slate-700 dark:text-slate-200">A note appears on the staff. Press its key, on the screen, your keyboard or a MIDI piano.</p>
+        <p className="text-sm text-slate-700 dark:text-slate-200">A note appears on the staff. Press its key, on the screen, or your keyboard.</p>
       </div>
       <Card padding="md" className="space-y-3">
         <div className="flex flex-wrap gap-2" aria-label="Current options">
@@ -632,7 +632,7 @@ function rewardLine(reward: RoundResponse): string {
   const parts: string[] = ["Round saved"];
   if (reward.skill.pointsGainedNow > 0) parts.push(`+${reward.skill.pointsGainedNow} Note reading skill point${reward.skill.pointsGainedNow > 1 ? "s" : ""}`);
   else if (reward.skill.pointsToday >= reward.skill.dailyCap) parts.push("daily skill-point limit reached");
-  if (reward.xpGained > 0) parts.push(`+${reward.xpGained} XP`);
+  if (reward.xpGained > 0) parts.push(`+${reward.xpGained} points`);
   return `${parts.join(" · ")}.`;
 }
 

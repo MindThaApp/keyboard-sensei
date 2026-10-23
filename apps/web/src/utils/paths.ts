@@ -1,11 +1,8 @@
+import { PATH_NAMES } from "../components/ui/glossary";
 import type { LessonListItem } from "@keyboard-sensei/shared-types";
 
 /** Display names for learning paths, keyed by the API's path slug. */
-export const PATH_LABEL: Record<string, string> = {
-  "classical-technical": "Classical Technique",
-  "sightreading-intensive": "Reading & Rhythm",
-  "modern-chords": "Modern Chords",
-};
+export const PATH_LABEL: Record<string, string> = PATH_NAMES;
 
 export const pathLabel = (path: string): string => PATH_LABEL[path] ?? path;
 
