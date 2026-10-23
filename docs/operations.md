@@ -63,6 +63,9 @@ ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-essentials-pack.ts'"
 # 128 sampled instruments (~256MB)
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-instrument-library.ts'"
+# Studio Grand piano (VCSL Steinway B, ~5MB pack). Needs ffmpeg with libmp3lame, which the API image doesn't have:
+# run `pnpm --filter @keyboard-sensei/api exec tsx scripts/fetch-vcsl-piano.ts` on a machine that does, then copy
+# apps/api/data/instruments/vcsl_steinway_b and apps/api/scripts/vcsl-piano-manifest.json to the server's volumes.
 # Seed (always last: it indexes what the scripts above wrote)
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'"
 ```

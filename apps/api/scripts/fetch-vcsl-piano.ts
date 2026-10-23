@@ -20,7 +20,9 @@
  *   - three touch (velocity) layers, every whole-tone root (42 notes, so a played
  *     key is never pitch-shifted by more than a semitone, except above G#7);
  *   - each note trimmed to a length that suits its pitch, with a fade-out;
- *   - MP3 (plays everywhere, including Safari and headless Chromium);
+ *   - mono MP3 (plays everywhere, including Safari and headless Chromium). Mono because the decoded
+ *     samples sit in memory as 32-bit float: stereo would be about twice the memory for a stereo image
+ *     that a pitch-shifted, layered sampler can't keep faithful anyway;
  *   - one set of damper-release recordings for the notes that have dampers.
  *
  * Output: data/instruments/vcsl_steinway_b/ (gitignored) and
@@ -57,15 +59,15 @@ const LAYERS = [
 const RELEASE_SOURCE_LAYER = "vl3";
 
 /** Length of the kept note, by pitch: long bass strings, short treble. */
-const noteSeconds = (midi: number): number => Math.round((11 - ((midi - 21) / 87) * 6.5) * 10) / 10;
-const FADE_OUT_S = 1.2;
+const noteSeconds = (midi: number): number => Math.round((7.5 - ((midi - 21) / 87) * 4.5) * 10) / 10;
+const FADE_OUT_S = 1.0;
 const RELEASE_SECONDS = 0.9;
 const RELEASE_FADE_S = 0.3;
 /** Loudness is measured over the first second, where a piano note is loudest. */
 const RMS_WINDOW_S = 1;
 const SAMPLE_RATE = 44_100;
-const MP3_BITRATE = "80k";
-const RELEASE_BITRATE = "48k";
+const MP3_BITRATE = "64k";
+const RELEASE_BITRATE = "40k";
 const DOWNLOAD_CONCURRENCY = 4;
 
 function range(from: number, to: number, step: number): number[] {
@@ -159,14 +161,14 @@ function run(command: string, args: string[], input?: Buffer): Promise<Buffer> {
   });
 }
 
-/** Trim, fade out, and resample to 44.1 kHz stereo float PCM (raw f32le). */
+/** Trim, fade out, and resample to 44.1 kHz mono float PCM (raw f32le). */
 const trimFilter = (job: Job): string =>
   `atrim=0:${job.seconds},afade=t=out:st=${Math.max(0, job.seconds - job.fadeS)}:d=${job.fadeS}`;
 
 async function decodeTrimmed(wav: Buffer, job: Job): Promise<Buffer> {
   return run(
     "ffmpeg",
-    ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-af", trimFilter(job), "-ar", String(SAMPLE_RATE), "-ac", "2", "-f", "f32le", "pipe:1"],
+    ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-af", trimFilter(job), "-ar", String(SAMPLE_RATE), "-ac", "1", "-f", "f32le", "pipe:1"],
     wav,
   );
 }
@@ -176,18 +178,18 @@ async function encodeMp3(pcm: Buffer, job: Job): Promise<Buffer> {
     "ffmpeg",
     [
       "-hide_banner", "-loglevel", "error",
-      "-f", "f32le", "-ar", String(SAMPLE_RATE), "-ac", "2", "-i", "pipe:0",
-      "-c:a", "libmp3lame", "-b:a", job.bitrate, "-joint_stereo", "1", "-write_xing", "1",
+      "-f", "f32le", "-ar", String(SAMPLE_RATE), "-ac", "1", "-i", "pipe:0",
+      "-c:a", "libmp3lame", "-b:a", job.bitrate, "-write_xing", "1",
       "-f", "mp3", "pipe:1",
     ],
     pcm,
   );
 }
 
-/** RMS of the first second of stereo float PCM. */
+/** RMS of the first second of mono float PCM. */
 function openingRms(pcm: Buffer): number {
   const floats = new Float32Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.byteLength / 4));
-  const count = Math.min(floats.length, RMS_WINDOW_S * SAMPLE_RATE * 2);
+  const count = Math.min(floats.length, RMS_WINDOW_S * SAMPLE_RATE);
   let sum = 0;
   for (let i = 0; i < count; i++) sum += floats[i] * floats[i];
   return Math.sqrt(sum / Math.max(1, count));
@@ -281,7 +283,7 @@ async function main(): Promise<void> {
     {
       id: PACK_ID,
       name: "Studio Grand",
-      description: "Studio Grand — a recorded Steinway B with soft, medium and hard touch and damper release (about 10 MB, loads on first use)",
+      description: "Studio Grand — a recorded Steinway B with soft, medium and hard touch and damper release (about 5 MB, loads on first use)",
       category: "piano",
       rights: "CC0-1.0 Versilian Community Sample Library (VCSL), Grand Piano Steinway B",
       sourceUrl: SOURCE_PAGE,
