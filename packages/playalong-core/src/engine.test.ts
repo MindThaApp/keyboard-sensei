@@ -291,3 +291,19 @@ describe("PlayAlongEngine accompaniment", () => {
     expect(finished).toBe(true);
   });
 });
+
+describe("PlayAlongEngine endNow", () => {
+  it("finishes once with the notes reached so far judged and the rest missed", () => {
+    const results: string[][] = [];
+    const engine = new PlayAlongEngine({ notes, durationS: 10, tempoPct: 100, waitMode: false, guideAudio: false, onFinish: (result) => results.push([...result.judgments]) });
+    engine.start(0);
+    engine.tick(4000);
+    engine.pressKey(60, 4000);
+    engine.endNow();
+    engine.endNow();
+    expect(results).toHaveLength(1);
+    expect(results[0]![0]).toBe("perfect");
+    expect(results[0]!.slice(1).every((judgment) => judgment === "miss")).toBe(true);
+    expect(engine.isFinished).toBe(true);
+  });
+});

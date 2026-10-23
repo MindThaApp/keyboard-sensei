@@ -9,7 +9,7 @@ import { drillLink, lessonExerciseLink, songPracticeLink } from "../../utils/pra
 import { warmupFor } from "../../utils/warmup";
 import { Advanced, Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, ProgressRing, Skeleton } from "../ui";
 import { StarRating } from "../progress/ProgressBits";
-import DailyChallengeRow from "../challenge/DailyChallengeRow";
+import DailyChallengeRow, { rowTier, useChallengeToday } from "../challenge/DailyChallengeRow";
 
 const HANDS_LABEL = { both: "both hands", right: "right hand", left: "left hand" } as const;
 const LEVEL_LABEL = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
@@ -129,7 +129,9 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
   const { review, song } = today;
   // A new learner sees the ring and one "Up next" card, not an empty list.
   const noteReading = showNoteReading(today);
-  if (!song && !review && !warmup && !noteReading) return null;
+  const challenge = useChallengeToday();
+  const hasChallenge = challenge !== null && rowTier(challenge) !== null;
+  if (!song && !review && !warmup && !noteReading && !hasChallenge) return null;
   return (
     <ListGroup header="Also today" aria-label="Also today">
       {song && (
@@ -186,7 +188,7 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           accessory="chevron"
         />
       )}
-      <DailyChallengeRow />
+      <DailyChallengeRow today={challenge} />
     </ListGroup>
   );
 }
