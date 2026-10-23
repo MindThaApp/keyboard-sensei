@@ -14,6 +14,7 @@ import FeedbackWidget from "./components/feedback/FeedbackWidget";
 import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
 import AdminUsersPage from "./components/admin/AdminUsersPage";
 import AdminSongsPage from "./components/admin/AdminSongsPage";
+import CataloguePage from "./components/admin/CataloguePage";
 import PlayAlongPage from "./components/play/PlayAlongPage";
 import SongLibraryPage from "./components/library/SongLibraryPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
@@ -217,6 +218,7 @@ function AppShell() {
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/songs" element={<RequireAdmin><AdminSongsPage /></RequireAdmin>} />
+          <Route path="/admin/catalogue" element={<RequireAdmin><CataloguePage /></RequireAdmin>} />
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>

@@ -35,6 +35,7 @@ import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { creditsRouter } from "./catalogue/credits.js";
 import { catalogueRouter } from "./catalogue/routes.js";
+import { adminCatalogueRouter } from "./admin-catalogue.js";
 import { gamesRouter } from "./games/router.js";
 import { progressionRouter } from "./progression/router.js";
 import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
@@ -236,6 +237,7 @@ app.use(songsRouter);
 app.use(instrumentsRouter);
 app.use(archiveRouter);
 app.use(catalogueRouter());
+app.use(adminCatalogueRouter());
 app.use(progressionRouter);
 app.use(gamesRouter);
 
