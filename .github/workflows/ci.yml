@@ -76,5 +76,9 @@ jobs:
           # Baked into the web bundle at build time; matches the home-server deploy.
           build-args: |
             VITE_API_URL=/api
+            GIT_SHA=${{ github.sha }}
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+            SENTRY_PROJECT=${{ vars.SENTRY_PROJECT_WEB }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max

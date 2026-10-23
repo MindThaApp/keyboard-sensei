@@ -25,6 +25,10 @@ COPY packages packages
 WORKDIR /app/apps/api
 RUN pnpm prisma:generate
 
+# Names the release in error reports (keyboard-sensei@<version>+<sha>); optional.
+ARG GIT_SHA
+ENV GIT_SHA=${GIT_SHA}
+
 EXPOSE 3001
 # Applies pending migrations (safe/idempotent) on every start, then boots the server.
 # Seeding is NOT run here since it resets demo-user progress on every rerun (see seed.ts
