@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
-import type { AuthUser } from "@keyboard-sensei/shared-types";
 import { useAuth } from "../../contexts/AuthContext";
 import { useExperience } from "../../contexts/ExperienceContext";
 import { useMidiContext } from "../midi/MidiContext";
