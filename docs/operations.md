@@ -6,10 +6,17 @@ the [README](../README.md).
 
 ## Server
 
-The app runs on a home LAN server at `192.168.4.4` (Debian, user `ramin`) under
-Docker Compose. It is reachable at `https://192.168.4.4:8181` (Caddy reverse
-proxy; the API is at `https://192.168.4.4:8181/api`), and via Tailscale subnet
+The reference deployment runs on a home LAN server (Debian) under
+Docker Compose. It is reachable at `https://<deploy-host>:8181` (Caddy reverse
+proxy; the API is at `https://<deploy-host>:8181/api`), and via VPN subnet
 routing when off the LAN.
+
+The commands below use two shell variables for the server: `DEPLOY_HOST` (its
+LAN address or hostname, also read by the Caddyfile and compose files) and
+`DEPLOY_USER` (the SSH user). Export them first, e.g.
+`export DEPLOY_HOST=<address> DEPLOY_USER=<user>`. Where this document says
+`<deploy-host>`, use the same value. Put `DEPLOY_HOST=<address>` in the server's
+`.env.deploy` as well so Caddy issues its certificate for that address.
 
 ## Deploy
 
@@ -27,8 +34,8 @@ rsync -az --delete \
   --exclude '*.tsbuildinfo' \
   --exclude '.env.deploy' --exclude '.env.deploy.bak' --exclude 'keyboard-sensei-lan-ca.crt' \
   --exclude 'apps/api/data' \
-  ./ ramin@192.168.4.4:~/apps/keyboard-sensei/
-ssh ramin@192.168.4.4 "cd ~/apps/keyboard-sensei && docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build"
+  ./ "$DEPLOY_USER@$DEPLOY_HOST":~/apps/keyboard-sensei/
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd ~/apps/keyboard-sensei && docker compose --env-file .env.deploy -f docker-compose.deploy.yml up -d --build"
 cd - && git worktree remove --force /tmp/ks-deploy
 ```
 
@@ -55,39 +62,39 @@ the images. Fetch or generate them on the server after a fresh deploy:
 
 ```sh
 # 305 library songs
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-midi-library.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-midi-library.ts'"
 # 20 authored beginner tunes
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-beginner-pack.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-beginner-pack.ts'"
 # Essentials pack: fetch the source MIDIs, then generate and verify the Full/Intermediate/Beginner levels
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-essentials-pack.ts'"
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-essentials-pack.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-essentials-pack.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-essentials-pack.ts'"
 # Source pack (piano-midi.de + Mutopia), as DRAFTS: fetches each pinned file, checks it, creates draft Works and Songs
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/import-pack.ts batch-a'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/import-pack.ts batch-a'"
 # 128 sampled instruments (~256MB)
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-instrument-library.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-instrument-library.ts'"
 # Studio Grand piano (VCSL Steinway B, ~5MB pack). Needs ffmpeg with libmp3lame, which the API image doesn't have:
 # run `pnpm --filter @keyboard-sensei/api exec tsx scripts/fetch-vcsl-piano.ts` on a machine that does, then copy
 # apps/api/data/instruments/vcsl_steinway_b and apps/api/scripts/vcsl-piano-manifest.json to the server's volumes.
 # Seed (always last: it indexes what the scripts above wrote)
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'"
 ```
 
 Content-only changes (no schema change) still need a reseed to reach the
 deployed demo account:
 
 ```sh
-ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx prisma/seed.ts'"
 ```
 
 ## Backups and restore
 
 Run `scripts/backup-keyboard-sensei.sh` on the server. It writes a PostgreSQL
 custom-format dump plus a tarball of each data volume to
-`/home/ramin/backups/keyboard-sensei` (override with `BACKUP_DIR`). Suggested
+`$HOME/backups/keyboard-sensei` (override with `BACKUP_DIR`). Suggested
 crontab entry:
 
 ```cron
-30 3 * * * /home/ramin/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/ramin/backups/keyboard-sensei/backup.log 2>&1
+30 3 * * * /home/<user>/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/<user>/backups/keyboard-sensei/backup.log 2>&1
 ```
 
 Restore steps (database dump and each volume, including the Caddy data volume
@@ -104,7 +111,7 @@ That keeps the privacy policy's promise that a deleted account leaves the
 backups within 14 days. The local backup always completes first; an upload
 failure only makes the script exit non-zero, so it shows in the cron log.
 
-One-time setup on the server (as `ramin`, so cron uses the same config):
+One-time setup on the server (as the deploy user, so cron uses the same config):
 
 1. `sudo apt install rclone`
 2. `rclone config` and create a remote. Either:
@@ -123,7 +130,7 @@ One-time setup on the server (as `ramin`, so cron uses the same config):
 5. Add the variable to the crontab line:
 
 ```cron
-30 3 * * * RCLONE_REMOTE=ks-crypt: /home/ramin/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/ramin/backups/keyboard-sensei/backup.log 2>&1
+30 3 * * * RCLONE_REMOTE=ks-crypt: /home/<user>/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/<user>/backups/keyboard-sensei/backup.log 2>&1
 ```
 
 rclone reads `~/.config/rclone/rclone.conf`; set `RCLONE_CONFIG` to use another
@@ -166,7 +173,7 @@ Each device that wants hardware MIDI must trust the Caddy CA root once:
 
 1. Get the certificate, either from `/data/caddy/pki/authorities/local/root.crt`
    inside the `keyboard-sensei-caddy-1` container, or from the shared drive at
-   `/home/ramin/shared/keyboard-sensei-lan-ca.crt`.
+   `/home/<user>/shared/keyboard-sensei-lan-ca.crt`.
 2. On macOS:
    `security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db <path>`
 3. Fully quit and reopen the browser. A tab refresh does not pick up newly
@@ -310,7 +317,7 @@ What to create in [Google Cloud Console](https://console.cloud.google.com/):
 3. **Web client** (Clients → Create client → Web application), e.g. "Keyboard Sensei web":
    - Authorised JavaScript origins: `https://<your domain>`, plus
      `http://localhost:5173` for development. (Google sign-in won't work on the
-     LAN address `https://192.168.4.4:8181`: Google doesn't accept IP addresses
+     LAN address `https://<deploy-host>:8181`: Google doesn't accept IP addresses
      as origins.)
    - No redirect URIs are needed (the button uses the popup flow).
 4. **Android client** (Create client → Android):
@@ -337,7 +344,7 @@ What to create in [Google Cloud Console](https://console.cloud.google.com/):
 A tunnel serves the app at a public domain with a real certificate without
 opening any port on the router. The `cloudflared` service in
 `docker-compose.deploy.yml` sits behind the `public` profile, so it doesn't start
-unless asked. Caddy and the LAN route on `https://192.168.4.4:8181` keep working
+unless asked. Caddy and the LAN route on `https://<deploy-host>:8181` keep working
 alongside it.
 
 1. Put the domain on Cloudflare (free plan is fine).
@@ -356,7 +363,7 @@ What changes in `.env.deploy` when the app goes public:
 
 | Setting | Value | Why |
 |---|---|---|
-| `CORS_ORIGIN` | `https://<your domain>,https://192.168.4.4:8181,https://localhost` | Every origin a browser calls the API from: the public site, the LAN site, and the Android app (Capacitor serves the app from `https://localhost`). Same-origin `/api` calls don't need CORS, but the Android app's do |
+| `CORS_ORIGIN` | `https://<your domain>,https://<deploy-host>:8181,https://localhost` | Every origin a browser calls the API from: the public site, the LAN site, and the Android app (Capacitor serves the app from `https://localhost`). Same-origin `/api` calls don't need CORS, but the Android app's do |
 | `VITE_API_URL` | `/api` (unchanged) | Relative, so the same build works on the public domain and the LAN address |
 | `APP_URL` | `https://<your domain>` | Links in emails must use the public origin, not the LAN one |
 | `TRUST_PROXY` | stays `2` | Through the tunnel the chain is Cloudflare → cloudflared → nginx → API. Cloudflare puts the client address in `X-Forwarded-For`, nginx appends cloudflared's, so the client is 2 hops back, as on the LAN (Caddy → nginx → API). **Verify after going live**: from a phone on mobile data, fail the login 11 times (the 11th gets "Too many failed sign-in attempts"), then confirm a laptop on another network can still sign in. If the laptop is blocked too, every visitor is sharing one rate-limit bucket: set nginx to pass `CF-Connecting-IP` as the client address for requests from cloudflared |

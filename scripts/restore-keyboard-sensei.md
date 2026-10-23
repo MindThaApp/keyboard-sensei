@@ -17,5 +17,5 @@ Repeat for `keyboard-sensei-midi-library`, `keyboard-sensei-feedback-screenshots
 Suggested server crontab entry:
 
 ```cron
-30 3 * * * /home/ramin/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/ramin/backups/keyboard-sensei/backup.log 2>&1
+30 3 * * * /home/<user>/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/<user>/backups/keyboard-sensei/backup.log 2>&1
 ```
