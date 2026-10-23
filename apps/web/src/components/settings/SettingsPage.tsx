@@ -19,6 +19,7 @@ import {
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 import AudioLatencySection from "./AudioLatencySection";
 import DailyGoalSection from "./DailyGoalSection";
+import DeleteAccountSection from "./DeleteAccountSection";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
@@ -543,6 +544,7 @@ export default function SettingsPage() {
         <>
           <DailyGoalSection />
           <AccountSection />
+          <DeleteAccountSection />
         </>
       )}
       {activeTab === "appearance" && <AppearanceSection />}

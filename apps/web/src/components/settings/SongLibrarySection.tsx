@@ -1,3 +1,4 @@
+import { useServerConfig } from "../../services/serverConfig";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   adminDeleteSong,
@@ -442,6 +443,9 @@ export default function SongLibrarySection() {
   const [uploading, setUploading] = useState<"file" | "url" | "archive" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
+  // A public deployment can't redistribute the (non-commercial) archive: no entry point.
+  const serverConfig = useServerConfig();
+  const archiveAvailable = serverConfig !== null && !serverConfig.publicCatalogue;
 
   useEffect(() => {
     getSongs()
@@ -482,9 +486,11 @@ export default function SongLibrarySection() {
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "url" ? null : "url")); }}>
             Import from URL
           </button>
-          <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "archive" ? null : "archive")); }}>
-            Browse Archive
-          </button>
+          {archiveAvailable && (
+            <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "archive" ? null : "archive")); }}>
+              Browse Archive
+            </button>
+          )}
         </div>
       </div>
 
@@ -500,7 +506,7 @@ export default function SongLibrarySection() {
           onCancel={() => setUploading(null)}
         />
       )}
-      {uploading === "archive" && (
+      {uploading === "archive" && archiveAvailable && (
         <BrowseArchiveDialog
           onDone={(song) => { setSongs((current) => (current ? [song, ...current] : [song])); }}
           onCancel={() => setUploading(null)}
