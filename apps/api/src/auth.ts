@@ -4,13 +4,47 @@ import { env } from "./config.js";
 import { prisma } from "./db.js";
 
 declare global { namespace Express { interface Request { userId?: string } } }
-export interface TokenPayload { sub: string; email: string }
-export function createAccessToken(user: TokenPayload): string { return jwt.sign(user,env.JWT_SECRET,{expiresIn:"8h"}) }
-export function requireAuth(req:Request,res:Response,next:NextFunction): void {
-  const token=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-  if(!token){res.status(401).json({error:{code:"unauthorized",message:"A Bearer access token is required"}});return}
-  try { const payload=jwt.verify(token,env.JWT_SECRET) as jwt.JwtPayload; if(typeof payload.sub!=="string") throw new Error(); req.userId=payload.sub; next() }
-  catch { res.status(401).json({error:{code:"invalid_token",message:"The access token is invalid or expired"}}) }
+export interface TokenPayload { sub: string; email: string; tv?: number }
+
+/**
+ * `tv` is the user's token_version when the token was issued. Bumping the column
+ * (password change/reset, sign out everywhere) voids every token issued before it.
+ * Tokens minted before this claim existed count as version 0.
+ */
+export function createAccessToken(user: TokenPayload): string {
+  return jwt.sign({ ...user, tv: user.tv ?? 0 }, env.JWT_SECRET, { expiresIn: "8h" });
+}
+
+const reject = (res: Response, status: number, code: string, message: string) =>
+  res.status(status).json({ error: { code, message } });
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  if (!token) {
+    reject(res, 401, "unauthorized", "A Bearer access token is required");
+    return;
+  }
+  let payload: jwt.JwtPayload;
+  try {
+    payload = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
+    if (typeof payload.sub !== "string") throw new Error("no subject");
+  } catch {
+    reject(res, 401, "invalid_token", "The access token is invalid or expired");
+    return;
+  }
+  try {
+    // One primary-key lookup per request: also catches deleted accounts.
+    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { token_version: true } });
+    const issuedVersion = typeof payload.tv === "number" ? payload.tv : 0;
+    if (!user || user.token_version !== issuedVersion) {
+      reject(res, 401, "invalid_token", "The access token is invalid or expired");
+      return;
+    }
+    req.userId = payload.sub;
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 
 /**
