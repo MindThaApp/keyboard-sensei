@@ -1,0 +1,238 @@
+/* App shell: floating navigation, scroll edges, account menu, focus mode. */
+
+/* ------------------------------------------------------------ page room */
+/* Content clears the floating bars: top cluster / capsule above, tab bar below. */
+.ks-shell-main {
+  padding-top: calc(72px + env(safe-area-inset-top));
+  padding-bottom: calc(var(--tabbar-h, 62px) + 26px + 40px + env(safe-area-inset-bottom));
+}
+html[data-device="desktop"] .ks-shell-main {
+  padding-top: 88px;
+  padding-bottom: 48px;
+}
+html[data-device="desktop"] {
+  --ui-toast-bottom: 24px;
+}
+
+/* ------------------------------------------------------------ scroll edges */
+.ks-edge {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+.ks-edge--top {
+  top: 0;
+}
+.ks-edge--bottom {
+  bottom: 0;
+}
+
+/* ------------------------------------------------------------ top-right cluster */
+.glass.ks-float-cluster {
+  position: fixed;
+  z-index: 41;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 52px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 26px;
+}
+
+/* ------------------------------------------------------------ goal chip */
+.ks-goal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: 22px;
+  color: var(--label);
+  font: 600 var(--ui-fs-sub, 14px) / 1.2 var(--font-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ks-goal-chip__text {
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+}
+.ks-goal-chip__streak {
+  margin-left: 4px;
+}
+.ks-tabbar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ------------------------------------------------------------ account */
+.ks-account {
+  position: relative;
+}
+.ks-account__button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--on-tint, #fff);
+  background: var(--tint-fill);
+  font: 600 16px / 1 var(--font-rounded);
+  cursor: pointer;
+}
+.ks-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 224px;
+  padding: 6px;
+  border-radius: var(--r-card, 20px);
+  background: rgb(var(--bg-elevated-rgb));
+  color: var(--label);
+  box-shadow: var(--shadow-2);
+}
+.ks-menu__name {
+  margin: 0;
+  padding: 8px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--label-2);
+  font-size: var(--ui-fs-sub, 14px);
+}
+.ks-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--label);
+  font: 400 var(--ui-fs-body, 17px) / 1.2 var(--font-text);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ks-menu__item:hover {
+  background: var(--fill);
+}
+
+/* ------------------------------------------------------------ back circle (stage) */
+.glass.ks-back-circle {
+  position: fixed;
+  z-index: 41;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.ks-back-circle a {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  color: var(--label);
+  font-size: 28px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------------ feedback launcher (admins) */
+.ks-feedback-launcher {
+  position: fixed;
+  z-index: 39;
+  right: 16px;
+  bottom: calc(var(--tabbar-h, 62px) + 26px + 16px + env(safe-area-inset-bottom));
+}
+html[data-device="desktop"] .ks-feedback-launcher {
+  bottom: 16px;
+}
+
+/* ------------------------------------------------------------ feedback form */
+.ks-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 16px 16px;
+}
+.ks-feedback__text {
+  width: 100%;
+  min-height: 112px;
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--label);
+  font: 400 var(--ui-fs-body, 17px) / 1.35 var(--font-text);
+  resize: vertical;
+}
+.ks-feedback__note {
+  margin: 0;
+  color: var(--label-2a, var(--label-2));
+  font-size: var(--ui-fs-sub, 14px);
+}
+.ks-feedback__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--ui-fs-sub, 14px);
+}
+.ks-feedback__thumb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ks-feedback__thumb img {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+/* ------------------------------------------------------------ focus mode */
+/* Only the stage, the keyboard and the practice screen's own two controls stay. */
+html[data-focus-mode] .ks-tabbar,
+html[data-focus-mode] .ks-float-cluster,
+html[data-focus-mode] .ks-back-circle,
+html[data-focus-mode] .ks-edge,
+html[data-focus-mode] .ks-feedback-launcher,
+html[data-focus-mode] .ks-toast-viewport {
+  display: none !important;
+}
+html[data-focus-mode] .ks-shell-main {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ks-reward-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ks-reward-lines a {
+  color: var(--label);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------ desktop capsule sizing */
+/* The top capsule hugs its tabs instead of splitting a fixed width between them. */
+.ks-tabbar[data-placement="top"] .ks-tabbar__list {
+  flex: none;
+  grid-auto-columns: max-content;
+}
+.ks-tabbar[data-placement="top"] .ks-tab {
+  flex: none;
+  white-space: nowrap;
+}
+.ks-tabbar[data-placement="top"] .ks-tabbar__bar {
+  max-width: none;
+}
