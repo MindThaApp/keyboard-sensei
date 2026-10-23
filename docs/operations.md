@@ -216,9 +216,36 @@ The server's secrets live in `~/apps/keyboard-sensei/.env.deploy`, read by
 | `VITE_SENTRY_DSN_ANDROID` | Android build env | DSN of the **android** project; falls back to `VITE_SENTRY_DSN` |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_PROJECT`, `SENTRY_ORG`, `SENTRY_URL` | build env / build args | Source-map upload (see "Error monitoring"). Only when `SENTRY_AUTH_TOKEN` is set; org defaults to `mindtheapp`, URL to `https://de.sentry.io` |
 | `RCLONE_REMOTE`, `RCLONE_KEEP_DAYS` | crontab | Off-box backup destination and its retention (default 14 days) |
+| `OMR_SERVICE_URL` | `.env.deploy`, `apps/api/.env` | Sheet-music recognition (beta): `http://omr:8090` with the `omr` compose profile, `http://localhost:8090` locally. Unset = the feature is hidden. See "Sheet-music recognition" |
 
 Local development uses `apps/api/.env` and `apps/web/.env`, copied from their
 `.env.example` files.
+
+## Sheet-music recognition (beta)
+
+"Photo or PDF of sheet music" (Settings → Library) turns a PDF (up to 6 pages) or a photo of
+printed music into a private song. Off unless `OMR_SERVICE_URL` is set.
+
+- **Engine:** [homr](https://github.com/liebharc/homr) (AGPL-3.0), installed unmodified at a
+  pinned commit in `services/omr/Dockerfile` (keep `HOMR_COMMIT` in `apps/web/scripts/third-party-licenses.ts`
+  in step; a test checks). It runs as its own container behind a small HTTP wrapper
+  (`services/omr/server.py`) and is never linked into our code. If homr is ever *modified*,
+  AGPL §13 requires offering the modified source to users.
+- **Isolation and limits:** compose profile `omr`; only on the `internal: true` network `omr`
+  shared with the API (no route out; models are baked in at build time). Read-only root, tmpfs
+  `/tmp`, 2 CPUs, 2.5 GB, all capabilities dropped. One recognition at a time (the service
+  answers 503 if busy); a 240 s limit per file. Inputs are checked by magic bytes: PDF ≤ 6 pages,
+  JPEG/PNG 800 px – 50 MP, 20 MB.
+- **Queue:** in the API process (`apps/api/src/omr/`), one worker, at most 5 waiting, one
+  unfinished job per user, 10 uploads per user per hour. Results stay in memory, private to the
+  uploader, for an hour; nothing is written until the user reviews the engraving and saves it
+  (`content_rights = "user-score-scan"`, private like any upload). A restart drops queued and
+  unsaved jobs.
+- **Cost:** about 13 s a page and 1.7 GB peak on 2 cores (measured on 2 vCPU).
+- **Turn on:** `docker compose --env-file .env.deploy -f docker-compose.deploy.yml --profile omr up -d --build`
+  with `OMR_SERVICE_URL=http://omr:8090` in `.env.deploy`. Locally:
+  `docker compose --profile omr up -d omr` and `OMR_SERVICE_URL=http://localhost:8090` in `apps/api/.env`.
+- **Service tests:** `docker run --rm --network none <omr image> python -m unittest test_server`.
 
 ## Public release
 

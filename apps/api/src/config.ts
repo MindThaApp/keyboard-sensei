@@ -65,6 +65,9 @@ export const env = z
     // Comma-separated DSNs of the projects the web and Android apps report to. The only
     // destinations POST /sentry-tunnel will forward to; unset = the tunnel answers 404.
     SENTRY_TUNNEL_DSNS: z.string().optional(),
+    // Sheet-music recognition (beta): the internal OMR service (services/omr, compose
+    // profile "omr"). Unset = the feature is off and POST /songs/upload/omr answers 503.
+    OMR_SERVICE_URL: z.string().url().optional(),
   })
   // Empty values count as unset, so compose files can pass optional settings as ${VAR:-}.
   .parse(Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== "")));

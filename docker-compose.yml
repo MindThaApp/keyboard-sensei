@@ -14,5 +14,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+  # Sheet-music recognition for local development (docs/operations.md, "Sheet-music recognition"):
+  #   docker compose --profile omr up -d omr   and   OMR_SERVICE_URL=http://localhost:8090
+  omr:
+    build:
+      context: services/omr
+    ports:
+      - "127.0.0.1:8090:8090"
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+      - /home/omr:size=64m
+    cpus: 2
+    mem_limit: 2560m
+    profiles: ["omr"]
 volumes:
   keyboard-sensei-postgres:

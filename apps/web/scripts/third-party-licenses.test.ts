@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ESSENTIALS } from "../../api/src/essentials/manifest.ts";
-import { collectLgplNotices, collectMusicLicenses, collectPackageLicenses, hasKnownLicense, isLgpl, type PackageLicense } from "./third-party-licenses.ts";
+import { collectLgplNotices, collectMusicLicenses, collectPackageLicenses, hasKnownLicense, HOMR_COMMIT, isLgpl, SERVICES, type PackageLicense } from "./third-party-licenses.ts";
 import { THIRD_PARTY_ASSETS } from "./third-party-assets.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -77,6 +77,13 @@ describe("third-party licences", () => {
     expect(verovio?.licenseUrls).toEqual(["https://www.gnu.org/licenses/lgpl-3.0.html", "https://www.gnu.org/licenses/gpl-3.0.html"]);
     // A new LGPL dependency without a notice fails the build instead of shipping silently.
     expect(() => collectLgplNotices([{ name: "some-lgpl-lib", version: "1.0.0", license: "LGPL-2.1", author: null, homepage: null, licenseText: null }])).toThrow(/LGPL_PACKAGES/);
+  });
+
+  it("credits the sheet-music recognition service at the exact commit its container installs", () => {
+    const dockerfile = readFileSync(path.join(REPO_ROOT, "services/omr/Dockerfile"), "utf8");
+    expect(dockerfile).toContain(`ARG HOMR_COMMIT=${HOMR_COMMIT}`);
+    const homr = SERVICES.find((service) => service.name === "homr");
+    expect(homr).toMatchObject({ license: "AGPL-3.0", sourceUrl: `https://github.com/liebharc/homr/tree/${HOMR_COMMIT}` });
   });
 
   it("treats a missing licence field as unknown", () => {
