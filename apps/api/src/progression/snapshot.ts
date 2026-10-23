@@ -11,7 +11,7 @@ import { computeGoalStreak, type GoalStreak } from "./streak.js";
  * Achievements, stars, skills and the Today screen are pure functions of this.
  */
 
-type Db = Pick<PrismaClient, "$queryRaw" | "user" | "lesson" | "userProgress" | "quizAttempt" | "song" | "practiceDay" | "xpEvent" | "userAchievement">;
+type Db = Pick<PrismaClient, "$queryRaw" | "user" | "lesson" | "userProgress" | "quizAttempt" | "song" | "practiceDay" | "xpEvent" | "userAchievement" | "challengeAttempt">;
 
 export interface LiveLesson extends Lesson {
   order: number;
@@ -38,6 +38,13 @@ export interface PlayAlongRow {
   accuracy: number;
   tempoPct: number;
   extras: PlayAlongExtras;
+}
+
+/** A finished daily-challenge run. */
+export interface ChallengeAttemptRow {
+  day: string;
+  tier: number;
+  score: number;
 }
 
 export interface SongInfo {
@@ -76,6 +83,7 @@ export interface Snapshot {
   practiceDays: { day: string; seconds: number; goalMinutes: number; goalMet: boolean }[];
   xpTotal: number;
   unlocked: Map<string, Date>;
+  challengeAttempts: ChallengeAttemptRow[];
 }
 
 const asDate = (value: unknown): Date => new Date(value as string);
@@ -125,7 +133,7 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
   // Play-along rows are read whole (to_jsonb) rather than through the Prisma model, so
   // the practice-level fields are picked up whenever the columns exist, and treated as
   // Full / both hands / not a loop on rows (and databases) that predate them.
-  const [lessonRows, progressRows, exerciseRows, quizRows, playAlongRaw, practiceDays, xp, achievementRows, essentialsRows] =
+  const [lessonRows, progressRows, exerciseRows, quizRows, playAlongRaw, practiceDays, xp, achievementRows, essentialsRows, challengeRows] =
     await Promise.all([
       db.lesson.findMany({ where: { retired_at: null }, orderBy: { order: "asc" }, select: { order: true, lesson_json: true } }),
       db.userProgress.findMany({ where: { user_id: userId } }),
@@ -139,6 +147,11 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
       db.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }),
       db.userAchievement.findMany({ where: { user_id: userId } }),
       db.song.findMany({ where: { id: { startsWith: "essentials-" }, retired_at: null, uploader_id: null }, select: SONG_SELECT }),
+      db.challengeAttempt.findMany({
+        where: { user_id: userId, finished_at: { not: null } },
+        orderBy: { finished_at: "asc" },
+        select: { day: true, tier: true, score: true },
+      }),
     ]);
 
   const playAlong: PlayAlongRow[] = playAlongRaw.map(({ row }) => ({
@@ -190,6 +203,7 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
     })),
     xpTotal: xp._sum.amount ?? 0,
     unlocked: new Map(achievementRows.map((row) => [row.achievement_key, row.unlocked_at])),
+    challengeAttempts: challengeRows.map((row) => ({ day: row.day, tier: row.tier, score: row.score ?? 0 })),
   };
 }
 

@@ -22,6 +22,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@keyboard-sensei/challenge-gen':
+        specifier: workspace:*
+        version: link:../../packages/challenge-gen
       '@keyboard-sensei/lesson-engine':
         specifier: workspace:*
         version: link:../../packages/lesson-engine
@@ -138,6 +141,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.5.3
         version: 8.5.3
+      '@keyboard-sensei/challenge-gen':
+        specifier: workspace:*
+        version: link:../../packages/challenge-gen
       '@keyboard-sensei/lesson-engine':
         specifier: workspace:*
         version: link:../../packages/lesson-engine

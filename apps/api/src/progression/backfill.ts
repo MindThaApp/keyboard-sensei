@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { generateChallenge } from "@keyboard-sensei/challenge-gen";
 import { newlyEarned, achievementStats } from "./achievements.js";
 import { dayKey } from "./days.js";
 import { averageBarSeconds, exerciseSeconds, playAlongSeconds } from "./practice-time.js";
@@ -74,6 +75,15 @@ export async function backfillUser(db: Db, userId: string, now: Date = new Date(
     const value = playAlongSeconds(song, attempt.tempoPct, attempt.extras, bar);
     playSeconds.set(attempt.id, value);
     events.push({ at: attempt.createdAt, seconds: value });
+  }
+  // Finished daily-challenge runs count the piece's length, as when they were played.
+  const challengeRows = await db.challengeAttempt.findMany({
+    where: { user_id: userId, finished_at: { not: null } },
+    select: { day: true, tier: true, key: true, finished_at: true },
+  });
+  for (const row of challengeRows) {
+    if (row.tier !== 1 && row.tier !== 2 && row.tier !== 3) continue;
+    events.push({ at: row.finished_at!, seconds: generateChallenge(row.day, row.tier, { key: row.key }).durationSeconds });
   }
   events.sort((a, b) => a.at.getTime() - b.at.getTime());
   for (const event of events) {
