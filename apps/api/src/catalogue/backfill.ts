@@ -57,7 +57,7 @@ export type SourceKind = "essentials" | "beginner" | "piano-midi-de" | "mutopia"
  * source, the licence read from the file), so it owns their quality fields and
  * the backfill leaves them alone.
  */
-export const PACK_SOURCE_KINDS: ReadonlySet<string> = new Set(["piano-midi-de", "mutopia"]);
+export const PACK_SOURCE_KINDS: ReadonlySet<string> = new Set(["piano-midi-de", "mutopia", "authored"]);
 export type PdStatus = "pd-worldwide" | "pd-us-eu" | "copyrighted" | "unknown";
 
 /** The columns the backfill reads. */

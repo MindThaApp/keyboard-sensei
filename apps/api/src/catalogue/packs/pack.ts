@@ -9,6 +9,7 @@
  * stays out of public builds until its licence is confirmed (see
  * UNCONFIRMED_LICENCE_SOURCES in ../backfill.ts).
  */
+import type { AuthoredScore } from "../../essentials/authored/notation.js";
 import type { AliasSeed, Era, MoodTagId, WorkGenre } from "../works-data.js";
 
 /** A Mutopia licence name as the site prints it. */
@@ -61,6 +62,35 @@ export interface ScanSecondSource {
   reason: string;
 }
 
+/**
+ * An authored arrangement: a public-domain tune written out note by note in
+ * src/essentials/authored/ (the harmony and bass are original to this
+ * project), with the file generated from the score.
+ */
+export interface AuthoredPrimarySource {
+  kind: "authored";
+  /** What the notes are based on: the tune, and how the arrangement was made. */
+  basis: string;
+  /** The page the piece's credit points at (an edition or a reference for the tune). */
+  sourceUrl: string;
+  score: AuthoredScore;
+}
+
+/**
+ * An independent transcription of the tune in ABC notation, read by machine
+ * for the opening-notes check. The excerpt is the opening of the cited file,
+ * copied from it; only its pitches are used.
+ */
+export interface AbcSecondSource {
+  kind: "abc";
+  /** The collection and tune, e.g. "The Everyday Song Book (1927), no. 144". */
+  reference: string;
+  url: string;
+  abc: string;
+  /** Semitones to add to the transcription to reach the score's key (default 0). */
+  transpose?: number;
+}
+
 export interface PackPiece {
   /** Work id, e.g. "moonlight-sonata-2". */
   slug: string;
@@ -77,8 +107,10 @@ export interface PackPiece {
   level: 1 | 2 | 3 | 4 | 5;
   tags?: MoodTagId[];
   aliases?: AliasSeed[];
-  primary: PianoMidiDeSource | MutopiaPrimarySource;
-  second: MutopiaSource | ScanSecondSource;
+  /** Year of first publication, where the public-domain status of a composed piece depends on it. */
+  publishedYear?: number;
+  primary: PianoMidiDeSource | MutopiaPrimarySource | AuthoredPrimarySource;
+  second: MutopiaSource | ScanSecondSource | AbcSecondSource;
 }
 
 export interface Pack {
@@ -107,6 +139,7 @@ export function pianoMidiDeCopyrightYear(notices: string[]): number | null {
 }
 
 export const isPianoMidiDe = (source: PackPiece["primary"]): source is PianoMidiDeSource => source.kind === "piano-midi-de";
+export const isAuthoredPrimary = (source: PackPiece["primary"]): source is AuthoredPrimarySource => source.kind === "authored";
 
 /** Short licence tag for a Mutopia licence name, in the form Song.file_licence uses. */
 export function mutopiaLicenceTag(licence: MutopiaLicence): string {
@@ -116,21 +149,35 @@ export function mutopiaLicenceTag(licence: MutopiaLicence): string {
 }
 
 /** The licence tag of a piece's primary file. */
-export const fileLicenceOf = (piece: PackPiece): string =>
-  isPianoMidiDe(piece.primary) ? PIANO_MIDI_DE_LICENCE_TAG : mutopiaLicenceTag(piece.primary.licence);
+export function fileLicenceOf(piece: PackPiece): string {
+  const { primary } = piece;
+  if (isPianoMidiDe(primary)) return PIANO_MIDI_DE_LICENCE_TAG;
+  return isAuthoredPrimary(primary) ? "public-domain" : mutopiaLicenceTag(primary.licence);
+}
 
 /** Song.source_kind. */
-export const sourceKindOf = (piece: PackPiece): "piano-midi-de" | "mutopia" => piece.primary.kind;
+export const sourceKindOf = (piece: PackPiece): "piano-midi-de" | "mutopia" | "authored" => piece.primary.kind;
 
-/** Song.source_ref: the file name, or the Mutopia piece id. */
-export const sourceRefOf = (piece: PackPiece): string => (isPianoMidiDe(piece.primary) ? piece.primary.file : piece.primary.mutopiaRef);
+/** Song.source_ref: the file name, the Mutopia piece id, or the authored slug. */
+export function sourceRefOf(piece: PackPiece): string {
+  const { primary } = piece;
+  if (isPianoMidiDe(primary)) return primary.file;
+  return isAuthoredPrimary(primary) ? piece.slug : primary.mutopiaRef;
+}
 
 /** Song.source_url: the page the piece's credit points at. */
-export const sourceUrlOf = (piece: PackPiece): string => (isPianoMidiDe(piece.primary) ? PIANO_MIDI_DE_HOME : piece.primary.infoUrl);
+export function sourceUrlOf(piece: PackPiece): string {
+  const { primary } = piece;
+  if (isPianoMidiDe(primary)) return PIANO_MIDI_DE_HOME;
+  return isAuthoredPrimary(primary) ? primary.sourceUrl : primary.infoUrl;
+}
 
 /** Song id: stable and derived from the source, so a re-run finds the same row. */
-export const songIdOf = (piece: PackPiece): string =>
-  isPianoMidiDe(piece.primary) ? `pmd-${piece.primary.file.replace(/\.mid$/i, "")}` : `mutopia-${piece.primary.mutopiaId}`;
+export function songIdOf(piece: PackPiece): string {
+  const { primary } = piece;
+  if (isPianoMidiDe(primary)) return `pmd-${primary.file.replace(/\.mid$/i, "")}`;
+  return isAuthoredPrimary(primary) ? `authored-${piece.slug}` : `mutopia-${primary.mutopiaId}`;
+}
 
 /**
  * The credit line the licence requires. For piano-midi.de: the author, the
@@ -139,6 +186,9 @@ export const songIdOf = (piece: PackPiece): string =>
  */
 export function attributionFor(piece: PackPiece, copyrightYear: number | null): string {
   const { primary } = piece;
+  if (isAuthoredPrimary(primary)) {
+    return `${piece.title} (${piece.composer}), arranged for Keyboard Sensei. ${primary.basis} Public Domain.`;
+  }
   if (isPianoMidiDe(primary)) {
     const year = copyrightYear ? ` Copyright © ${copyrightYear} by ${PIANO_MIDI_DE_AUTHOR}.` : "";
     return (
