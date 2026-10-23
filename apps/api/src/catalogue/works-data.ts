@@ -98,6 +98,15 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "john-field", name: "John Field", sort_name: "Field, John", born: 1782, died: 1837, aliases: ["Field"], era: "romantic" },
   { id: "jean-philippe-rameau", name: "Jean-Philippe Rameau", sort_name: "Rameau, Jean-Philippe", born: 1683, died: 1764, aliases: ["Rameau"], era: "baroque" },
   { id: "domenico-scarlatti", name: "Domenico Scarlatti", sort_name: "Scarlatti, Domenico", born: 1685, died: 1757, aliases: ["Scarlatti"], era: "baroque" },
+  { id: "joseph-brackett", name: "Joseph Brackett", sort_name: "Brackett, Joseph", born: 1797, died: 1882, aliases: ["Elder Joseph Brackett", "Joseph Brackett Jr."], era: "romantic" },
+  { id: "john-henry-hopkins-jr", name: "John Henry Hopkins Jr.", sort_name: "Hopkins, John Henry, Jr.", born: 1820, died: 1891, aliases: ["J. H. Hopkins", "John H. Hopkins"], era: "romantic" },
+  { id: "richard-storrs-willis", name: "Richard Storrs Willis", sort_name: "Willis, Richard Storrs", born: 1819, died: 1900, aliases: ["R. S. Willis"], era: "romantic" },
+  { id: "henry-j-gauntlett", name: "Henry J. Gauntlett", sort_name: "Gauntlett, Henry J.", born: 1805, died: 1876, aliases: ["Henry John Gauntlett", "H. J. Gauntlett"], era: "romantic" },
+  { id: "adolphe-adam", name: "Adolphe Adam", sort_name: "Adam, Adolphe", born: 1803, died: 1856, aliases: ["Adam", "A. Adam"], era: "romantic" },
+  { id: "henry-smart", name: "Henry Smart", sort_name: "Smart, Henry", born: 1813, died: 1879, aliases: ["Henry Thomas Smart", "H. T. Smart"], era: "romantic" },
+  { id: "thomas-hastings", name: "Thomas Hastings", sort_name: "Hastings, Thomas", born: 1784, died: 1872, aliases: ["T. Hastings"], era: "romantic" },
+  { id: "john-hughes", name: "John Hughes", sort_name: "Hughes, John", born: 1873, died: 1932, aliases: ["John Hughes (Pontypridd)", "J. Hughes"], era: "early-20th-c" },
+  { id: "james-leith-macbeth-bain", name: "James Leith Macbeth Bain", sort_name: "Bain, James Leith Macbeth", born: null, died: 1925, aliases: ["J. L. M. Bain", "Macbeth Bain"], era: "early-20th-c" },
 ];
 
 /**
@@ -215,7 +224,7 @@ export const ESSENTIALS_WORKS: Record<string, WorkMeta> = {
   "invention-13": { genre: "classical", catalogue: "BWV 784", aliases: [...t("Two-Part Invention No. 13"), ...cat("BWV 784")] },
   "happy-birthday": { genre: "childrens", published_year: 1893, aliases: t("Good Morning to All") },
   "jingle-bells": { genre: "hymn-carol", aliases: t("One Horse Open Sleigh") },
-  "twinkle-twinkle-little-star": { genre: "childrens", aliases: tr("Ah! vous dirai-je, maman") },
+  "twinkle-twinkle-little-star": { genre: "childrens", aliases: [...tr("Ah! vous dirai-je, maman"), ...nick("Baa, Baa, Black Sheep", "The Alphabet Song")] },
   "wedding-march": { genre: "classical", catalogue: "Op. 61 No. 9", aliases: [...t("A Midsummer Night's Dream"), ...cat("Op. 61 No. 9")] },
   "bridal-chorus": { genre: "classical", aliases: [...nick("Here Comes the Bride"), ...t("Lohengrin"), ...tr("Treulich geführt")] },
   "hallelujah-chorus": { genre: "classical", catalogue: "HWV 56", aliases: [...t("Messiah"), ...cat("HWV 56")] },
