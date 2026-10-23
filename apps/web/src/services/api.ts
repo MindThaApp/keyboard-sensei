@@ -187,6 +187,10 @@ export interface Song {
   arrangement_level?: string | null;
   /** Credit line the source's licence requires (Essentials: Mutopia typesetter + licence + link). */
   attribution?: string | null;
+  /** The catalogue Work this file belongs to; null/absent for ADL, uploads and archive imports. */
+  work_id?: string | null;
+  /** Effective quality tier (an admin override wins); absent from older servers. */
+  quality_tier?: "verified" | "good" | "unrated" | "low";
 }
 export interface ArchiveEntryResult {
   id: string;

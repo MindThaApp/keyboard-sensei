@@ -352,11 +352,14 @@ export const workBestScore = (work: WorkSummary, bests: Record<string, { score: 
 export const levelLabel = (work: Pick<WorkSummary, "level_min" | "level_max">): string =>
   work.level_min === work.level_max ? `Level ${work.level_min}` : `Levels ${work.level_min}–${work.level_max}`;
 
-/** "Level 2 · Easy", or the version's own grade band when the catalogue has one. */
+/**
+ * "Level 2 · Easy", or the version's own grade band when the catalogue has one. A piece that
+ * spans several levels shows only the range: one version's band would misstate the others.
+ */
 export function levelChipText(work: WorkSummary): string {
+  if (work.level_min !== work.level_max) return levelLabel(work);
   const grade = work.versions.find((version) => version.grade_band)?.grade_band;
-  const name = work.level_min === work.level_max ? ` · ${levelHint(work.level_min).name}` : "";
-  return `${levelLabel(work)}${grade ? ` · ${grade}` : name}`;
+  return `${levelLabel(work)} · ${grade ?? levelHint(work.level_min).name}`;
 }
 
 /** "Beethoven": the surname part of the sort name, which is what fits a phone row. */
@@ -433,6 +436,24 @@ export function shelvesToLoad(facets: LibraryFacets, now: Date, seasonalOn: bool
 /** True when the Seasonal chip has something to switch on out of season. */
 export const hasSeasonalShelf = (facets: LibraryFacets, now: Date): boolean =>
   !isChristmasSeason(now) && WORK_SHELVES.some((shelf) => shelf.seasonal && shelf.available(facets));
+
+const TIER_ORDER: Record<string, number> = { verified: 0, good: 1, unrated: 2, low: 3 };
+const foldText = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Songs that belong to no catalogue Work (the ADL library, archive imports, uploads), for the
+ * "More songs" section under All songs: Good first, then Unrated, then Low. Low is for admins
+ * only, as in the catalogue. Songs from a server that doesn't report tiers count as Unrated.
+ * `query` matches title or artist, ignoring case and accents.
+ */
+export function moreSongs(songs: Song[], options: { isAdmin: boolean; query?: string }): Song[] {
+  const query = foldText((options.query ?? "").trim());
+  const tierOf = (song: Song) => song.quality_tier ?? "unrated";
+  return songs
+    .filter((song) => !song.work_id && (options.isAdmin || tierOf(song) !== "low"))
+    .filter((song) => !query || foldText(song.title).includes(query) || foldText(song.artist).includes(query))
+    .sort((a, b) => (TIER_ORDER[tierOf(a)] ?? 2) - (TIER_ORDER[tierOf(b)] ?? 2) || byTitle(a, b));
+}
 
 /** Songs the player added themselves (uploads, recordings, imports): "Your uploads". */
 export const uploadedSongs = (songs: Song[]): Song[] => songs.filter((song) => song.mine).sort(byTitle);

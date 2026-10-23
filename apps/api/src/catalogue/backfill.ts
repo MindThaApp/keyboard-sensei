@@ -38,8 +38,12 @@ import {
   COMPOSERS,
   CURATED_TIER_OVERRIDES,
   ESSENTIALS_WORKS,
+  FEATURED_RANK,
+  MOOD_TAGS,
   TRADITIONAL,
+  WORK_MOOD_TAGS,
   composerIdFor,
+  gradeBandFor,
   type AliasSeed,
   type Era,
   type WorkMeta,
@@ -198,6 +202,7 @@ interface WorkSeed {
   published_year: number | null;
   pd_status: PdStatus;
   recognisability: number | null;
+  featured_rank: number | null;
   notes: string | null;
   aliases: AliasSeed[];
 }
@@ -219,6 +224,7 @@ function workSeed(id: string, title: string, artist: string, meta: WorkMeta | un
     published_year: meta?.published_year ?? null,
     pd_status: pdStatus({ traditional, died: composer?.died ?? null, publishedYear: meta?.published_year ?? null }, year),
     recognisability,
+    featured_rank: FEATURED_RANK[id] ?? null,
     // "Traditional (Welsh)": keep the origin the credit names.
     notes: traditional && artist !== "Traditional" ? artist : null,
     aliases: meta?.aliases ?? [],
@@ -236,6 +242,7 @@ interface StoredWorkFields {
   era: string | null;
   published_year: number | null;
   recognisability: number | null;
+  featured_rank: number | null;
   notes: string | null;
   pd_status: string;
 }
@@ -248,7 +255,7 @@ interface StoredWorkFields {
  */
 export function emptyWorkFieldsToFill(stored: StoredWorkFields, seed: Omit<WorkSeed, "aliases">): Partial<StoredWorkFields> {
   const filled: Partial<StoredWorkFields> = {};
-  for (const key of ["composer_id", "catalogue", "movement", "era", "published_year", "recognisability", "notes"] as const) {
+  for (const key of ["composer_id", "catalogue", "movement", "era", "published_year", "recognisability", "featured_rank", "notes"] as const) {
     if (stored[key] === null && seed[key] !== null) Object.assign(filled, { [key]: seed[key] });
   }
   if (stored.pd_status === "unknown" && seed.pd_status !== "unknown") filled.pd_status = seed.pd_status;
@@ -334,8 +341,8 @@ export async function backfillCatalogue(prisma: PrismaClient, options: Catalogue
     report.composersWritten += 1;
   }
 
-  // 2. Collection tags.
-  for (const tag of Object.values(COLLECTION_TAGS)) {
+  // 2. Collection and mood tags.
+  for (const tag of [...Object.values(COLLECTION_TAGS), ...Object.values(MOOD_TAGS)]) {
     const created = await prisma.tag.createMany({ data: [tag], skipDuplicates: true });
     report.tagsCreated += created.count;
   }
@@ -347,6 +354,7 @@ export async function backfillCatalogue(prisma: PrismaClient, options: Catalogue
       arrangement_group: true, arrangement_level: true, retired_at: true,
       work_id: true, source_kind: true, source_ref: true, file_licence: true, public_eligible: true,
       quality_tier: true, quality_score: true, quality_signals: true, tier_override: true,
+      difficulty: true, grade_band: true,
     },
     orderBy: { id: "asc" },
   });
@@ -408,6 +416,19 @@ export async function backfillCatalogue(prisma: PrismaClient, options: Catalogue
     report.workTagsCreated += created.count;
   }
 
+  // Mood tags (Christmas, Relaxing, Wedding ...): only on a Work with no mood tag yet, so an
+  // admin's retagging is not undone. Works that are not in the database yet are skipped.
+  const moodTagged = new Set(
+    (await prisma.workTag.findMany({ where: { tag: { kind: "mood" } }, select: { work_id: true } })).map((link) => link.work_id),
+  );
+  const moodLinks = Object.entries(WORK_MOOD_TAGS)
+    .filter(([workId]) => existingWorks.has(workId) && !moodTagged.has(workId))
+    .flatMap(([workId, tagIds]) => tagIds.map((tag_id) => ({ work_id: workId, tag_id })));
+  if (moodLinks.length > 0) {
+    const created = await prisma.workTag.createMany({ data: moodLinks, skipDuplicates: true });
+    report.workTagsCreated += created.count;
+  }
+
   // 5. search_text, rebuilt for every Work from what is stored now.
   const works = await prisma.work.findMany({
     include: { aliases: { orderBy: { alias: "asc" } }, tags: { include: { tag: true }, orderBy: { tag_id: "asc" } }, composer: true },
@@ -442,6 +463,9 @@ export async function backfillCatalogue(prisma: PrismaClient, options: Catalogue
     if (file_licence !== song.file_licence) data.file_licence = file_licence;
     if (work_id !== song.work_id) data.work = work_id ? { connect: { id: work_id } } : { disconnect: true };
     if (public_eligible !== song.public_eligible) data.public_eligible = public_eligible;
+    // Approximate grade band for curated versions only; an editor's value is never replaced.
+    const grade_band = song.grade_band ?? (source_kind === "essentials" || source_kind === "beginner" ? gradeBandFor(song.difficulty) : null);
+    if (grade_band !== song.grade_band) data.grade_band = grade_band;
 
     const bytes = readSongFile(song.file_path);
     if (bytes) {

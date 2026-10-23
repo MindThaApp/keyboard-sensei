@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_URL } from "../../services/api";
 import PublicPageLayout, { Prose } from "./PublicPageLayout";
 
 /** Shape of public/third-party-licenses.json, written at build time by scripts/third-party-licenses.ts. */
@@ -9,6 +10,30 @@ interface ThirdPartyLicenses {
   music: { title: string; composer: string; license: string; attribution: string; attributionRequired: boolean; url: string }[];
 }
 
+/** One row of GET /credits: a shared song served under a Creative Commons licence. */
+interface SongCredit {
+  song_id: string;
+  title: string;
+  artist: string;
+  level: string | null;
+  licence: string;
+  licence_url: string | null;
+  attribution: string | null;
+  source_url: string | null;
+}
+
+/** The versions of one piece share a credit line; show it once. */
+function groupCredits(credits: SongCredit[]) {
+  const groups = new Map<string, { key: string; title: string; artist: string; licence: string; licence_url: string | null; attribution: string | null; source_url: string | null }>();
+  for (const credit of credits) {
+    // Derived versions are titled "Canon in D (Beginner)"; the credit is for the piece.
+    const title = credit.title.replace(/ \((Beginner|Intermediate|Full)\)$/, "");
+    const key = `${title}|${credit.artist}|${credit.licence}|${credit.attribution ?? ""}`;
+    if (!groups.has(key)) groups.set(key, { ...credit, title, key });
+  }
+  return [...groups.values()];
+}
+
 const spdxUrl = (license: string) =>
   /^[A-Za-z0-9.+-]+$/.test(license) ? `https://spdx.org/licenses/${license}.html` : null;
 
@@ -16,6 +41,8 @@ export default function ThirdPartyLicensesPage() {
   const [data, setData] = useState<ThirdPartyLicenses | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  // The server's own list of the Creative Commons songs it serves: the one source of truth for credits.
+  const [credits, setCredits] = useState<SongCredit[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +57,23 @@ export default function ThirdPartyLicensesPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/credits`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`credits ${response.status}`);
+        return response.json() as Promise<{ credits: SongCredit[] }>;
+      })
+      .then((json) => !cancelled && setCredits(json.credits))
+      // Offline or an older server: the static list below carries the attribution lines instead.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const creditGroups = useMemo(() => groupCredits(credits ?? []), [credits]);
 
   const packages = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -70,6 +114,7 @@ export default function ThirdPartyLicensesPage() {
               </a>
               ; the beginner and intermediate versions are simplified from them. Where an edition is ShareAlike, the
               simplified versions are shared under the same licence.
+              {credits && credits.length > 0 && " Credit lines for the Creative Commons editions are under Song credits below."}
             </p>
             <ul className="mt-4 divide-y divide-slate-200 dark:divide-slate-800">
               {data.music.map((piece) => (
@@ -80,7 +125,7 @@ export default function ThirdPartyLicensesPage() {
                     </span>
                     <span className={`text-xs ${piece.attributionRequired ? "text-brass-700 dark:text-brass-300" : "text-slate-500"}`}>{piece.license}</span>
                   </div>
-                  {piece.attributionRequired && <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-300">{piece.attribution}</p>}
+                  {piece.attributionRequired && !(credits && credits.length > 0) && <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-300">{piece.attribution}</p>}
                   <a className="mt-1 inline-block break-all text-xs text-felt-700 underline dark:text-felt-300" href={piece.url} target="_blank" rel="noreferrer">
                     Source
                   </a>
@@ -88,6 +133,42 @@ export default function ThirdPartyLicensesPage() {
               ))}
             </ul>
           </section>
+
+          {credits && credits.length > 0 && (
+            <section aria-labelledby="credits-heading">
+              <h2 id="credits-heading" className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">
+                Song credits
+              </h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                Songs this server plays under a Creative Commons licence, with the credit each one asks for. The list comes
+                straight from the song library, so it always matches what you can play.
+              </p>
+              <ul className="mt-4 divide-y divide-slate-200 dark:divide-slate-800" data-testid="song-credits">
+                {creditGroups.map((group) => (
+                  <li key={group.key} className="py-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
+                        {group.title} <span className="font-normal text-slate-500">· {group.artist}</span>
+                      </span>
+                      {group.licence_url ? (
+                        <a className="text-xs text-slate-500 underline" href={group.licence_url} target="_blank" rel="noreferrer">
+                          {group.licence}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-500">{group.licence}</span>
+                      )}
+                    </div>
+                    {group.attribution && <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-300">{group.attribution}</p>}
+                    {group.source_url && (
+                      <a className="mt-1 inline-block break-all text-xs text-felt-700 underline dark:text-felt-300" href={group.source_url} target="_blank" rel="noreferrer">
+                        Source
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section aria-labelledby="sounds-heading">
             <h2 id="sounds-heading" className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">
