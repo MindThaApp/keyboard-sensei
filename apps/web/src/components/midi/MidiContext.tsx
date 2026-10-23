@@ -275,7 +275,9 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         // hardware attached (e.g. a keyboard plugged into its USB-to-DEVICE port
         // instead of USB-to-HOST, so the OS never exposes it as a MIDI input).
         setWebMidiConnected(false);
-        setWebMidiError("MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
+        setWebMidiError(isNativeApp()
+          ? "No MIDI keyboard found. Plug one in over USB (most phones need a USB-C OTG adapter), or search for a Bluetooth keyboard."
+          : "MIDI access granted, but no keyboard was detected — check the USB connection and try again.");
         syncDevices([]);
         return;
       }
