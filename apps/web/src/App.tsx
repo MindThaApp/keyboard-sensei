@@ -6,6 +6,7 @@ import ProgressPage from "./components/progress/ProgressPage";
 import TodayPage from "./components/today/TodayPage";
 import PracticePage from "./components/practice/PracticePage";
 import DailyGoalPage from "./components/auth/DailyGoalPage";
+import FirstStepsPage from "./components/auth/FirstStepsPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage from "./components/auth/AuthPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
@@ -168,6 +169,7 @@ export default function App() {
           <Route path="/learn" element={<LessonListPage />} />
           <Route path="/welcome/assessment" element={<AssessmentRoute />} />
           <Route path="/welcome/save-progress" element={<SaveProgressPage />} />
+          <Route path="/welcome/first-steps" element={<FirstStepsPage />} />
           <Route path="/welcome/goal" element={<DailyGoalPage />} />
           <Route path="/lessons/:lessonId" element={<LessonPlayerPage />} />
           <Route path="/practice" element={<PracticePage tab="songs" />} />
