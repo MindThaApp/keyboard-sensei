@@ -124,28 +124,6 @@ html[data-device="desktop"] {
   background: var(--fill);
 }
 
-/* ------------------------------------------------------------ back circle (stage) */
-.glass.ks-back-circle {
-  position: fixed;
-  z-index: 41;
-  top: calc(12px + env(safe-area-inset-top));
-  left: 12px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-}
-.ks-back-circle a {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  color: var(--label);
-  font-size: 28px;
-  line-height: 1;
-  text-decoration: none;
-}
-
 /* ------------------------------------------------------------ feedback launcher (admins) */
 .ks-feedback-launcher {
   position: fixed;
@@ -201,7 +179,6 @@ html[data-device="desktop"] .ks-feedback-launcher {
 /* Only the stage, the keyboard and the practice screen's own two controls stay. */
 html[data-focus-mode] .ks-tabbar,
 html[data-focus-mode] .ks-float-cluster,
-html[data-focus-mode] .ks-back-circle,
 html[data-focus-mode] .ks-edge,
 html[data-focus-mode] .ks-feedback-launcher,
 html[data-focus-mode] .ks-toast-viewport {

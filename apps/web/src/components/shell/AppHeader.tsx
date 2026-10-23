@@ -169,7 +169,7 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Account
 }
 
 export interface AppNavigationProps extends AccountMenuProps {
-  /** The Play-Along stage owns the whole screen: only a way back is shown. */
+  /** The Play-Along stage owns the whole screen: no shell navigation is rendered. */
   performanceView: boolean;
 }
 
@@ -182,15 +182,8 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
   const { device } = useDeviceClass();
   const condensed = useCondensedOnScroll();
 
-  if (performanceView) {
-    return (
-      <GlassSurface as="div" variant="clear-dark" className="ks-back-circle">
-        <Link to="/practice" aria-label="Back to Practice">
-          <span aria-hidden="true">{"‹"}</span>
-        </Link>
-      </GlassSurface>
-    );
-  }
+  // The practice screen has its own back and title module, so the shell steps aside.
+  if (performanceView) return null;
 
   if (device === "desktop") {
     return (
