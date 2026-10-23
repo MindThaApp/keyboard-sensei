@@ -282,6 +282,11 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         expect((await api("GET", `/songs/${songs.archive.id}/notation`, { token: owner.token })).status).toBe(200);
         expect((await api("GET", `/songs/${songs.library.id}/file`, { token: admin.token })).status).toBe(200);
 
+        // The PianoCoRe archive is non-commercial: no search or import on a public catalogue, for anyone.
+        expect((await api("GET", "/archive/search?q=bach", { token: stranger.token })).status).toBe(404);
+        expect((await api("POST", "/archive/any-id/import", { token: admin.token })).status).toBe(404);
+        expect((await api("GET", "/config")).body).toMatchObject({ publicCatalogue: true });
+
         // Today, the shelves and achievements read only from what exists, and still answer.
         for (const path of ["/users/me/today", "/songs/stars/me", "/users/me/progression", "/users/me/summary"]) {
           expect((await api("GET", path, { token: stranger.token })).status, path).toBe(200);

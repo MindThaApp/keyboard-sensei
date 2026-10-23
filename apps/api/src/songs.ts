@@ -92,7 +92,7 @@ export const songCollection = (song: { file_path: string; uploader_id: string | 
  * library has no licence covering redistribution (see docs/operations.md), so it is
  * hidden. Uploads are never public; see songVisibleTo.
  */
-export const isPublicCatalogueSong = (song: { file_path: string; uploader_id: string | null }): boolean =>
+export const isPubliclyServable = (song: { file_path: string; uploader_id: string | null }): boolean =>
   !song.uploader_id && (!env.PUBLIC_CATALOGUE || songCollection(song) !== null);
 
 /**
@@ -104,7 +104,7 @@ export const canSeeSong = (
   song: { file_path: string; uploader_id: string | null },
   userId: string,
   admin: boolean,
-): boolean => admin || song.uploader_id === userId || isPublicCatalogueSong(song);
+): boolean => admin || song.uploader_id === userId || isPubliclyServable(song);
 
 const songVisibleTo = async (song: { file_path: string; uploader_id: string | null }, userId: string): Promise<boolean> =>
   canSeeSong(song, userId, false) || (await isAdminUser(userId));
