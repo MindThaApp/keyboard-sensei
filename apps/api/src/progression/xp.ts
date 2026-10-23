@@ -14,6 +14,8 @@
  * | Play-along loop                | score / 20, max 5; max 25 per song per day                |
  * | Daily goal met                 | +30, once per day                                         |
  * | Streak milestone               | 3/7/14/30/60/100 days: +30/70/140/300/600/1000, once each |
+ * | Daily challenge cleared (70+)  | +15 / +25 / +40 by tier, once per tier per day            |
+ * | Note-reading round             | max 15 a round, 45 a day (set by the games router)         |
  *
  * Repeat factor (anti-farming): the 1st–3rd attempt at the same exercise or song in
  * a day earns full XP, the 4th–6th half, every later one a fifth; and something
@@ -52,7 +54,7 @@ export function repeatFactor(earlierToday: number, previousBest: number | null):
 }
 
 export interface XpItem {
-  source: "exercise" | "lesson" | "quiz" | "playalong" | "star" | "daily_goal" | "streak";
+  source: "exercise" | "lesson" | "quiz" | "playalong" | "star" | "daily_goal" | "streak" | "challenge" | "note_reading_round";
   amount: number;
   reason: string;
   dedupeKey: string;
@@ -183,3 +185,15 @@ export const streakMilestoneXp = (current: number): XpItem[] =>
     reason: `${milestone.days}-day streak`,
     dedupeKey: `streak:${milestone.days}`,
   }));
+
+/** A daily challenge run counts as cleared at this score (one star). */
+export const CHALLENGE_CLEAR_SCORE = 70;
+export const CHALLENGE_XP: Record<1 | 2 | 3, number> = { 1: 15, 2: 25, 3: 40 };
+
+/** Clearing a tier of the daily challenge; pays for the first clear of that tier that day only. */
+export const dailyChallengeXp = (day: string, tier: 1 | 2 | 3, tierName: string): XpItem => ({
+  source: "challenge",
+  amount: CHALLENGE_XP[tier],
+  reason: `Daily challenge cleared: ${tierName}`,
+  dedupeKey: `daily-challenge:${day}:${tier}`,
+});
