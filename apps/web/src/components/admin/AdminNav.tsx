@@ -14,6 +14,7 @@ export default function AdminNav() {
       <NavLink to="/admin/users" className={linkClasses}>Users</NavLink>
       <NavLink to="/admin/feedback" className={linkClasses}>Feedback</NavLink>
       <NavLink to="/admin/songs" className={linkClasses}>Songs</NavLink>
+      <NavLink to="/admin/catalogue" className={linkClasses}>Catalogue</NavLink>
     </nav>
   );
 }
