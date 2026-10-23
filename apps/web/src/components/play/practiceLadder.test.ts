@@ -10,6 +10,7 @@ import {
   ladderStep,
   PRACTICE_LADDER,
   runStars,
+  simpleOpening,
   simpleStart,
   starCap,
   trickySpan,
@@ -61,6 +62,26 @@ describe("Simple mode start", () => {
     expect(simpleStart({ rung: 3, passed: true }, current)).toEqual({ level: "simplified", hands: "both", tempoPct: 100, waitMode: false });
     expect(simpleStart({ rung: 0, passed: true }, current)).toEqual({ level: "melody", hands: "right", tempoPct: 70, waitMode: false });
     expect(simpleStart({ rung: 7, passed: true }, current)).toEqual({ level: "full", hands: "both", tempoPct: 100, waitMode: false });
+  });
+});
+
+describe("Simple mode opening of a song", () => {
+  const current: LadderState = { level: "full", hands: "both", tempoPct: 100, waitMode: false };
+
+  it("gives the beginner start on the first open only", () => {
+    expect(simpleOpening(null, null, current)).toEqual(BEGINNER_START);
+    // Opened before but never finished a run: no longer the first open.
+    expect(simpleOpening(null, {}, current)).toEqual(current);
+  });
+
+  it("keeps Wait for me as the user set it, over the beginner start's and the ladder's", () => {
+    expect(simpleOpening(null, { waitMode: false }, current)).toEqual({ ...current, waitMode: false });
+    expect(simpleOpening({ rung: 0, passed: false }, { waitMode: false }, current)).toEqual({ level: "melody", hands: "right", tempoPct: 60, waitMode: false });
+    expect(simpleOpening({ rung: 3, passed: true }, { waitMode: true }, current)).toMatchObject({ level: "simplified", waitMode: true });
+  });
+
+  it("leaves the ladder alone when the user never touched Wait for me", () => {
+    expect(simpleOpening({ rung: 3, passed: true }, {}, current)).toEqual(simpleStart({ rung: 3, passed: true }, current));
   });
 });
 
