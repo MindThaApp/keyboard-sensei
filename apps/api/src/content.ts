@@ -8,7 +8,7 @@ import { technique2Lessons, technique2Exercises } from "./content/technique2.js"
 import { depthExercises, withPractice } from "./content/depth.js";
 import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
-import { withTier, validateTiers } from "./content/tiers.js";
+import { tierOf, withTier, validateTiers } from "./content/tiers.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
 
 /**
@@ -47,20 +47,23 @@ const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, e
  * Each path is its own unlock chain (every lesson requires the previous one in its path).
  * The main classical-technical path starts open; the other paths branch off it once the
  * lessons they build on are complete.
+ *
+ * Within a path, lessons are ordered by tier (content/tiers.ts) before chaining, keeping
+ * the authored order inside a tier. That way a lesson never waits on one from a later
+ * tier; validateTiers checks the cross-path prerequisites too.
  */
-const classicalPath = chainLessons([
-  ...coreLessons,
-  ...repertoireLessons,
-  ...earTrainingLessons,
-  ...technique2Lessons,
-  ...keyLessons,
-]);
+const byTier = (sequence: Lesson[]): Lesson[] =>
+  [...sequence].sort((a, b) => tierOf(a.id) - tierOf(b.id));
+
+const classicalPath = chainLessons(
+  byTier([...coreLessons, ...repertoireLessons, ...earTrainingLessons, ...technique2Lessons, ...keyLessons]),
+);
 
 // Reading & Rhythm opens after the first sight-reading drill.
-const readingPath = chainLessons(readingLessons, ["lesson-11"]);
+const readingPath = chainLessons(byTier(readingLessons), ["lesson-11"]);
 
 // Modern Chords opens after the foundation assessment (lesson 12), which covers triads.
-const modernPath = chainLessons(modernLessons, ["lesson-12"]);
+const modernPath = chainLessons(byTier(modernLessons), ["lesson-12"]);
 
 export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath]
   .map(withPractice)

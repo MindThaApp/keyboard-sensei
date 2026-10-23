@@ -728,10 +728,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     it("finishing a lesson opens the next lesson AND any path that branches from it", async () => {
       const user = await createUser();
-      const course = m.content.lessons.map((lesson) => lesson.id);
       // Lessons 1–10 already done (written directly; their unlock writes are not under test here).
+      const firstTen = Array.from({ length: 10 }, (_, index) => `lesson-${String(index + 1).padStart(2, "0")}`);
       await m.prisma.userProgress.createMany({
-        data: course.slice(0, 10).map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
+        data: firstTen.map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
       });
       expect(await statusOf(user.token, "lesson-11")).toBe("unlocked");
       expect(await statusOf(user.token, "lesson-reading-c-position")).toBe("locked");
@@ -750,9 +750,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       // Completing lesson 12 behind the API's back (as if the Modern Chords path had been
       // added after the learner finished it) writes no unlock row, yet its first lesson
       // opens at read time.
-      await m.prisma.userProgress.update({
+      await m.prisma.userProgress.upsert({
         where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-12" } },
-        data: { status: "completed", best_score: 90 },
+        create: { user_id: user.id, lesson_id: "lesson-12", status: "completed", best_score: 90 },
+        update: { status: "completed", best_score: 90 },
       });
       expect(await statusOf(user.token, "lesson-chords-major-symbols")).toBe("unlocked");
       const detail = await api("GET", "/lessons/lesson-chords-major-symbols", { token: user.token });
@@ -1023,6 +1024,55 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
       const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
       expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
+    });
+
+    it("keeps every lesson a learner earned under the old chain and stores newly earned ones", async () => {
+      const { backfillUnlocks } = await import("./progress.js");
+      const { LEGACY_PREREQUISITES } = await import("./content/legacy-prerequisites.js");
+      await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
+      const statuses = async (token: string) => {
+        const res = await api("GET", "/lessons", { token });
+        const items = res.body as Array<{ id: string; progress: { status: string } }>;
+        return new Map(items.map((item) => [item.id, item.progress.status]));
+      };
+      const complete = (userId: string, ids: string[]) =>
+        m.prisma.userProgress.createMany({
+          data: ids.map((lesson_id) => ({ user_id: userId, lesson_id, status: "completed" as const, best_score: 90, completed_at: new Date() })),
+        });
+
+      // Finished lessons 01-16 under the old order, with no stored row for lesson-17 (its
+      // old prerequisite was lesson-16; now it waits for lesson-32).
+      const veteran = await createUser();
+      const oldChain = Array.from({ length: 16 }, (_, index) => `lesson-${String(index + 1).padStart(2, "0")}`);
+      await complete(veteran.id, oldChain);
+      // Finished lessons 01-06 only: lesson-08 now follows lesson-06 directly.
+      const beginner = await createUser();
+      await complete(beginner.id, oldChain.slice(0, 6));
+
+      const before = await statuses(veteran.token);
+      expect(before.get("lesson-17")).toBe("locked");
+      expect((await statuses(beginner.token)).get("lesson-08")).toBe("unlocked"); // read time
+
+      const report = await backfillUnlocks(m.prisma, m.content.lessons, LEGACY_PREREQUISITES);
+      expect(report.unlocked).toBeGreaterThan(0);
+
+      const after = await statuses(veteran.token);
+      expect(after.get("lesson-17")).toBe("unlocked");
+      for (const id of oldChain) expect(after.get(id), id).toBe("completed");
+      // Nothing that was open before the backfill is closed after it.
+      for (const [id, status] of before) if (status !== "locked") expect(after.get(id), id).not.toBe("locked");
+      const stored = await m.prisma.userProgress.findUnique({
+        where: { user_id_lesson_id: { user_id: beginner.id, lesson_id: "lesson-08" } },
+      });
+      expect(stored?.status).toBe("unlocked");
+      // lesson-07 was open under the old chain (after lesson-06), so it stays open; a lesson
+      // the beginner has not earned under either chain stays locked.
+      const beginnerAfter = await statuses(beginner.token);
+      expect(beginnerAfter.get("lesson-07")).toBe("unlocked");
+      expect(beginnerAfter.get("lesson-11")).toBe("locked");
+
+      // Idempotent: a second run changes nothing.
+      expect(await backfillUnlocks(m.prisma, m.content.lessons, LEGACY_PREREQUISITES)).toEqual({ users: 0, unlocked: 0 });
     });
   });
 
