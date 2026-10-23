@@ -46,7 +46,8 @@ import { exerciseBestsFor, recordLessonOutcome, scoreFromResult, unlockLesson } 
 import { narrationVoiceIdSchema } from "./narration-voices.js";
 import { createSentryTunnelRouter, parseAllowedDsns } from "./sentry-tunnel.js";
 import { reportServerError } from "./sentry.js";
-import { instrumentUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
+import { instrumentUploadRateLimit, omrUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
+import { omrRouter } from "./omr/omr-routes.js";
 
 const updateProfileSchema = z
   .object({
@@ -198,6 +199,8 @@ app.get("/config", (_req, res) =>
     publicCatalogue: env.PUBLIC_CATALOGUE,
     googleSignIn: env.GOOGLE_CLIENT_IDS.length > 0,
     registrationOpen: env.REGISTRATION_OPEN,
+    // Sheet music from a photo or PDF (beta): only when the OMR service is configured.
+    sheetMusicRecognition: Boolean(env.OMR_SERVICE_URL),
   }),
 );
 
@@ -230,11 +233,13 @@ app.use(requireAuth);
 
 // Path-scoped (not per-route) so they run after requireAuth and can key on req.userId.
 app.use("/songs/upload", songUploadRateLimit);
+app.use("/songs/upload/omr", omrUploadRateLimit);
 app.use("/instruments/upload", instrumentUploadRateLimit);
 
 app.use(feedbackRouter);
 app.use(adminUsersRouter);
 app.use(songsRouter);
+app.use(omrRouter);
 app.use(instrumentsRouter);
 app.use(archiveRouter);
 app.use(catalogueRouter());
