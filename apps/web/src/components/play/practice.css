@@ -72,6 +72,9 @@
   pointer-events: auto;
 }
 .glass.ks-practice-module {
+  /* A translucent fill, never a backdrop blur: they sit over the animating canvas. */
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   gap: 8px;

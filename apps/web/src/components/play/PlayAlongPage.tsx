@@ -246,8 +246,12 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     return { min, max };
   }, [parsed, arrangement]);
   const notationVerticalRange = useMemo(() => ({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
-  const defaultRange = useMemo(() => pianoRangeFor(pitchSpan.min, pitchSpan.max), [pitchSpan]);
   const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: pitchSpan.min, highestNote: pitchSpan.max }), [pitchSpan]);
+  // An upright phone is too narrow for octave padding: there the song's own range is
+  // the default, so the keys stay big enough to hit.
+  const phonePortrait = device === "phone" && orientation === "portrait";
+  const paddedRange = useMemo(() => pianoRangeFor(pitchSpan.min, pitchSpan.max), [pitchSpan]);
+  const defaultRange = phonePortrait ? tightRange : paddedRange;
   // One geometry for the keys and the falling notes, so they can never drift apart.
   const sizing = useKeyboardSizing({ defaultRange, tightRange, deviceRange, hasDevice: devices.length > 0, containerWidthPx: stageWidth });
   const geometry = sizing.geometry;

@@ -395,5 +395,6 @@ export function saveSongMemory(songId: string, memory: SongMemory): void {
 export function simpleStart(memory: SongMemory | null, current: LadderState): LadderState {
   if (!memory) return BEGINNER_START;
   const rung = memory.passed ? Math.min(PRACTICE_LADDER.length - 1, memory.rung + 1) : memory.rung;
-  return applyRung({ ...current, waitMode: memory.rung === 0 }, rung);
+  // Step from the remembered rung itself, so leaving Learn it turns Wait for me off.
+  return applyRung(applyRung(current, memory.rung), rung);
 }
