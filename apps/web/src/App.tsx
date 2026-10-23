@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate, useSearchParams } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
@@ -18,7 +18,9 @@ import SongLibraryPage from "./components/library/SongLibraryPage";
 import SkillAssessmentPage from "./components/auth/SkillAssessmentPage";
 import SaveProgressPage from "./components/auth/SaveProgressPage";
 import { formatScoresParam, parseSourceParam } from "./components/auth/onboardingParams";
-import AppHeader, { BottomTabBar } from "./components/shell/AppHeader";
+import AppNavigation from "./components/shell/AppHeader";
+import { ToastProvider } from "./components/ui/Toast";
+import { exitFocusMode } from "./hooks/useFocusMode";
 import RewardToasts from "./components/shell/RewardToasts";
 import { useAuth } from "./contexts/AuthContext";
 import { applyAssessmentPlacement, updateTimezone } from "./services/api";
@@ -30,6 +32,10 @@ import TermsPage from "./components/legal/TermsPage";
 import DeleteAccountPage from "./components/legal/DeleteAccountPage";
 import ThirdPartyLicensesPage from "./components/legal/ThirdPartyLicensesPage";
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./components/auth/AccountRecoveryPages";
+
+// Dev-only component kit page. The condition is a build-time constant, so production
+// bundles drop the import entirely.
+const KitPreview = import.meta.env.DEV ? lazy(() => import("./components/ui/KitPreview")) : null;
 
 /**
  * Pages that work signed in or out, outside the app shell: the policies and account
@@ -110,14 +116,26 @@ function useReportTimezone(user: { timezone?: string | null } | null) {
 }
 
 export default function App() {
+  return (
+    <ToastProvider>
+      <AppShell />
+    </ToastProvider>
+  );
+}
+
+function AppShell() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   useNativeKeepAwake();
   // The Play-Along stage fills the viewport; everything else is a normal scrolling page.
+  const isAdmin = auth.user?.role === "admin";
   const isPerformanceView = useMatch("/play/:songId") !== null;
   useReportTimezone(auth.user);
+
+  // Focus mode belongs to the screen that asked for it: navigating away ends it.
+  useEffect(() => exitFocusMode(), [location.pathname]);
 
   // Route guard: the API already 403s non-admins; this just keeps them off the pages.
   const RequireAdmin = ({ children }: { children: ReactNode }) =>
@@ -128,15 +146,12 @@ export default function App() {
 
   if (!auth.authenticated) {
     return (
-      <>
-        <AuthPage
-          onEntered={(kind) => {
-            // Signing in lands on Today; a new account goes through onboarding first.
-            navigate(kind === "login" ? "/" : `/welcome/assessment?from=${kind}`, { replace: kind === "login" });
-          }}
-        />
-        <FeedbackWidget />
-      </>
+      <AuthPage
+        onEntered={(kind) => {
+          // Signing in lands on Today; a new account goes through onboarding first.
+          navigate(kind === "login" ? "/" : `/welcome/assessment?from=${kind}`, { replace: kind === "login" });
+        }}
+      />
     );
   }
 
@@ -148,12 +163,12 @@ export default function App() {
       >
         Skip to content
       </a>
-      <AppHeader
-        isAdmin={auth.user?.role === "admin"}
+      <AppNavigation
+        performanceView={isPerformanceView}
+        isAdmin={isAdmin}
         displayName={auth.user?.display_name ?? null}
         onLogout={auth.logout}
-        onOpenFeedback={isPerformanceView ? () => setFeedbackOpen(true) : undefined}
-        widthClassName={isPerformanceView ? "" : PAGE_WIDTH}
+        onOpenFeedback={() => setFeedbackOpen(true)}
       />
       <main
         id="main-content"
@@ -161,7 +176,7 @@ export default function App() {
         className={
           isPerformanceView
             ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3 outline-none sm:px-4"
-            : `mx-auto w-full ${PAGE_WIDTH} px-4 pb-24 pt-6 outline-none`
+            : `ks-shell-main mx-auto w-full ${PAGE_WIDTH} px-4 outline-none`
         }
       >
         <Routes>
@@ -178,6 +193,17 @@ export default function App() {
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
+          {/* New screens: register their routes here, above the redirects. */}
+          {KitPreview && (
+            <Route
+              path="/dev/kit"
+              element={
+                <Suspense fallback={null}>
+                  <KitPreview />
+                </Suspense>
+              }
+            />
+          )}
           {/* Old addresses. */}
           <Route path="/play" element={<Redirect to="/practice" />} />
           <Route path="/practice-gym" element={<Redirect to="/practice/gym" />} />
@@ -192,10 +218,13 @@ export default function App() {
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>
-      <FeedbackWidget open={feedbackOpen} onOpenChange={setFeedbackOpen} showLauncher={!isPerformanceView} />
+      <FeedbackWidget
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        showLauncher={isAdmin && !isPerformanceView}
+      />
       <AudioNoticeToasts />
       <RewardToasts />
-      {!isPerformanceView && <BottomTabBar />}
     </div>
   );
 }
