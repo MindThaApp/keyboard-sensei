@@ -24,19 +24,19 @@ describe("challenge unlocks", () => {
     expect(REQUIRED_LESSON_IDS.filter((id) => !ids.has(id))).toEqual([]);
   });
 
-  it("locks everything for a new learner and says what to finish first", () => {
+  it("opens Starter for a new learner and says what to finish for the rest", () => {
     const access = challengeAccess(new Set(), refs);
-    expect(access.tiers.map((tier) => tier.unlocked)).toEqual([false, false, false]);
-    expect(access.tiers[0]!.needs.map((lesson) => lesson.id)).toEqual(["lesson-04", "lesson-05"]);
-    // Higher tiers list what the lower ones need too.
+    expect(access.tiers.map((tier) => tier.unlocked)).toEqual([true, false, false]);
+    expect(access.tiers[0]!.needs).toEqual([]);
+    // Higher tiers list what the lower ones would need too.
+    expect(access.tiers[1]!.needs.map((lesson) => lesson.id)).toEqual(expect.arrayContaining(["lesson-04", "lesson-05"]));
     expect(access.tiers[2]!.needs.map((lesson) => lesson.id)).toEqual(expect.arrayContaining(["lesson-04", "lesson-06"]));
     expect(access.keys).toEqual([]);
   });
 
-  it("unlocks Starter from either path, and tiers only in order", () => {
+  it("unlocks the tiers above Starter from either path, and only in order", () => {
     expect(challengeAccess(new Set(["lesson-04", "lesson-05"]), refs).tiers[0]!.unlocked).toBe(true);
-    expect(challengeAccess(new Set(["lesson-rhythm-rests", "lesson-reading-c-position"]), refs).tiers[0]!.unlocked).toBe(true);
-    // Everything Intermediate needs, but not Starter: still locked.
+    // Everything Intermediate lists itself, but not what Starter would need: still locked.
     const noStarter = challengeAccess(new Set(["lesson-rhythm-eighths", "lesson-19", "lesson-06", "lesson-07"]), refs);
     expect(noStarter.tiers[1]!.unlocked).toBe(false);
     const both = challengeAccess(new Set(["lesson-04", "lesson-05", "lesson-rhythm-eighths", "lesson-19", "lesson-06", "lesson-07"]), refs);

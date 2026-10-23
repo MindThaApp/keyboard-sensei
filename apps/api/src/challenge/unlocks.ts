@@ -8,7 +8,9 @@ import { CHALLENGE_TIERS, type ChallengeTier } from "@keyboard-sensei/challenge-
  * the classical path and once in the reading or chords path). Each group lists the
  * gentlest route first: that is the lesson a locked tier points to.
  *
- * Tiers unlock in order, each needing what its music uses (generator: TIER_SHAPE):
+ * Tiers unlock in order, each needing what its music uses (generator: TIER_SHAPE).
+ * Starter is always open, so a brand-new learner has something to try; the lessons it
+ * lists below still gate the tiers above it:
  *   Starter       treble reading in C position; quarters and halves
  *   Intermediate  eighths and dotted quarters; the bass clef; hands together
  *   Advanced      sixteenths and ties; broken chords and sevenths in the left hand
@@ -102,7 +104,10 @@ export function challengeAccess(completed: ReadonlySet<string>, lessons: readonl
   const needs = new Map<string, LessonRef>();
   for (const tier of CHALLENGE_TIERS) {
     for (const lesson of unmet(TIER_REQUIREMENTS[tier])) needs.set(lesson.id, lesson);
-    tiers.push({ tier, unlocked: needs.size === 0, needs: [...needs.values()] });
+    // Starter is open from day one (C major / A minor, quarters and halves, no left hand, and
+    // "Listen first" plays it); what it would have asked still gates Intermediate and Advanced.
+    const open = tier === 1 || needs.size === 0;
+    tiers.push({ tier, unlocked: open, needs: tier === 1 ? [] : [...needs.values()] });
   }
   const keys = Object.entries(KEY_REQUIREMENTS)
     .filter(([, requirement]) => unmet(requirement).length === 0)
