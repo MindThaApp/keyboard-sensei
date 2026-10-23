@@ -1,4 +1,5 @@
 import { getAudioContext, getMasterBus } from "../audio/audioEngine";
+import { isNativeApp } from "../native/platform";
 import { previewChord, SampledInstrument } from "./sampler";
 import { SustainPedalState } from "./sustainPedal";
 
@@ -98,7 +99,9 @@ export class PianoSynth {
   private activeSampler: SampledInstrument | null = null;
   private activeInstrumentId: string | null = null;
   private readonly sustain = new SustainPedalState();
-  private readonly cacheLimit = maxCachedInstruments();
+  /** The Android app always counts as low-memory: its WebView is killed (not just
+   *  slowed) when decoded samples pile up, and deviceMemory over-reports there. */
+  private readonly cacheLimit = isNativeApp() ? LOW_MEMORY_CACHED_INSTRUMENTS : maxCachedInstruments();
   /** Which engine actually produced the currently-sounding voice for a note, so
    *  stopNote() releases the right one even if the selected instrument changed
    *  between the note-on and note-off (e.g. the user switched voices mid-note). */
@@ -160,6 +163,16 @@ export class PianoSynth {
       if (oldest === this.activeSampler) break;
       this.samplerCache.delete(oldestId);
       oldest.dispose();
+    }
+  }
+
+  /** Frees every decoded instrument except the one in use (e.g. on leaving practice),
+   *  so the samples of earlier choices don't sit in memory while nothing plays. */
+  releaseInactiveInstruments(): void {
+    for (const [id, sampler] of [...this.samplerCache]) {
+      if (sampler === this.activeSampler) continue;
+      this.samplerCache.delete(id);
+      sampler.dispose();
     }
   }
 
