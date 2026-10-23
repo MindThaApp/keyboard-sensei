@@ -9,6 +9,7 @@ import { drillLink, lessonExerciseLink, songPracticeLink } from "../../utils/pra
 import { warmupFor } from "../../utils/warmup";
 import { Advanced, Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, ProgressRing, Skeleton } from "../ui";
 import { StarRating } from "../progress/ProgressBits";
+import DailyChallengeRow from "../challenge/DailyChallengeRow";
 
 const HANDS_LABEL = { both: "both hands", right: "right hand", left: "left hand" } as const;
 const LEVEL_LABEL = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
@@ -68,14 +69,14 @@ function GoalCard({ today }: { today: TodayResponse }) {
         )}
         {streak.frozenDays.length > 0 && (
           <p className="text-footnote text-label-2a" data-testid="freeze-used">
-            <span aria-hidden>❄️ </span>A streak freeze covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`}.
+            <span aria-hidden>❄️ </span>A day-off pass covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`}.
           </p>
         )}
         {hasMetGoal && (
           <p className="text-footnote text-label-2a">
             {streak.freezesAvailable > 0
-              ? `${streak.freezesAvailable} streak freeze${streak.freezesAvailable > 1 ? "s" : ""} banked. A missed day won't break your streak.`
-              : `Meet your goal ${streak.daysToNextFreeze} more day${streak.daysToNextFreeze === 1 ? "" : "s"} in a row to earn a streak freeze.`}
+              ? `${streak.freezesAvailable} day-off pass${streak.freezesAvailable > 1 ? "es" : ""} saved. A missed day won't break your streak.`
+              : `Meet your goal ${streak.daysToNextFreeze} more day${streak.daysToNextFreeze === 1 ? "" : "s"} in a row to earn a day-off pass.`}
           </p>
         )}
       </div>
@@ -185,7 +186,7 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           accessory="chevron"
         />
       )}
-      {/* WP9 places <DailyChallengeRow /> here: the "Daily challenge · Tier n" row. */}
+      <DailyChallengeRow />
     </ListGroup>
   );
 }

@@ -38,6 +38,7 @@ import { catalogueRouter } from "./catalogue/routes.js";
 import { adminCatalogueRouter } from "./admin-catalogue.js";
 import { gamesRouter } from "./games/router.js";
 import { progressionRouter } from "./progression/router.js";
+import { challengeRouter } from "./challenge/router.js";
 import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
 import { exerciseSeconds } from "./progression/practice-time.js";
 import { dayKey, isValidTimeZone } from "./progression/days.js";
@@ -239,6 +240,7 @@ app.use(archiveRouter);
 app.use(catalogueRouter());
 app.use(adminCatalogueRouter());
 app.use(progressionRouter);
+app.use(challengeRouter);
 app.use(gamesRouter);
 
 app.get("/users/me", async (req, res, next) => {

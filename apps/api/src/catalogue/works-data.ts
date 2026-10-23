@@ -33,6 +33,8 @@ export interface ComposerSeed {
 }
 
 export const TRADITIONAL = "traditional";
+/** Pieces with no known composer (the Anna Magdalena Notebook minuets). */
+export const ANONYMOUS = "anonymous";
 
 export const COMPOSERS: ComposerSeed[] = [
   { id: TRADITIONAL, name: "Traditional", sort_name: "Traditional", born: null, died: null, aliases: ["Trad.", "Folk song", "Anonymous"], era: "traditional" },
@@ -87,6 +89,15 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "wolfgang-amadeus-mozart", name: "Wolfgang Amadeus Mozart", sort_name: "Mozart, Wolfgang Amadeus", born: 1756, died: 1791, aliases: ["Mozart", "W. A. Mozart"], era: "classical-era" },
   { id: "william-croft", name: "William Croft", sort_name: "Croft, William", born: 1678, died: 1727, aliases: ["Croft"], era: "baroque" },
   { id: "william-h-monk", name: "William H. Monk", sort_name: "Monk, William H.", born: 1823, died: 1889, aliases: ["William Henry Monk"], era: "romantic" },
+  { id: ANONYMOUS, name: "Anonymous", sort_name: "Anonymous", born: null, died: null, aliases: ["Anon.", "Unknown composer", "Anna Magdalena Notebook"], era: null },
+  { id: "carl-czerny", name: "Carl Czerny", sort_name: "Czerny, Carl", born: 1791, died: 1857, aliases: ["Czerny", "Karl Czerny"], era: "classical-era" },
+  { id: "friedrich-kuhlau", name: "Friedrich Kuhlau", sort_name: "Kuhlau, Friedrich", born: 1786, died: 1832, aliases: ["Kuhlau", "Frederik Kuhlau"], era: "classical-era" },
+  { id: "jean-louis-streabbog", name: "Jean-Louis Streabbog", sort_name: "Streabbog, Jean-Louis", born: 1835, died: 1886, aliases: ["Streabbog", "Louis Streabbog", "Jean-Louis Gobbaerts", "Gobbaerts"], era: "romantic" },
+  { id: "jan-ladislav-dussek", name: "Jan Ladislav Dussek", sort_name: "Dussek, Jan Ladislav", born: 1760, died: 1812, aliases: ["Dussek", "Johann Ladislaus Dussek", "J. L. Dussek"], era: "classical-era" },
+  { id: "tom-turpin", name: "Tom Turpin", sort_name: "Turpin, Tom", born: null, died: 1922, aliases: ["Thomas Turpin", "Thomas Million Turpin"], era: "ragtime" },
+  { id: "john-field", name: "John Field", sort_name: "Field, John", born: 1782, died: 1837, aliases: ["Field"], era: "romantic" },
+  { id: "jean-philippe-rameau", name: "Jean-Philippe Rameau", sort_name: "Rameau, Jean-Philippe", born: 1683, died: 1764, aliases: ["Rameau"], era: "baroque" },
+  { id: "domenico-scarlatti", name: "Domenico Scarlatti", sort_name: "Scarlatti, Domenico", born: 1685, died: 1757, aliases: ["Scarlatti"], era: "baroque" },
 ];
 
 /**

@@ -6,20 +6,16 @@ vi.mock("../audio/audioEngine", () => ({
   getAudioContext: () => ({}),
   getMasterBus: () => ({}),
 }));
-vi.mock("./sampler", () => ({
-  previewChord: vi.fn(),
-  SampledInstrument: class {
-    constructor(readonly instrumentId: string) {}
-    load() {
-      return Promise.resolve();
-    }
-    dispose() {
-      disposed.push(this.instrumentId);
-    }
-    get decodedBytes() {
-      return 1_000_000;
-    }
-  },
+vi.mock("./instrumentBank", () => ({
+  previewInstrumentChord: vi.fn(),
+  createSampleVoiceBank: async (instrumentId: string) => ({
+    instrumentId,
+    load: () => Promise.resolve(),
+    dispose: () => {
+      disposed.push(instrumentId);
+    },
+    decodedBytes: 1_000_000,
+  }),
 }));
 
 const { PianoSynth, MAX_CACHED_INSTRUMENTS, maxCachedInstruments } = await import("./synth");

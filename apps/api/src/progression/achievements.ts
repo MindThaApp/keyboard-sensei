@@ -1,4 +1,6 @@
+import { addDays } from "./days.js";
 import { levelInfo, TIERS } from "./levels.js";
+import { CHALLENGE_CLEAR_SCORE } from "./xp.js";
 import {
   goalStreak,
   lessonPathOfExercise,
@@ -65,6 +67,12 @@ export interface AchievementStats {
   quizzesCompleted: number;
   quizLessons: number;
   playerLevel: number;
+  /** Daily-challenge runs played to the end, at any tier. */
+  challengesFinished: number;
+  /** Most days in a row with a daily challenge cleared (70+ at any tier). */
+  longestChallengeStreak: number;
+  /** Advanced-tier daily challenges cleared. */
+  advancedChallengesCleared: number;
 }
 
 export interface AchievementDefinition {
@@ -187,6 +195,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   count("streak_14", "streaks", "Fortnight of Focus", "Meet your daily goal 14 days in a row", 14, (s) => s.longestStreak),
   count("streak_30", "streaks", "Monthly Master", "Meet your daily goal 30 days in a row", 30, (s) => s.longestStreak),
   count("streak_100", "streaks", "Century", "Meet your daily goal 100 days in a row", 100, (s) => s.longestStreak),
+  count("daily_challenge_streak_7", "streaks", "Challenge Week", "Clear the daily challenge 7 days in a row", 7, (s) => s.longestChallengeStreak),
   count("goal_days_20", "streaks", "Habit Formed", "Meet your daily goal on 20 different days", 20, (s) => s.goalDaysMet),
   // Practice time
   count("minutes_60", "practice", "First Hour", "Practise for 60 minutes in total", 60, (s) => Math.floor(s.practiceMinutes)),
@@ -201,12 +210,14 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   // Exploration
   count("first_quiz_attempt", "exploration", "Curious Mind", "Answer your first quiz question", 1, (s) => s.quizAttempts),
   count("quizzes_10", "exploration", "Quiz Whiz", "Get every question right in 10 lesson quizzes", 10, (s) => s.quizzesCompleted, (s) => s.quizLessons >= 10),
+  count("daily_challenge_first", "exploration", "First Challenge", "Finish a daily challenge", 1, (s) => s.challengesFinished),
   count("explore_all_paths", "exploration", "Explorer", "Practise an exercise in every learning path", 1, (s) => (s.paths.size > 0 && [...s.paths.keys()].every((path) => s.pathsTried.has(path)) ? 1 : 0), (s) => s.paths.size > 1),
   ...KNOWN_GENRES.map(genreTried),
   count("essentials_all_genres", "exploration", "Wide Repertoire", "Play an Essentials piece from every genre", 1, (s) => (s.essentialsGenresAvailable.size > 0 && [...s.essentialsGenresAvailable].every((genre) => s.essentialsGenresPlayed.has(genre)) ? 1 : 0), (s) => s.essentialsGenresAvailable.size > 1),
   // Mastery
   count("lesson_three_star", "mastery", "Polished", "Earn 3★ on a lesson (95+ best score)", 1, (s) => s.threeStarLessons),
   count("lesson_three_star_10", "mastery", "Perfectionist", "Earn 3★ on 10 lessons", 10, (s) => s.threeStarLessons, (s) => s.totalLessons >= 10),
+  count("daily_challenge_advanced", "mastery", "Advanced Cleared", "Clear the Advanced daily challenge (70 or better)", 1, (s) => s.advancedChallengesCleared),
   count("essentials_master", "mastery", "Essentials Master", "Earn 3★ on the Full version of an Essentials piece", 1, (s) => s.essentialsMastered, (s) => s.hasEssentialsFull),
   count("essentials_master_5", "mastery", "Concert Pianist", "Earn 3★ on the Full version of 5 Essentials pieces", 5, (s) => s.essentialsMastered, (s) => s.hasEssentialsFull),
   ...TIERS.filter((tier) => tier.firstLevel > 1).map((tier) => tierReached(tier.name, tier.firstLevel)),
@@ -273,6 +284,14 @@ export function achievementStats(snapshot: Snapshot): AchievementStats {
     if (questionIds.every((id) => snapshot.correctQuestionIds.has(id))) quizzesCompleted += 1;
   }
 
+  const clearedDays = [...new Set(snapshot.challengeAttempts.filter((run) => run.score >= CHALLENGE_CLEAR_SCORE).map((run) => run.day))].sort();
+  let longestChallengeStreak = 0;
+  let run = 0;
+  clearedDays.forEach((day, i) => {
+    run = i > 0 && addDays(clearedDays[i - 1]!, 1) === day ? run + 1 : 1;
+    longestChallengeStreak = Math.max(longestChallengeStreak, run);
+  });
+
   const songStarValues = [...songStars.values()];
   return {
     completedLessons,
@@ -298,6 +317,9 @@ export function achievementStats(snapshot: Snapshot): AchievementStats {
     quizzesCompleted,
     quizLessons,
     playerLevel: levelInfo(snapshot.xpTotal).level,
+    challengesFinished: snapshot.challengeAttempts.length,
+    longestChallengeStreak,
+    advancedChallengesCleared: snapshot.challengeAttempts.filter((attempt) => attempt.tier === 3 && attempt.score >= CHALLENGE_CLEAR_SCORE).length,
   };
 }
 

@@ -85,14 +85,15 @@ export function goalAndStreakXp(snapshot: Snapshot): XpItem[] {
   return [dailyGoalXp(snapshot.today), ...streakMilestoneXp(streak.current)];
 }
 
-interface StarScope {
+export interface StarScope {
   kind: "lesson" | "song";
   id: string;
   title: string;
   level?: PracticeLevel;
 }
 
-async function settle(
+/** Pays `items` plus any goal and streak awards, then stores newly earned achievements. */
+export async function settle(
   db: Db,
   snapshot: Snapshot,
   items: XpItem[],
@@ -158,7 +159,7 @@ async function settle(
   };
 }
 
-async function userClock(db: Db, userId: string, now: Date) {
+export async function userClock(db: Db, userId: string, now: Date) {
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { daily_goal_minutes: true, timezone: true } });
   return { goalMinutes: user.daily_goal_minutes, day: dayKey(now, user.timezone) };
 }

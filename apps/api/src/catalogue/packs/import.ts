@@ -28,7 +28,7 @@ import { InvalidMidiError, extractSongMetadata } from "../../midi-metadata.js";
 import { classifyMidiQuality, type QualityResult } from "../../midi-quality.js";
 import { isPublicEligible, licenceFamily, pdStatus, storedSignals, stableJson } from "../backfill.js";
 import { buildSearchText } from "../search-text.js";
-import { COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, TRADITIONAL, composerIdFor, gradeBandFor, type MoodTagId } from "../works-data.js";
+import { ANONYMOUS, COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, TRADITIONAL, composerIdFor, gradeBandFor, type ComposerSeed, type MoodTagId } from "../works-data.js";
 import { abcMelody, splitAbcTunes } from "./abc.js";
 import { INCIPIT_REJECT_BELOW, compareIncipits, skylineIncipit } from "./incipit.js";
 import {
@@ -179,10 +179,6 @@ function compareWithAbc(primary: Uint8Array, source: AbcSecondSource): IncipitOu
   };
 }
 
-/** Public-domain status as the pipeline reads it: traditional tunes are always public domain. */
-const pdStatusOf = (piece: PackPiece, composerId: string, died: number | null, year: number): ReturnType<typeof pdStatus> =>
-  pdStatus({ traditional: composerId === TRADITIONAL, died, publishedYear: piece.publishedYear ?? null }, year);
-
 async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, year: number): Promise<CheckedPiece> {
   const composerId = composerIdFor(piece.composer);
   const composer = COMPOSERS.find((candidate) => candidate.id === composerId);
@@ -234,12 +230,16 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
     authored: isAuthoredPrimary(piece.primary),
     incipitCheck: incipit.result,
     fileLicence: licenceFamily(fileLicence),
-    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatusOf(piece, composerId!, composer.died, year)),
+    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(workPdStatus(composer, year, piece.publishedYear)),
     metadata: "complete",
     reviewerApproved: false,
   });
   return { bytes, copyrightYear, incipit, quality, meta };
 }
+
+/** A Work's public-domain status: unattributed and traditional pieces are old enough by nature. */
+const workPdStatus = (composer: ComposerSeed, year: number, publishedYear?: number | null) =>
+  pdStatus({ traditional: composer.id === TRADITIONAL || composer.id === ANONYMOUS, died: composer.died, publishedYear: publishedYear ?? null }, year);
 
 /**
  * Equality for stored columns. A double read back from Postgres keeps 15
@@ -292,7 +292,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   const signals = quality.signals
     ? { ...storedSignals(quality.signals), incipitCheck: checked.incipit.result, incipitSource: checked.incipit.note }
     : null;
-  const pd = pdStatusOf(piece, composerId, composer.died, options.year);
+  const pd = workPdStatus(composer, options.year, piece.publishedYear);
   const pinned = {
     difficulty: checked.meta.difficulty,
     duration_sec: checked.meta.durationSec,
@@ -335,7 +335,8 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   }
 
   const moodTags = (piece.tags ?? []) as MoodTagId[];
-  const tags = [COLLECTION_TAGS.midiano, ...moodTags.map((id) => MOOD_TAGS[id])];
+  const collectionTags = pack.collection === null ? [] : [COLLECTION_TAGS.midiano];
+  const tags = [...collectionTags, ...moodTags.map((id) => MOOD_TAGS[id])];
   const aliases = [...(piece.aliases ?? [])].sort((a, b) => a.alias.localeCompare(b.alias));
 
   await prisma.$transaction(async (tx) => {
@@ -352,6 +353,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
           era: piece.era,
           genre: piece.genre,
           pd_status: pd,
+          published_year: piece.publishedYear ?? null,
           // After the 100 Essentials, in pack order.
           recognisability: 100 + piece.rank,
           curation_status: "draft",
