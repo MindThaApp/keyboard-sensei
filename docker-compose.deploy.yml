@@ -32,6 +32,17 @@ services:
       TRUST_PROXY: 2
       # Set REGISTRATION_OPEN=false in .env.deploy to close self-service sign-up.
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # Public release (docs/operations.md, "Public exposure"). All optional; empty = off/unset.
+      PUBLIC_CATALOGUE: ${PUBLIC_CATALOGUE:-false}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+      APP_URL: ${APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
@@ -48,9 +59,26 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL}
+        # The Google OAuth *Web* client ID; empty = no "Sign in with Google" button.
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     depends_on:
       - api
     restart: unless-stopped
+
+  # Public exposure through a Cloudflare Tunnel (off by default). Start with:
+  #   docker compose --env-file .env.deploy -f docker-compose.deploy.yml --profile public up -d
+  # The tunnel dials out to Cloudflare, so no router port is opened. In the Cloudflare
+  # dashboard, route the public hostname to http://web:80 (the same nginx Caddy uses).
+  # Caddy and the LAN route on :8181 keep working alongside it.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.3
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - web
+    restart: unless-stopped
+    profiles: ["public"]
 
   # HTTPS on the LAN so Web MIDI (navigator.requestMIDIAccess) works — browsers only
   # allow it in a "secure context", which plain http://<lan-ip> never satisfies. Uses

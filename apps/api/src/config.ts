@@ -56,4 +56,5 @@ export const env = z
           .filter(Boolean),
       ),
   })
-  .parse(process.env);
+  // Empty values count as unset, so compose files can pass optional settings as ${VAR:-}.
+  .parse(Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== "")));
