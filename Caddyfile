@@ -6,10 +6,10 @@
 	# internal_error alert (confirmed via packet capture: full ClientHello
 	# received and ACKed, then Caddy sends the alert — a cert-selection
 	# failure, not a network/transport problem).
-	default_sni 192.168.4.4
+	default_sni {$DEPLOY_HOST:127.0.0.1}
 }
 
-https://192.168.4.4:8181, https://localhost:8181 {
+https://{$DEPLOY_HOST:127.0.0.1}:8181, https://localhost:8181 {
 	tls internal
 
 	reverse_proxy web:80
