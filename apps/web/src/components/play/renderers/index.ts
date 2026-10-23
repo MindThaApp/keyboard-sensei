@@ -18,6 +18,7 @@ export interface NotesStyleOption {
  */
 export const NOTES_STYLES: readonly NotesStyleOption[] = [
   { value: "classic", label: "Classic", load: async () => new ClassicRenderer() },
+  { value: "neon3d", label: "Neon 3D", load: async () => (await import("./neon3d/Neon3DRenderer")).create() },
 ];
 
 export function isNotesStyle(value: unknown): value is NotesStyle {
