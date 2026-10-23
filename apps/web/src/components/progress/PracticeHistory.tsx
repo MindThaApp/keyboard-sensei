@@ -4,6 +4,7 @@ import type { AttemptSummary, LessonListItem } from "@keyboard-sensei/shared-typ
 import { getAttempts, getMyPlayAlongAttempts, type PlayAlongAttemptSummary } from "../../services/api";
 import { useProgressStore } from "../../state/progressStore";
 import { practiceGymDrills } from "../../data/practiceGymDrills";
+import { Button, Card, EmptyState, ErrorState, ListGroup, ListRow, SegmentedControl, Skeleton } from "../ui";
 
 /**
  * exerciseId -> the title a learner saw. Built from data the client already has: the
@@ -22,10 +23,10 @@ function exerciseTitles(lessons: readonly LessonListItem[]): Map<string, string>
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card p-4">
-      <p className="text-xs font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
-    </div>
+    <Card padding="md">
+      <p className="text-footnote font-semibold uppercase tracking-wide text-label-2a">{label}</p>
+      <p className="mt-1 text-title2 tabular-nums text-label">{value}</p>
+    </Card>
   );
 }
 
@@ -33,59 +34,37 @@ function ScoreBadge({ score, passThreshold = 70 }: { score: number; passThreshol
   const passing = score >= passThreshold;
   return (
     <span
-      className={`rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${
-        passing
-          ? "bg-brass-100 text-brass-700 dark:bg-brass-700/20 dark:text-brass-300"
-          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-      }`}
+      className={`rounded-pill px-2.5 py-0.5 text-footnote font-semibold tabular-nums ${passing ? "bg-tint/15 text-tint" : "bg-fill text-label-2"}`}
+      aria-label={`Score ${score}${passing ? ", passed" : ""}`}
     >
       {score}
     </span>
   );
 }
 
-function AttemptRow({ attempt, exerciseTitle }: { attempt: AttemptSummary; exerciseTitle: string | undefined }) {
+function HistorySkeleton({ label }: { label: string }) {
   return (
-    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900">
-      <div className="min-w-0 flex-1">
-        <Link
-          to={`/lessons/${attempt.lessonId}`}
-          className="truncate font-medium text-slate-900 hover:text-felt-700 dark:text-slate-100 dark:hover:text-felt-300"
-        >
-          {attempt.lessonTitle}
-        </Link>
-        {/* Never the raw id ("exercise-01") — if the title is unknown, say nothing. */}
-        {exerciseTitle && <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{exerciseTitle}</p>}
-      </div>
-      <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{new Date(attempt.createdAt).toLocaleString()}</span>
-      <ScoreBadge score={attempt.score} />
-    </li>
+    <div className="space-y-3" role="status" aria-label={label}>
+      <Skeleton height={72} radius={16} />
+      <Skeleton height={160} radius={16} />
+    </div>
   );
 }
 
-function PlayAlongRow({ attempt }: { attempt: PlayAlongAttemptSummary }) {
+function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
   return (
-    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900">
-      <div className="min-w-0 flex-1">
-        <Link
-          to={`/play/${attempt.song_id}`}
-          className="truncate font-medium text-slate-900 hover:text-felt-700 dark:text-slate-100 dark:hover:text-felt-300"
-        >
-          {attempt.title}
-        </Link>
-        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-          {attempt.artist} · {attempt.tempo_bpm ? `${Math.round(attempt.tempo_bpm)} BPM` : `${Math.round(attempt.tempo_pct)}% tempo`} · {attempt.lookahead_s}s visibility · accuracy {Math.round(attempt.accuracy)}%
-        </p>
-      </div>
-      <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{new Date(attempt.created_at).toLocaleString()}</span>
-      <ScoreBadge score={Math.round(attempt.score)} />
-    </li>
+    <ErrorState
+      title={`Couldn't load your ${what}`}
+      message="Check your connection and try again."
+      action={<Button variant="filled" onClick={onRetry}>Try again</Button>}
+    />
   );
 }
 
 function ExerciseHistory() {
   const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const lessons = useProgressStore((s) => s.lessons);
   const lessonsLoaded = useProgressStore((s) => s.loaded);
   const loadLessons = useProgressStore((s) => s.loadAll);
@@ -97,23 +76,24 @@ function ExerciseHistory() {
 
   useEffect(() => {
     let cancelled = false;
+    setError(false);
     getAttempts()
       .then((response) => { if (!cancelled) setAttempts(response.attempts); })
-      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Unable to load practice history"); });
+      .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, []);
+  }, [retry]);
 
-  if (error) return <p role="alert" className="text-rose-700 dark:text-rose-300">{error}</p>;
-  if (!attempts) return <p className="text-slate-500 dark:text-slate-300">Loading practice history…</p>;
+  if (error) return <LoadError what="practice history" onRetry={() => setRetry((n) => n + 1)} />;
+  if (!attempts) return <HistorySkeleton label="Loading practice history" />;
   if (attempts.length === 0) {
     return (
-      <section className="card p-6 text-center">
-        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">No practice yet</h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Your exercise attempts will show up here. Start a lesson to log your first one.
-        </p>
-        <Link to="/learn" className="primary-button mt-4 inline-block">Browse lessons</Link>
-      </section>
+      <Card>
+        <EmptyState
+          title="No practice yet"
+          message="Your exercise attempts will show up here. Start a lesson to log your first one."
+          action={<Link to="/learn" className="ks-btn ks-btn--filled">Browse lessons</Link>}
+        />
+      </Card>
     );
   }
 
@@ -123,43 +103,53 @@ function ExerciseHistory() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatTile label="Total attempts" value={String(total)} />
-        <StatTile label="Average score" value={String(averageScore)} />
-        <StatTile label="Best score" value={String(bestScore)} />
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile label="Attempts" value={String(total)} />
+        <StatTile label="Average" value={String(averageScore)} />
+        <StatTile label="Best" value={String(bestScore)} />
       </div>
-      <ol className="space-y-2">
+      <ListGroup aria-label="Exercise attempts">
         {attempts.map((attempt) => (
-          <AttemptRow key={attempt.id} attempt={attempt} exerciseTitle={titles.get(attempt.exerciseId)} />
+          <ListRow
+            key={attempt.id}
+            as={Link}
+            to={`/lessons/${attempt.lessonId}`}
+            title={attempt.lessonTitle}
+            // Never the raw id ("exercise-01"): if the title is unknown, say only when.
+            subtitle={[titles.get(attempt.exerciseId), new Date(attempt.createdAt).toLocaleString()].filter(Boolean).join(" · ")}
+            accessory={<ScoreBadge score={attempt.score} />}
+          />
         ))}
-      </ol>
+      </ListGroup>
     </div>
   );
 }
 
 function PlayAlongHistory() {
   const [recent, setRecent] = useState<PlayAlongAttemptSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setError(false);
     getMyPlayAlongAttempts()
       .then((response) => { if (!cancelled) setRecent(response.recent); })
-      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Unable to load play-along history"); });
+      .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, []);
+  }, [retry]);
 
-  if (error) return <p role="alert" className="text-rose-700 dark:text-rose-300">{error}</p>;
-  if (!recent) return <p className="text-slate-500 dark:text-slate-300">Loading play-along history…</p>;
+  if (error) return <LoadError what="play-along history" onRetry={() => setRetry((n) => n + 1)} />;
+  if (!recent) return <HistorySkeleton label="Loading play-along history" />;
   if (recent.length === 0) {
     return (
-      <section className="card p-6 text-center">
-        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">No play-along runs yet</h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Pick a song and play along with the falling notes — your scores land here.
-        </p>
-        <Link to="/practice" className="primary-button mt-4 inline-block">Browse songs</Link>
-      </section>
+      <Card>
+        <EmptyState
+          title="No play-along runs yet"
+          message="Pick a song and play along with the falling notes. Your scores land here."
+          action={<Link to="/practice" className="ks-btn ks-btn--filled">Browse songs</Link>}
+        />
+      </Card>
     );
   }
 
@@ -169,16 +159,23 @@ function PlayAlongHistory() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatTile label="Recent runs" value={String(total)} />
-        <StatTile label="Best score" value={String(best)} />
-        <StatTile label="Average accuracy" value={`${averageAccuracy}%`} />
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile label="Runs" value={String(total)} />
+        <StatTile label="Best" value={String(best)} />
+        <StatTile label="Accuracy" value={`${averageAccuracy}%`} />
       </div>
-      <ol className="space-y-2">
+      <ListGroup aria-label="Play-along runs">
         {recent.map((attempt) => (
-          <PlayAlongRow key={attempt.id} attempt={attempt} />
+          <ListRow
+            key={attempt.id}
+            as={Link}
+            to={`/play/${attempt.song_id}`}
+            title={attempt.title}
+            subtitle={`${attempt.artist} · ${attempt.tempo_bpm ? `${Math.round(attempt.tempo_bpm)} BPM` : `${Math.round(attempt.tempo_pct)}% tempo`} · accuracy ${Math.round(attempt.accuracy)}% · ${new Date(attempt.created_at).toLocaleString()}`}
+            accessory={<ScoreBadge score={Math.round(attempt.score)} />}
+          />
         ))}
-      </ol>
+      </ListGroup>
     </div>
   );
 }
@@ -188,27 +185,16 @@ export default function PracticeHistory() {
   const [tab, setTab] = useState<"exercises" | "playalong">("exercises");
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">Practice history</h2>
-        <div className="ml-auto flex gap-1 text-sm" role="tablist" aria-label="History type">
-          {([["exercises", "Exercises"], ["playalong", "Play-along"]] as const).map(([value, label]) => (
-            <button
-              key={value}
-              role="tab"
-              aria-selected={tab === value}
-              onClick={() => setTab(value)}
-              className={`rounded-md px-2.5 py-1 transition-colors ${
-                tab === value
-                  ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-4">
+      <SegmentedControl
+        aria-label="History type"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "exercises", label: "Exercises" },
+          { value: "playalong", label: "Play-along" },
+        ]}
+      />
       {tab === "exercises" ? <ExerciseHistory /> : <PlayAlongHistory />}
     </div>
   );

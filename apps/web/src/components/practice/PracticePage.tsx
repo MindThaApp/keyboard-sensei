@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { SegmentedControl } from "../ui";
 import SongBrowserPage from "../play/SongBrowserPage";
 import PracticeGymPage from "../midi/PracticeGymPage";
 import RecordingPage from "../record/RecordingPage";
@@ -17,24 +18,16 @@ const TABS: { id: PracticeTab; label: string; to: string }[] = [
  * like /practice/gym?drill=… work.
  */
 export default function PracticePage({ tab }: { tab: PracticeTab }) {
+  const navigate = useNavigate();
   return (
     <div className="space-y-5">
-      <nav aria-label="Practice" className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-        {TABS.map((item) => (
-          <Link
-            key={item.id}
-            to={item.to}
-            aria-current={tab === item.id ? "page" : undefined}
-            className={`rounded-t-md px-3 py-2 text-sm transition-colors ${
-              tab === item.id
-                ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-            }`}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <SegmentedControl<PracticeTab>
+        aria-label="Practice"
+        block
+        options={TABS.map(({ id, label }) => ({ value: id, label }))}
+        value={tab}
+        onChange={(id) => navigate(TABS.find((item) => item.id === id)?.to ?? "/practice")}
+      />
       {tab === "songs" && <SongBrowserPage />}
       {tab === "gym" && <PracticeGymPage />}
       {tab === "record" && <RecordingPage />}

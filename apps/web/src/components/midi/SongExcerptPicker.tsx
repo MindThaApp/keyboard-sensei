@@ -3,17 +3,17 @@ import { Link } from "react-router-dom";
 import type { PracticeHands } from "@keyboard-sensei/midi-engine";
 import type { Song } from "../../services/api";
 import { practicePresetSearch } from "../play/practiceSession";
+import { ListGroup, SegmentedControl } from "../ui";
+import { SettingsRow } from "../settings/SettingsRow";
 
 const DEFAULT_BAR_COUNT = 8;
 const MAX_BAR_COUNT = 32;
 
 const HAND_OPTIONS: { value: PracticeHands; label: string }[] = [
-  { value: "right", label: "Right hand" },
-  { value: "left", label: "Left hand" },
-  { value: "both", label: "Both hands" },
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+  { value: "both", label: "Both" },
 ];
-
-const fieldClass = "rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
 
 /**
  * Picks a few bars and a hand of a library song, then opens the song practice
@@ -28,43 +28,38 @@ export default function SongExcerptPicker({ song }: { song: Song }) {
   const to = `/play/${encodeURIComponent(song.id)}${practicePresetSearch({ hands: hand, firstBar: startBar, lastBar: startBar + barCount - 1 })}`;
 
   return (
-    <div className="card flex flex-wrap items-end gap-3 p-4">
-      <div className="w-full">
-        <p className="font-medium text-slate-900 dark:text-slate-100">{song.title}</p>
-        <p className="text-xs text-slate-500">{song.artist}</p>
-      </div>
-      <label className="text-xs text-slate-500 dark:text-slate-400">
-        Start bar
+    <ListGroup header={song.title} footer={song.artist} aria-label="Practice excerpt">
+      <SettingsRow title="Start bar">
         <input
           type="number"
           min={1}
+          aria-label="Start bar"
           value={startBar}
           onChange={(e) => setStartBar(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-          className={`mt-1 block w-20 ${fieldClass}`}
+          className="settings-field"
+          style={{ width: "6rem" }}
         />
-      </label>
-      <label className="text-xs text-slate-500 dark:text-slate-400">
-        How many bars
+      </SettingsRow>
+      <SettingsRow title="How many bars">
         <input
           type="number"
           min={1}
           max={MAX_BAR_COUNT}
+          aria-label="How many bars"
           value={barCount}
           onChange={(e) => setBarCount(Math.max(1, Math.min(MAX_BAR_COUNT, Math.floor(Number(e.target.value)) || 1)))}
-          className={`mt-1 block w-20 ${fieldClass}`}
+          className="settings-field"
+          style={{ width: "6rem" }}
         />
-      </label>
-      <label className="text-xs text-slate-500 dark:text-slate-400">
-        Hand
-        <select value={hand} onChange={(e) => setHand(e.target.value as PracticeHands)} className={`mt-1 block ${fieldClass}`}>
-          {HAND_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </label>
-      <Link to={to} className="primary-button ml-auto">
-        Practise these bars ▶
-      </Link>
-    </div>
+      </SettingsRow>
+      <SettingsRow title="Hand">
+        <SegmentedControl aria-label="Hand" options={HAND_OPTIONS} value={hand} onChange={setHand} />
+      </SettingsRow>
+      <SettingsRow>
+        <Link to={to} className="ks-btn ks-btn--filled ks-btn--lg" style={{ textDecoration: "none" }}>
+          Practise these bars
+        </Link>
+      </SettingsRow>
+    </ListGroup>
   );
 }

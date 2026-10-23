@@ -103,6 +103,53 @@ export function rangeLabelFor(range: KeyRange): string {
   return `${midiNoteToName(range.lowestNote)}–${midiNoteToName(range.highestNote)}`;
 }
 
+/** Simple mode never shows more than this many white keys at once... */
+export const SIMPLE_MAX_WHITE_KEYS = 15;
+/** ...and never draws a white key narrower than this. */
+export const SIMPLE_MIN_KEY_PX = 26;
+
+function whiteKeyCount(range: KeyRange): number {
+  let count = 0;
+  for (let n = range.lowestNote; n <= range.highestNote; n++) if (!isBlackKey(n)) count++;
+  return count;
+}
+
+/**
+ * Simple mode's keyboard window: at most SIMPLE_MAX_WHITE_KEYS white keys, each at least
+ * SIMPLE_MIN_KEY_PX wide. Only the default range's octave padding is trimmed, and always
+ * around `focus` (the notes the piece needs), so a needed note is never cut off. A focus
+ * that is itself wider than the window is returned whole; the caller scrolls it.
+ */
+export function simpleWindowRange(defaultRange: KeyRange, focus: KeyRange | undefined, containerWidthPx: number): KeyRange {
+  if (containerWidthPx <= 0) return defaultRange;
+  const maxWhite = Math.max(
+    8,
+    Math.min(SIMPLE_MAX_WHITE_KEYS, Math.floor(containerWidthPx / SIMPLE_MIN_KEY_PX)),
+  );
+  if (whiteKeyCount(defaultRange) <= maxWhite) return defaultRange;
+  // No focus (Settings, Record): centre the window on the middle of the default range.
+  const middle = snapDown(Math.round((defaultRange.lowestNote + defaultRange.highestNote) / 2));
+  const core = snapRangeToWhiteKeys(focus ?? { lowestNote: middle, highestNote: middle });
+  if (whiteKeyCount(core) >= maxWhite) return core;
+
+  // Grow the focus one white key at a time, alternating sides, inside the default range.
+  let low = Math.max(core.lowestNote, defaultRange.lowestNote);
+  let high = Math.min(core.highestNote, defaultRange.highestNote);
+  let growLow = true;
+  while (whiteKeyCount({ lowestNote: low, highestNote: high }) < maxWhite) {
+    const canLow = low > defaultRange.lowestNote;
+    const canHigh = high < defaultRange.highestNote;
+    if (!canLow && !canHigh) break;
+    if ((growLow && canLow) || !canHigh) {
+      low = snapDown(low - 1);
+    } else {
+      high = snapUp(high + 1);
+    }
+    growLow = !growLow;
+  }
+  return { lowestNote: low, highestNote: high };
+}
+
 export type FitStep = "default" | "tight" | "keyboard";
 
 /** The step order "Auto-fit keys" cycles through; "tight" is skipped when the caller
@@ -168,6 +215,9 @@ export interface UseKeyboardSizingOptions {
    *  target notes must all be reachable without scrolling. Off for Play-Along, where
    *  zooming in past the song's range and scrolling is a legitimate choice. */
   keepTightRangeVisible?: boolean;
+  /** Simple mode: window the default range to <= 15 white keys of >= 26 px (see
+   *  simpleWindowRange). Off for callers that share one geometry with a falling-note canvas. */
+  simpleFit?: boolean;
 }
 
 export interface KeyboardSizing {
@@ -204,6 +254,7 @@ export function useKeyboardSizing({
   persistenceKey = null,
   onDeviceRangeChange,
   keepTightRangeVisible = false,
+  simpleFit = false,
 }: UseKeyboardSizingOptions): KeyboardSizing {
   const hasTight = tightRange != null;
   const steps = useMemo(() => stepsFor(hasTight), [hasTight]);
@@ -218,7 +269,9 @@ export function useKeyboardSizing({
   );
 
   function namedRangeFor(step: FitStep): KeyRange {
-    return resolveNamedRange(step, { defaultRange, tightRange, deviceRange, hasDevice });
+    const windowed =
+      simpleFit && step === "default" ? simpleWindowRange(defaultRange, tightRange, containerWidthPx) : defaultRange;
+    return resolveNamedRange(step, { defaultRange: windowed, tightRange, deviceRange, hasDevice });
   }
 
   // Reset to the default range whenever it changes identity (a new song/exercise
@@ -262,7 +315,9 @@ export function useKeyboardSizing({
 
   const fitWidthPx =
     containerWidthPx > 0
-      ? clampZoomPx(fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidthPx))
+      ? clampZoomPx(
+          Math.max(simpleFit ? SIMPLE_MIN_KEY_PX : 0, fitWhiteKeyWidth(range.lowestNote, range.highestNote, containerWidthPx)),
+        )
       : DEFAULT_WHITE_KEY_WIDTH_PX;
   const widthPx = isWidthFit
     ? fitWidthPx
