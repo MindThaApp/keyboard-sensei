@@ -1,8 +1,11 @@
-import { memo } from "react";
+import { lazy, memo, Suspense } from "react";
 import { finalScore, type PracticeHands, type PracticeLevel } from "@keyboard-sensei/midi-engine";
 import VirtualPiano, { type VirtualPianoProps } from "../piano/VirtualPiano";
 import { OsmdNotation } from "./OsmdNotation";
 import { usePlayAlongRunStore } from "./playAlongRunStore";
+
+// Verovio is ~7 MB of WASM: its own chunk, fetched only when a score-imported song shows notation.
+const VerovioNotation = lazy(() => import("./VerovioNotation"));
 
 /**
  * The pieces of the practice screen that change DURING a run. Each subscribes to
@@ -89,4 +92,14 @@ export const PlayAlongPiano = memo(function PlayAlongPiano(props: Omit<VirtualPi
 export const LiveOsmdNotation = memo(function LiveOsmdNotation({ notationBytes }: { notationBytes: ArrayBuffer }) {
   const songTimeS = usePlayAlongRunStore((state) => state.songTimeS);
   return <OsmdNotation notationBytes={notationBytes} songTimeS={Math.max(0, songTimeS)} />;
+});
+
+/** Score-imported songs: Verovio's engraving of the uploaded score, following the song clock. */
+export const LiveVerovioNotation = memo(function LiveVerovioNotation({ mei }: { mei: string }) {
+  const songTimeS = usePlayAlongRunStore((state) => state.songTimeS);
+  return (
+    <Suspense fallback={<p className="ks-practice__notation-loading glass-text">Loading the sheet music…</p>}>
+      <VerovioNotation mei={mei} songTimeS={Math.max(0, songTimeS)} />
+    </Suspense>
+  );
 });

@@ -3,8 +3,8 @@
  * ships or serves. npm packages are collected automatically; anything else is listed
  * here, by hand, with the licence checked at its source.
  *
- * To add one, append an entry. Verovio (LGPL-3.0-or-later)
- * needs nothing here if it arrives as an npm dependency: the collector picks it up.
+ * To add one, append an entry. npm packages under the LGPL (Verovio) get their notice
+ * from LGPL_PACKAGES in third-party-licenses.ts.
  */
 export interface ThirdPartyAsset {
   name: string;
