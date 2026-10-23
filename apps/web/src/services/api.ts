@@ -102,7 +102,7 @@ export const submitFeedbackWithScreenshot = async (
   message: string,
   page_path: string,
   screenshot: File | Blob,
-): Promise<{ ok: true }> => {
+): Promise<{ ok: true; id: string }> => {
   const { id } = await submitFeedback(type, message, page_path);
   const token = getToken();
   const response = await fetch(`${API_URL}/feedback/${encodeURIComponent(id)}/screenshot`, {
@@ -112,7 +112,7 @@ export const submitFeedbackWithScreenshot = async (
   });
   const body = await response.json().catch(() => null) as ({ ok: true } & { error?: { message?: string } }) | null;
   if (!response.ok) throw new Error(body?.error?.message ?? `Screenshot upload failed (${response.status}) — your feedback was still saved.`);
-  return body as { ok: true };
+  return { ok: true, id };
 };
 
 export const getAdminFeedback = (status: "open" | "resolved" | "all") =>
