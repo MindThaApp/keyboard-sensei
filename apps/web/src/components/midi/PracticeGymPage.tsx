@@ -4,7 +4,8 @@ import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
 import SongExcerptPicker from "./SongExcerptPicker";
 import { practiceGymDrills } from "../../data/practiceGymDrills";
-import { ListGroup, ListRow, SegmentedControl } from "../ui";
+import { Button, ListGroup, ListRow, SegmentedControl } from "../ui";
+import { useFocusMode } from "../../hooks/useFocusMode";
 import "../settings/settings.css";
 import { getSongs, type Song, type SongGenre } from "../../services/api";
 
@@ -58,6 +59,15 @@ export default function PracticeGymPage() {
 
   const selectedSong = songs?.find((s) => s.id === selectedSongId) ?? null;
 
+  // Focus mode shows the open drill and nothing else. The rest of the page is hidden,
+  // not unmounted, so the drill keeps its state when focus is toggled.
+  const focus = useFocusMode({ hotkey: selectedDrill !== null });
+  const focused = focus.active && selectedDrill !== null;
+  const { active: focusActive, exit: exitFocus } = focus;
+  useEffect(() => {
+    if (focusActive && !selectedDrill) exitFocus();
+  }, [focusActive, exitFocus, selectedDrill]);
+
   // Picking a drill or a song opens its exercise further down the page; bring it on
   // screen so the keyboard isn't left below the fold.
   const drillRef = useRef<HTMLDivElement | null>(null);
@@ -80,27 +90,42 @@ export default function PracticeGymPage() {
 
   return (
     <div className="space-y-4">
-      <div>
+      <div hidden={focused}>
         <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>
       </div>
 
-      <MidiStatusBar />
+      <div hidden={focused}>
+        <MidiStatusBar />
+      </div>
 
-      <ListGroup header="Drills" aria-label="Drills">
-        {practiceGymDrills.map((drill) => (
-          <ListRow
-            key={drill.id}
-            title={drill.label}
-            subtitle={drill.description}
-            onClick={() => selectDrill(drill.id)}
-            accessory={drill.id === selectedDrillId ? "Open" : "chevron"}
-          />
-        ))}
-      </ListGroup>
+      <div hidden={focused}>
+        <ListGroup header="Drills" aria-label="Drills">
+          {practiceGymDrills.map((drill) => (
+            <ListRow
+              key={drill.id}
+              title={drill.label}
+              subtitle={drill.description}
+              onClick={() => selectDrill(drill.id)}
+              accessory={drill.id === selectedDrillId ? "Open" : "chevron"}
+            />
+          ))}
+        </ListGroup>
+      </div>
 
       {selectedDrill && (
         <div ref={drillRef} className="scroll-mt-3">
+          <div className="mb-2 flex justify-end">
+            {focused ? (
+              <Button variant="gray" size="sm" onClick={focus.exit} aria-label="Exit focus mode">
+                Exit focus
+              </Button>
+            ) : (
+              <Button variant="gray" size="sm" onClick={focus.enter} aria-label="Enter focus mode (F)">
+                Focus
+              </Button>
+            )}
+          </div>
           <MidiExercise
             key={selectedDrill.id}
             exerciseId={selectedDrill.exercise.exerciseId}
@@ -112,7 +137,7 @@ export default function PracticeGymPage() {
         </div>
       )}
 
-      <div>
+      <div hidden={focused}>
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Practise a song</h2>
         <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
           Pick a few bars of any library song and a hand. They open on the song practice screen, looped, with the other hand playing along.
@@ -169,7 +194,7 @@ export default function PracticeGymPage() {
       </div>
 
       {selectedSong && (
-        <div ref={excerptRef} className="scroll-mt-3">
+        <div ref={excerptRef} hidden={focused} className="scroll-mt-3">
           <SongExcerptPicker key={selectedSong.id} song={selectedSong} />
         </div>
       )}

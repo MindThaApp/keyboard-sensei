@@ -28,7 +28,7 @@
 :root,
 [data-density="regular"] {
   --ui-btn-pad-x: 20px;
-  --ui-seg-h: 36px;
+  --ui-seg-h: var(--hit-min);
   --ui-seg-pad-x: 14px;
   --ui-row-pad-y: 11px;
   --ui-row-pad-x: 16px;
@@ -43,7 +43,6 @@
   :root,
   [data-density] {
     --ui-btn-sm-h: var(--hit-min);
-    --ui-seg-h: var(--hit-min);
   }
 }
 
@@ -838,6 +837,7 @@ a.ks-row__main:active {
 }
 .ks-tabbar[data-placement="top"] .ks-tabbar__bar {
   width: auto;
+  max-width: none;
   height: 52px;
   border-radius: 26px;
 }
@@ -859,6 +859,11 @@ a.ks-row__main:active {
 .ks-tabbar__list > li {
   display: flex;
   min-width: 0;
+}
+.ks-tabbar[data-placement="top"] .ks-tabbar__list {
+  /* The capsule hugs its tabs instead of splitting a fixed width between them. */
+  flex: none;
+  grid-auto-columns: max-content;
 }
 .ks-tabbar__trailing {
   flex: none;
@@ -883,6 +888,8 @@ a.ks-row__main:active {
   transition: transform 240ms var(--spring);
 }
 .ks-tabbar[data-placement="top"] .ks-tab {
+  flex: none;
+  white-space: nowrap;
   flex-direction: row;
   gap: 8px;
   padding: 0 16px;

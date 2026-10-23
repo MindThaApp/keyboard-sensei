@@ -27,6 +27,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/learn",
     label: "Learn",
+    matches: ["/lessons"],
     icon: icon(
       "M9 4.8C7.6 3.9 5.6 3.5 3.5 3.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1c2 0 3.8.4 5.5 1.4V4.8Zm2 12.1c1.7-1 3.5-1.4 5.5-1.4a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1c-2.1 0-4.1.4-5.5 1.3v12.1Z",
     ),
@@ -34,6 +35,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/practice",
     label: "Practice",
+    matches: ["/play"],
     icon: icon(
       "M15.3 2.3a1 1 0 0 1 .7 1v10.2a2.5 2.5 0 1 1-2-2.45V6.2l-6 1.5v7.8A2.5 2.5 0 1 1 6 13.05V5a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .54.27Z",
     ),
