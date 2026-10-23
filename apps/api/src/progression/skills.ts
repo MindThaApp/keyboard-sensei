@@ -1,4 +1,6 @@
+import type { PrismaClient } from "@prisma/client";
 import type { Lesson } from "@keyboard-sensei/shared-types";
+import { dayKey } from "./days.js";
 
 /**
  * Six skills shown to the learner, fed by the `skillRewards` every lesson carries
@@ -77,4 +79,28 @@ export function readingGamePoints(rounds: { correct: number; day: string }[]): n
   let points = 0;
   for (const correct of correctByDay.values()) points += readingGameDayPoints(correct);
   return points;
+}
+
+type GameRoundDb = Pick<PrismaClient, "gameRound">;
+
+/** Every note-reading round's correct count with the learner's calendar day it fell on. */
+export async function readingGameRounds(
+  db: GameRoundDb,
+  userId: string,
+  timezone: string | null,
+): Promise<{ correct: number; day: string }[]> {
+  const rounds = await db.gameRound.findMany({
+    where: { user_id: userId, game: "note_reading" },
+    select: { correct: true, created_at: true },
+  });
+  return rounds.map((round) => ({ correct: round.correct, day: dayKey(round.created_at, timezone) }));
+}
+
+/** The `extra` argument for `skillPoints`: what the note-reading game has earned the reading skill. */
+export async function readingGameSkillPoints(
+  db: GameRoundDb,
+  userId: string,
+  timezone: string | null,
+): Promise<Partial<Record<SkillId, number>>> {
+  return { reading: readingGamePoints(await readingGameRounds(db, userId, timezone)) };
 }
