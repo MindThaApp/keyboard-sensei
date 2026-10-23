@@ -305,6 +305,18 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         expect((await api("POST", "/archive/any-id/import", { token: admin.token })).status).toBe(404);
         expect((await api("GET", "/config")).body).toMatchObject({ publicCatalogue: true });
 
+        // The shared demo account (published password) can't sign in on a public deployment.
+        const demoLogin = () => api("POST", "/auth/login", { body: { email: "demo@keyboardsensei.local", password: "demo-password" } });
+        await m.prisma.user.create({ data: { email: "demo@keyboardsensei.local", display_name: "Demo", password_hash: await bcrypt.hash("demo-password", 4) } });
+        try {
+          expect((await demoLogin()).status).toBe(401);
+          m.env.PUBLIC_CATALOGUE = false;
+          expect((await demoLogin()).status).toBe(200);
+          m.env.PUBLIC_CATALOGUE = true;
+        } finally {
+          await m.prisma.user.delete({ where: { email: "demo@keyboardsensei.local" } });
+        }
+
         // Today, the shelves and achievements read only from what exists, and still answer.
         for (const path of ["/users/me/today", "/songs/stars/me", "/users/me/progression", "/users/me/summary"]) {
           expect((await api("GET", path, { token: stranger.token })).status, path).toBe(200);
