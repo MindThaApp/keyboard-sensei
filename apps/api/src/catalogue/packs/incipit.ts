@@ -22,11 +22,17 @@ const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 /** MIDI number to scientific pitch name (60 = C4), sharps only. */
 export const pitchName = (midi: number): string => `${NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
 
-/** Highest pitch at each of the first `count` distinct onsets. Onsets within 1/32 beat count as one. */
-export function skylineIncipit(bytes: Uint8Array, count = INCIPIT_LENGTH): number[] {
+/**
+ * Highest pitch at each of the first `count` distinct onsets. Onsets within
+ * 1/32 beat count as one. With `trackNames`, only those tracks are read (the
+ * melody track of an authored file, which a melody-only transcription is
+ * compared with).
+ */
+export function skylineIncipit(bytes: Uint8Array, count = INCIPIT_LENGTH, trackNames?: readonly string[]): number[] {
   const midi = new Midi(bytes);
   const window = Math.max(1, Math.floor(midi.header.ppq / 32));
-  const notes = midi.tracks.flatMap((track) => track.notes).sort((a, b) => a.ticks - b.ticks || b.midi - a.midi);
+  const tracks = trackNames ? midi.tracks.filter((track) => trackNames.includes(track.name)) : midi.tracks;
+  const notes = tracks.flatMap((track) => track.notes).sort((a, b) => a.ticks - b.ticks || b.midi - a.midi);
   const skyline: number[] = [];
   let groupStart = -Infinity;
   for (const note of notes) {
