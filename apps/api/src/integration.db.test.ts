@@ -305,6 +305,18 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         expect((await api("POST", "/archive/any-id/import", { token: admin.token })).status).toBe(404);
         expect((await api("GET", "/config")).body).toMatchObject({ publicCatalogue: true });
 
+        // The shared demo account (published password) can't sign in on a public deployment.
+        const demoLogin = () => api("POST", "/auth/login", { body: { email: "demo@keyboardsensei.local", password: "demo-password" } });
+        await m.prisma.user.create({ data: { email: "demo@keyboardsensei.local", display_name: "Demo", password_hash: await bcrypt.hash("demo-password", 4) } });
+        try {
+          expect((await demoLogin()).status).toBe(401);
+          m.env.PUBLIC_CATALOGUE = false;
+          expect((await demoLogin()).status).toBe(200);
+          m.env.PUBLIC_CATALOGUE = true;
+        } finally {
+          await m.prisma.user.delete({ where: { email: "demo@keyboardsensei.local" } });
+        }
+
         // Today, the shelves and achievements read only from what exists, and still answer.
         for (const path of ["/users/me/today", "/songs/stars/me", "/users/me/progression", "/users/me/summary"]) {
           expect((await api("GET", path, { token: stranger.token })).status, path).toBe(200);
@@ -316,6 +328,26 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         await m.prisma.song.deleteMany({ where: { id: { in: songIds } } });
         await rm(dir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe("experience mode (Simple / Advanced)", () => {
+    it("is stored on the account, read back on a later sign-in, and validated", async () => {
+      const user = await createUserWithPassword();
+      const mode = async (token: string) => (await api("GET", "/users/me", { token })).body.experience_mode;
+      expect(await mode(user.token)).toBeNull();
+
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "advanced" } });
+      expect(set.status).toBe(200);
+      expect(set.body.experience_mode).toBe("advanced");
+
+      // A new device: a fresh sign-in sees what was chosen elsewhere.
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      expect(await mode(login.body.accessToken)).toBe("advanced");
+
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "simple" } })).body.experience_mode).toBe("simple");
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "expert" } })).status).toBe(400);
+      expect(await mode(user.token)).toBe("simple");
     });
   });
 

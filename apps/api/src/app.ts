@@ -52,6 +52,7 @@ const updateProfileSchema = z
     narration_voice_id: narrationVoiceIdSchema.nullable().optional(),
     daily_goal_minutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
     timezone: z.string().max(64).refine(isValidTimeZone, "Unknown timezone").optional(),
+    experience_mode: z.enum(["simple", "advanced"]).optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
 
@@ -63,6 +64,7 @@ const PROFILE_SELECT = {
   role: true,
   daily_goal_minutes: true,
   timezone: true,
+  experience_mode: true,
   google_sub: true,
 } as const;
 
