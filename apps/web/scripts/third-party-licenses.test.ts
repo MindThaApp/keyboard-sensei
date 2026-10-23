@@ -10,7 +10,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 
 /** The direct runtime dependencies every workspace package declares (not workspace links). */
 function declaredRuntimeDependencies(): string[] {
-  const dirs = ["apps/web", "apps/api", ...readdirSync(path.join(REPO_ROOT, "packages")).map((name) => `packages/${name}`)];
+  const dirs = ["apps/web", "apps/api", ...readdirSync(path.join(REPO_ROOT, "packages"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `packages/${entry.name}`)];
   const names = new Set<string>();
   for (const dir of dirs) {
     const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, dir, "package.json"), "utf8")) as { dependencies?: Record<string, string> };
