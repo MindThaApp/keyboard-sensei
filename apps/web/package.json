@@ -11,6 +11,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
     "@keyboard-sensei/lesson-engine": "workspace:*",
     "@keyboard-sensei/midi-engine": "workspace:*",
     "@keyboard-sensei/music-theory": "workspace:*",
