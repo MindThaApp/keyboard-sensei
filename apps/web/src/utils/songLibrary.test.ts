@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { Song } from "../services/api";
 import {
   DEFAULT_FILTERS,
+  DEFAULT_WORK_FILTERS,
+  composerShort,
+  firstUnratedIndex,
+  isBrowsing,
+  isChristmasSeason,
+  shelvesToLoad,
+  workFiltersFromParams,
+  workFiltersToParams,
   buildShelves,
   filterSongs,
   filtersFromParams,
@@ -138,5 +146,53 @@ describe("buildShelves", () => {
   it("omits empty shelves — no Recently played, no Essentials placeholder", () => {
     expect(buildShelves(songs, []).map((s) => s.id)).toEqual(["beginner", "uploads"]);
     expect(buildShelves([song({ id: "e", collection: "essentials" })], []).map((s) => s.id)).toEqual(["essentials"]);
+  });
+});
+
+describe("work filters", () => {
+  it("round-trips through the URL and omits defaults", () => {
+    const filters = workFiltersFromParams(new URLSearchParams("q=elise&level=2&length=1-3&unrated=1&sort=easiest"));
+    expect(filters).toMatchObject({ query: "elise", level: 2, duration: "1-3", unrated: true, sort: "easiest" });
+    expect(workFiltersToParams(filters).toString()).toBe("q=elise&level=2&length=1-3&sort=easiest&unrated=1");
+    expect(workFiltersToParams(DEFAULT_WORK_FILTERS).toString()).toBe("");
+  });
+
+  it("ignores junk params", () => {
+    expect(workFiltersFromParams(new URLSearchParams("level=9&sort=zzz&hands=x"))).toMatchObject({ level: 0, sort: "recommended", hands: "" });
+  });
+
+  it("only browses (shows shelves) with no search or narrowing filter", () => {
+    expect(isBrowsing(DEFAULT_WORK_FILTERS)).toBe(true);
+    expect(isBrowsing({ ...DEFAULT_WORK_FILTERS, unrated: true, sort: "title" })).toBe(true);
+    expect(isBrowsing({ ...DEFAULT_WORK_FILTERS, level: 1 })).toBe(false);
+    expect(isBrowsing({ ...DEFAULT_WORK_FILTERS, query: " x " })).toBe(false);
+  });
+
+  it("finds where the Unrated divider goes", () => {
+    expect(firstUnratedIndex([{ best_tier: "verified" }, { best_tier: "good" }, { best_tier: "unrated" }])).toBe(2);
+    expect(firstUnratedIndex([{ best_tier: "verified" }])).toBe(-1);
+    expect(firstUnratedIndex([{ best_tier: "unrated" }])).toBe(-1);
+  });
+
+  it("shows Christmas from 15 November to 6 January", () => {
+    expect(isChristmasSeason(new Date(2026, 10, 14))).toBe(false);
+    expect(isChristmasSeason(new Date(2026, 10, 15))).toBe(true);
+    expect(isChristmasSeason(new Date(2027, 0, 6))).toBe(true);
+    expect(isChristmasSeason(new Date(2027, 0, 7))).toBe(false);
+  });
+
+  it("only loads shelves the catalogue has content for", () => {
+    const facets = { eras: [], genres: [{ value: "folk", count: 3 }], tags: [], levels: [], unrated_extra: 0 };
+    const ids = shelvesToLoad(facets, new Date(2026, 5, 1), false).map((shelf) => shelf.id);
+    expect(ids).toEqual(["beginner-favourites", "featured", "folk"]);
+    const withChristmas = { ...facets, tags: [{ id: "christmas", label: "Christmas", kind: "theme", count: 2 }] };
+    expect(shelvesToLoad(withChristmas, new Date(2026, 5, 1), false).map((s) => s.id)).not.toContain("christmas");
+    expect(shelvesToLoad(withChristmas, new Date(2026, 5, 1), true).map((s) => s.id)).toContain("christmas");
+    expect(shelvesToLoad(withChristmas, new Date(2026, 11, 1), false).map((s) => s.id)).toContain("christmas");
+  });
+
+  it("shortens the composer to a surname", () => {
+    expect(composerShort({ id: "x", name: "Ludwig van Beethoven", sort_name: "Beethoven, Ludwig van" })).toBe("Beethoven");
+    expect(composerShort(null)).toBe("");
   });
 });
