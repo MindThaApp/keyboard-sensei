@@ -1,4 +1,4 @@
-// The verovio npm package ships no type declarations; these cover what the web app uses.
+// The verovio npm package ships no type declarations; these cover what the engraver worker uses.
 declare module "verovio/wasm" {
   const createVerovioModule: () => Promise<unknown>;
   export default createVerovioModule;
