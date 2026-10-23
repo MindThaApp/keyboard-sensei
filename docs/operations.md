@@ -61,6 +61,8 @@ ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api
 # Essentials pack: fetch the source MIDIs, then generate and verify the Full/Intermediate/Beginner levels
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-essentials-pack.ts'"
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/generate-essentials-pack.ts'"
+# Source pack (piano-midi.de + Mutopia), as DRAFTS: fetches each pinned file, checks it, creates draft Works and Songs
+ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/import-pack.ts batch-a'"
 # 128 sampled instruments (~256MB)
 ssh ramin@192.168.4.4 "docker exec keyboard-sensei-api-1 sh -c 'cd /app/apps/api && pnpm exec tsx scripts/fetch-instrument-library.ts'"
 # Seed (always last: it indexes what the scripts above wrote)
@@ -227,9 +229,20 @@ The rule lives in one predicate, `isPubliclyServable` / `canSeeSong` in
 `apps/api/src/songs.ts`. The Today screen, the "Ready for you" shelf and the
 achievements already read only Essentials songs, so they work unchanged.
 
-When piano-midi.de files (CC BY-SA 3.0 DE) are added, give each song its
-`attribution` line; the song page shows any song's attribution, and their source
-should be added to `apps/web/scripts/third-party-licenses.ts` alongside Essentials.
+Source packs (`scripts/import-pack.ts`, pins in `src/catalogue/packs/`) ingest
+piano-midi.de and Mutopia files as **draft** Works and Songs, each with its
+`attribution` line (for piano-midi.de: Bernd Krueger, the site, the copyright
+year read from the file, CC BY-SA 3.0 DE and a link to it). A pack never
+publishes anything: a reviewer sets the Work to published. Songs of a draft or
+in-review Work are left out of the shared list and `/credits`. **piano-midi.de
+songs are never `public_eligible` yet**: its licence is unconfirmed, so
+`UNCONFIRMED_LICENCE_SOURCES` in `src/catalogue/backfill.ts` holds it back from
+public builds. Check the licence on the site's copyright page in a browser,
+then remove `piano-midi-de` from that set and re-run the seed. The site answers
+scripted requests with HTTP 418, so the pinned files are fetched from the copy
+Midiano serves (sha256-checked, and each must carry Bernd Krueger's copyright
+notice). Their source should be added to
+`apps/web/scripts/third-party-licenses.ts` alongside Essentials.
 
 ### Email (password reset and verification)
 
