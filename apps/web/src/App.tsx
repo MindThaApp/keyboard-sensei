@@ -23,6 +23,7 @@ import { useAuth } from "./contexts/AuthContext";
 import { applyAssessmentPlacement, updateTimezone } from "./services/api";
 import { useProgressStore } from "./state/progressStore";
 import AudioNoticeToasts from "./components/shell/AudioNoticeToasts";
+import { useNativeKeepAwake } from "./native/nativeShell";
 import PrivacyPage from "./components/legal/PrivacyPage";
 import TermsPage from "./components/legal/TermsPage";
 import DeleteAccountPage from "./components/legal/DeleteAccountPage";
@@ -112,6 +113,7 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  useNativeKeepAwake();
   // The Play-Along stage fills the viewport; everything else is a normal scrolling page.
   const isPerformanceView = useMatch("/play/:songId") !== null;
   useReportTimezone(auth.user);

@@ -1,0 +1,25 @@
+{
+  "name": "@keyboard-sensei/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "sync": "cap sync android",
+    "icons": "scripts/generate-android-assets.sh",
+    "android:debug": "pnpm build:web && cap sync android && cd android && ../scripts/with-android-env.sh ./gradlew assembleDebug",
+    "android:release": "pnpm build:web && cap sync android && cd android && ../scripts/with-android-env.sh ./gradlew bundleRelease",
+    "android:test": "cd android && ../scripts/with-android-env.sh ./gradlew testDebugUnitTest"
+  },
+  "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/splash-screen": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "typescript": "^5.8.3"
+  }
+}

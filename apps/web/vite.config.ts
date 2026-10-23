@@ -132,6 +132,7 @@ export default defineConfig({
       { find: /^@keyboard-sensei\/lesson-engine$/, replacement: path.resolve(workspaceRoot, "packages/lesson-engine/src/index.ts") },
       { find: /^@keyboard-sensei\/midi-engine$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/index.ts") },
       { find: /^@keyboard-sensei\/midi-engine\/web$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/web.ts") },
+      { find: /^@keyboard-sensei\/midi-engine\/capacitor$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/capacitor.ts") },
       { find: /^@keyboard-sensei\/music-theory$/, replacement: path.resolve(workspaceRoot, "packages/music-theory/src/index.ts") },
       { find: /^@keyboard-sensei\/playalong-core$/, replacement: path.resolve(workspaceRoot, "packages/playalong-core/src/index.ts") },
     ],
