@@ -80,21 +80,34 @@ export interface QualityResult {
 const mean = (values: number[]): number => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 
 /**
- * Share of onsets within 1/48 beat of a 16th-note or 8th-triplet grid.
- * Score-like files sit near 1; live performances land well under 0.6.
- * Notes on 32nd, 16th-triplet or quintuplet grids count as off-grid, as the
- * library spec defines the signal.
+ * Finer grids (32nds, 16th triplets, quintuplets) are only trusted within one
+ * tick: score-derived files land on them exactly, while a loose match would
+ * let live performances through by chance.
+ */
+const EXACT_GRID_DIVISORS = [8, 6, 5];
+const EXACT_GRID_TOLERANCE_TICKS = 1;
+
+/**
+ * Share of onsets within 1/48 beat of a 16th-note or 8th-triplet grid, or
+ * within a tick of a 32nd / 16th-triplet / quintuplet grid. Score-like files
+ * sit near 1; live performances land well under 0.6.
  */
 export function measureQuantization(onsetTicks: number[], ppq: number): number {
   if (onsetTicks.length === 0) return 0;
   const tolerance = Math.max(1, ppq / 48);
-  const near = (ticks: number, grid: number): boolean => {
+  const near = (ticks: number, grid: number, within: number): boolean => {
     const remainder = ticks % grid;
-    return Math.min(remainder, grid - remainder) <= tolerance;
+    return Math.min(remainder, grid - remainder) <= within;
   };
   let onGrid = 0;
   for (const ticks of onsetTicks) {
-    if (near(ticks, ppq / 4) || near(ticks, ppq / 3)) onGrid += 1;
+    if (
+      near(ticks, ppq / 4, tolerance) ||
+      near(ticks, ppq / 3, tolerance) ||
+      EXACT_GRID_DIVISORS.some((divisor) => near(ticks, ppq / divisor, EXACT_GRID_TOLERANCE_TICKS))
+    ) {
+      onGrid += 1;
+    }
   }
   return onGrid / onsetTicks.length;
 }

@@ -92,6 +92,20 @@ describe("measureQuantization", () => {
     expect(measureQuantization([50, 55, 61], PPQ)).toBeLessThan(0.7);
     expect(measureQuantization([], PPQ)).toBe(0);
   });
+
+  it("accepts 32nd, 16th-triplet and quintuplet onsets within one tick", () => {
+    const thirtySecond = PPQ / 8;
+    const sixteenthTriplet = PPQ / 6;
+    const quintuplet = PPQ / 5;
+    expect(measureQuantization([thirtySecond, thirtySecond * 3, sixteenthTriplet, quintuplet * 2], PPQ)).toBe(1);
+    expect(measureQuantization([thirtySecond + 1, quintuplet - 1], PPQ)).toBe(1);
+  });
+
+  it("rejects onsets that are near but not on the finer grids", () => {
+    // 3 ticks off a 32nd (60), a 16th triplet (80) and a quintuplet (96), and clear of the coarse grids.
+    expect(measureQuantization([63, 83, 99], PPQ)).toBe(0);
+    expect(measureQuantization([PPQ / 8 + 2], PPQ)).toBe(0);
+  });
 });
 
 describe("classifyMidiQuality", () => {
