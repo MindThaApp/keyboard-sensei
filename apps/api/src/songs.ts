@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,9 @@ import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
 import { attemptSchema, levelOf, personalBests } from "./practice-attempts.js";
 import { rewardPlayAlongAttempt, type Rewards } from "./progression/rewards.js";
+import { classifyMidiQuality } from "./midi-quality.js";
+import { storedSignals } from "./catalogue/backfill.js";
+import { importScore, InvalidScoreError } from "./scores/import-score.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -49,6 +53,16 @@ export const isFetchRateLimited = (userId: string): boolean => {
   recentFetchByUser.set(userId, timestamps);
   return false;
 };
+
+// Scores: title and composer default to what the score itself names.
+const scoreUploadQuerySchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  artist: z.string().trim().min(1).max(120).optional(),
+  genre: z.enum(["classical", "pop", "film", "game", "jazz", "other"]).default("other"),
+});
+
+/** Score files are XML; uncompressed MusicXML of a long piece runs to a few MB. */
+export const SCORE_UPLOAD_LIMIT_BYTES = 5 * 1024 * 1024;
 
 const urlPreviewSchema = z.object({ url: z.string().trim().url().max(2000) });
 
@@ -130,6 +144,8 @@ const songListItem = (song: {
   // leaves the server (same reason `file_path` itself isn't included
   // here); fetch actual notation bytes via GET /songs/:id/notation.
   notation_path: song.notation_path ? "available" : null,
+  // What the notation file is: Verovio's MEI for score imports, MusicXML for archive imports.
+  notation_format: notationFormat(song.notation_path),
   mine: song.uploader_id === userId,
   collection: songCollection(song),
   // Versions of one piece at different difficulty levels share a group.
@@ -142,13 +158,27 @@ const songListItem = (song: {
   quality_tier: song.tier_override ?? song.quality_tier,
 });
 
+type NotationFormat = "mei" | "musicxml";
+
+const notationFormat = (notationPath: string | null): NotationFormat | null =>
+  notationPath ? (notationPath.endsWith(".mei") ? "mei" : "musicxml") : null;
+
 /** Song library routes; mounted behind requireAuth. */
 export const songsRouter: Router = Router();
 
-const deleteSongRow = async (song: { id: string; file_path: string; uploader_id: string | null }) => {
+const deleteSongRow = async (song: {
+  id: string;
+  file_path: string;
+  notation_path: string | null;
+  score_path: string | null;
+  uploader_id: string | null;
+}) => {
   await prisma.song.delete({ where: { id: song.id } });
-  // Only unlink files we own (uploads); seeded library files may be shared across reseeds.
-  if (song.uploader_id) await unlink(song.file_path).catch(() => undefined);
+  // Only unlink files we own (uploads, imports); seeded library files may be shared across reseeds.
+  if (!song.uploader_id) return;
+  for (const file of [song.file_path, song.notation_path, song.score_path]) {
+    if (file) await unlink(file).catch(() => undefined);
+  }
 };
 
 songsRouter.get("/songs", async (req, res, next) => {
@@ -260,7 +290,7 @@ songsRouter.get("/songs/:id/notation", async (req, res, next) => {
     }
     try {
       const bytes = await readFile(song.notation_path);
-      res.type("application/vnd.recordare.musicxml").send(bytes);
+      res.type(notationFormat(song.notation_path) === "mei" ? "application/mei+xml" : "application/vnd.recordare.musicxml").send(bytes);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         res.status(404).json({ error: { code: "not_found", message: "Notation file not found on disk" } });
@@ -378,6 +408,78 @@ songsRouter.post(
       await writeFile(filePath, bytes);
       const updated = await prisma.song.update({ where: { id: song.id }, data: { file_path: filePath } });
       res.status(201).json(songListItem(updated, userId));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * A score (MusicXML, compressed .mxl or MEI) becomes a private song: Verovio's MEI of it
+ * is the notation, the MIDI of the expanded score is what is played and scored, and the
+ * original is kept as sent. Mounted under /songs/upload, so the upload rate limit applies.
+ */
+songsRouter.post(
+  "/songs/upload/score",
+  express.raw({ type: () => true, limit: SCORE_UPLOAD_LIMIT_BYTES }),
+  async (req, res, next) => {
+    try {
+      const userId = uid(req);
+      const query = scoreUploadQuerySchema.parse(req.query);
+      const bytes = req.body as Buffer;
+      if (!Buffer.isBuffer(bytes) || bytes.length === 0) {
+        res.status(400).json({ error: { code: "empty_upload", message: "Send the score file's bytes as the request body" } });
+        return;
+      }
+      let imported: Awaited<ReturnType<typeof importScore>>;
+      let metadata: SongMetadata;
+      try {
+        imported = await importScore(new Uint8Array(bytes));
+        metadata = extractSongMetadata(imported.midi);
+      } catch (error) {
+        if (error instanceof InvalidScoreError || error instanceof InvalidMidiError) {
+          res.status(422).json({ error: { code: "invalid_score", message: error.message } });
+          return;
+        }
+        throw error;
+      }
+      const quality = classifyMidiQuality(imported.midi);
+      await mkdir(MIDI_LIBRARY_DIR, { recursive: true });
+      const song = await prisma.song.create({
+        data: {
+          title: query.title ?? imported.title ?? "Untitled score",
+          artist: query.artist ?? imported.composer ?? "Unknown",
+          genre: query.genre,
+          difficulty: metadata.difficulty,
+          duration_sec: metadata.durationSec,
+          note_count: metadata.noteCount,
+          content_rights: "user-score-upload",
+          file_path: "pending",
+          uploader_id: userId,
+          // Catalogue fields, as the backfill would set them for any upload: never public.
+          source_kind: "upload",
+          source_ref: createHash("sha256").update(bytes).digest("hex"),
+          file_licence: "unknown",
+          public_eligible: false,
+          hands: imported.report.playedStaves.length >= 2 ? "both" : null,
+          quality_tier: quality.tier,
+          quality_score: quality.score,
+          quality_signals: quality.signals ? storedSignals(quality.signals) : undefined,
+          quality_checked_at: new Date(),
+        },
+      });
+      const base = path.join(MIDI_LIBRARY_DIR, `score-${song.id}`);
+      const files = { file_path: `${base}.mid`, notation_path: `${base}.mei`, score_path: `${base}.${imported.kind}` };
+      try {
+        await writeFile(files.file_path, imported.midi);
+        await writeFile(files.notation_path, imported.mei);
+        await writeFile(files.score_path, bytes);
+      } catch (error) {
+        await deleteSongRow({ id: song.id, uploader_id: userId, ...files });
+        throw error;
+      }
+      const updated = await prisma.song.update({ where: { id: song.id }, data: files });
+      res.status(201).json({ ...songListItem(updated, userId), import_report: imported.report });
     } catch (e) {
       next(e);
     }

@@ -59,12 +59,12 @@ export async function deleteUserAccount(
   }
 
   const [songs, instruments, feedback] = await Promise.all([
-    prisma.song.findMany({ where: { uploader_id: userId }, select: { file_path: true, notation_path: true } }),
+    prisma.song.findMany({ where: { uploader_id: userId }, select: { file_path: true, notation_path: true, score_path: true } }),
     prisma.instrument.findMany({ where: { uploader_id: userId }, select: { pack_path: true } }),
     prisma.feedback.findMany({ where: { user_id: userId, screenshot: { not: null } }, select: { screenshot: true } }),
   ]);
   const files = [
-    ...songs.flatMap((song) => [song.file_path, song.notation_path]).filter((file): file is string => Boolean(file) && isInside(MIDI_LIBRARY_DIR, file!)),
+    ...songs.flatMap((song) => [song.file_path, song.notation_path, song.score_path]).filter((file): file is string => Boolean(file) && isInside(MIDI_LIBRARY_DIR, file!)),
     ...feedback
       .map((row) => path.join(FEEDBACK_SCREENSHOT_DIR, path.basename(row.screenshot!)))
       .filter((file) => isInside(FEEDBACK_SCREENSHOT_DIR, file)),
