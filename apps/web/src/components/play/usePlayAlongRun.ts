@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { PlayAlongEngine, type AccompanimentMute, type PracticeRun } from "@keyboard-sensei/playalong-core";
-import type { PlayAlongResult } from "@keyboard-sensei/midi-engine";
+import type { PlayAlongJudgment, PlayAlongNote, PlayAlongResult } from "@keyboard-sensei/midi-engine";
 import type { RawMidiEvent } from "@keyboard-sensei/shared-types";
 import { connectPlayAlongAudio } from "../../audio/playAlongAudio";
 import { latencyOffsetMs, useSavedLatencyOffsetMs } from "../../audio/latency";
@@ -29,8 +29,14 @@ interface Options<S extends RunSettings> {
   subscribe: (listener: (event: RawMidiEvent) => void) => () => void;
   /** Called every animation frame while running, to draw. Must not set React state. */
   onFrame: (engine: PlayAlongEngine, songTimeS: number, settings: S) => void;
-  /** The run finished on its own (not cancelled). `settings` and `run` are the ones it ran with. */
-  onFinish: (result: PlayAlongResult, settings: S, run: PracticeRun) => void;
+  /**
+   * The run finished on its own (not cancelled). `settings` and `run` are the ones it ran
+   * with; `liveJudgments` are the engine's own (in Wait for me, the only record of what
+   * was played, since that mode is not scored).
+   */
+  onFinish: (result: PlayAlongResult, settings: S, run: PracticeRun, liveJudgments: readonly (PlayAlongJudgment | undefined)[]) => void;
+  /** A note was judged during the run, for the renderer's hit and miss marks. Must not set React state. */
+  onJudged?: (index: number, judgment: PlayAlongJudgment, note: PlayAlongNote) => void;
 }
 
 /** How often the HUD store is refreshed during a run. */
@@ -43,7 +49,7 @@ const HUD_INTERVAL_MS = 120;
  * playAlongRunStore rather than React state, so the page itself only re-renders
  * when the run starts, pauses or ends.
  */
-export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, settings, subscribe, onFrame, onFinish }: Options<S>) {
+export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, settings, subscribe, onFrame, onFinish, onJudged }: Options<S>) {
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const engineRef = useRef<PlayAlongEngine | null>(null);
@@ -57,6 +63,8 @@ export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, setting
   onFrameRef.current = onFrame;
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
+  const onJudgedRef = useRef(onJudged);
+  onJudgedRef.current = onJudged;
 
   // Push setting changes into a RUNNING engine, so adjusting them while paused
   // takes effect on resume rather than only on the next attempt.
@@ -123,8 +131,12 @@ export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, setting
         stopAudioRef.current = null;
         publishPlayAlongRun({ stats: engine.liveStats, countdown: null, waiting: false, waitingNotes: [], songTimeS: run.offsetS + run.durationS });
         setRunning(false);
-        onFinishRef.current(result, runSettings, run);
+        stopJudged();
+        onFinishRef.current(result, runSettings, run, engine.judgments);
       },
+    });
+    const stopJudged = engine.on((event) => {
+      if (event.type === "judged") onJudgedRef.current?.(event.noteIndex, event.judgment, run.notes[event.noteIndex]!);
     });
     engineRef.current = engine;
     engine.start(performance.now());
@@ -145,6 +157,7 @@ export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, setting
     stopAudioRef.current = () => {
       stopClicks();
       disconnectGuide();
+      stopJudged();
     };
     setPaused(false);
     setRunning(true);
