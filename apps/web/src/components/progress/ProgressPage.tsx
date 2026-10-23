@@ -152,7 +152,7 @@ function StarsCard({ progression }: { progression: ProgressionResponse }) {
   if (totalLessonStars === 0 && starredSongs.length === 0) {
     return (
       <Card as="section" aria-label="Stars">
-        <EmptyState title="No stars yet" message="Pass an exercise to earn stars on a lesson, or play a song to the end at 70% accuracy." />
+        <EmptyState title="No stars yet" message="Pass an exercise to earn stars on a lesson, or play a song to the end, hitting 70% of the notes." />
       </Card>
     );
   }
