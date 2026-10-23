@@ -90,17 +90,6 @@ export default function PracticeGymPage() {
 
   return (
     <div className="space-y-4">
-      {focused && (
-        <Button
-          variant="gray"
-          size="sm"
-          className="fixed right-3 top-3 z-50"
-          aria-label="Exit focus mode"
-          onClick={focus.exit}
-        >
-          Exit focus
-        </Button>
-      )}
       <div hidden={focused}>
         <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>
@@ -126,13 +115,17 @@ export default function PracticeGymPage() {
 
       {selectedDrill && (
         <div ref={drillRef} className="scroll-mt-3">
-          {!focused && (
-            <div className="mb-2 flex justify-end">
+          <div className="mb-2 flex justify-end">
+            {focused ? (
+              <Button variant="gray" size="sm" onClick={focus.exit} aria-label="Exit focus mode">
+                Exit focus
+              </Button>
+            ) : (
               <Button variant="gray" size="sm" onClick={focus.enter} aria-label="Enter focus mode (F)">
                 Focus
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           <MidiExercise
             key={selectedDrill.id}
             exerciseId={selectedDrill.exercise.exerciseId}
