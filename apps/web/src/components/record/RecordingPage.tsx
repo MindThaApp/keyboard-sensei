@@ -7,6 +7,8 @@ import { uploadSong, type SongGenre } from "../../services/api";
 import { MidiRecorder, type MidiRecordingResult } from "@keyboard-sensei/playalong-core";
 import { parsePlayAlongSong } from "@keyboard-sensei/playalong-core";
 import { playSequence } from "../../audio/noteSequence";
+import { Button, ListGroup } from "../ui";
+import { SettingsRow } from "../settings/SettingsRow";
 
 const GENRES: { value: SongGenre; label: string }[] = [
   { value: "classical", label: "Classical" },
@@ -149,75 +151,79 @@ export default function RecordingPage() {
     }
   };
 
-  const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
+  const busy = state === "recording" || state === "saving" || state === "playing";
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="font-display text-2xl font-semibold">Record</h1>
+          <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Record</h1>
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Play your MIDI keyboard or the on-screen piano, then save the take to your library.
           </p>
         </div>
-        <Link to="/settings?tab=library" className="ml-auto text-sm text-slate-500 underline hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+        <Link to="/settings?tab=library" className="ml-auto inline-flex min-h-11 items-center text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
           Manage library
         </Link>
       </div>
 
       <MidiStatusBar />
 
-      <section className="card space-y-4 p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <button className="primary-button text-sm" disabled={state === "recording" || state === "saving" || state === "playing"} onClick={startRecording}>
+      <ListGroup aria-label="Recorder">
+        <SettingsRow
+          value={
+            <span className="tabular-nums">
+              {formatDuration(elapsedSec)} · {liveNoteCount} notes
+            </span>
+          }
+        >
+          <Button variant="filled" disabled={busy} onClick={startRecording}>
             Record
-          </button>
-          <button className="secondary-button text-sm" disabled={state !== "recording"} onClick={stopRecording}>
+          </Button>
+          <Button disabled={state !== "recording"} onClick={stopRecording}>
             Stop
-          </button>
-          <button className="secondary-button text-sm" disabled={state === "recording" || state === "saving" || (!recording && elapsedSec === 0)} onClick={discard}>
+          </Button>
+          <Button disabled={state === "recording" || state === "saving" || (!recording && elapsedSec === 0)} onClick={discard}>
             Discard
-          </button>
-          <div className="ml-auto flex gap-4 text-sm tabular-nums text-slate-600 dark:text-slate-300">
-            <span>{formatDuration(elapsedSec)}</span>
-            <span>{liveNoteCount} notes</span>
-          </div>
-        </div>
-        {message && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{message}</p>}
-        <VirtualPiano showLabels />
-      </section>
+          </Button>
+        </SettingsRow>
+        {message && (
+          <SettingsRow>
+            <p role="alert" className="settings-error m-0">{message}</p>
+          </SettingsRow>
+        )}
+      </ListGroup>
+      <VirtualPiano showLabels />
 
       {recording && (
-        <section className="card space-y-3 p-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-slate-500">Title
-              <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
-            </label>
-            <label className="block text-xs text-slate-500">Artist
-              <input className={field} value={artist} onChange={(e) => setArtist(e.target.value)} />
-            </label>
-          </div>
-          <label className="block text-xs text-slate-500">Genre
-            <select className={field} value={genre} onChange={(e) => setGenre(e.target.value as SongGenre)}>
+        <ListGroup
+          header="Save this take"
+          footer={
+            canSave
+              ? `${formatDuration(recording.durationSec)} · ${recording.noteCount} notes`
+              : `${formatDuration(recording.durationSec)} · ${recording.noteCount} notes. Record at least 20 notes over 20 seconds to save to the library.`
+          }
+          aria-label="Save this take"
+        >
+          <SettingsRow title="Title">
+            <input aria-label="Title" className="settings-field" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </SettingsRow>
+          <SettingsRow title="Artist">
+            <input aria-label="Artist" className="settings-field" value={artist} onChange={(e) => setArtist(e.target.value)} />
+          </SettingsRow>
+          <SettingsRow title="Genre">
+            <select aria-label="Genre" className="settings-field" value={genre} onChange={(e) => setGenre(e.target.value as SongGenre)}>
               {GENRES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
-          </label>
-          <p className="text-xs text-slate-500">
-            {formatDuration(recording.durationSec)} · {recording.noteCount} notes
-          </p>
-          {!canSave && (
-            <p className="text-xs text-slate-500">
-              Record at least 20 notes over 20 seconds to save to the library.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <button className="secondary-button text-sm" disabled={state === "playing" || state === "saving"} onClick={playPreview}>
+          </SettingsRow>
+          <SettingsRow>
+            <Button disabled={state === "playing" || state === "saving"} onClick={playPreview}>
               {state === "playing" ? "Playing…" : "Preview"}
-            </button>
-            <button className="primary-button text-sm" disabled={!title.trim() || !canSave || state === "saving" || state === "playing"} onClick={() => void save()}>
+            </Button>
+            <Button variant="filled" disabled={!title.trim() || !canSave || state === "saving" || state === "playing"} onClick={() => void save()}>
               {state === "saving" ? "Saving…" : "Save to library"}
-            </button>
-          </div>
-        </section>
+            </Button>
+          </SettingsRow>
+        </ListGroup>
       )}
     </div>
   );

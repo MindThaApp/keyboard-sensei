@@ -4,6 +4,8 @@ import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
 import SongExcerptPicker from "./SongExcerptPicker";
 import { practiceGymDrills } from "../../data/practiceGymDrills";
+import { ListGroup, ListRow, SegmentedControl } from "../ui";
+import "../settings/settings.css";
 import { getSongs, type Song, type SongGenre } from "../../services/api";
 
 const GENRES: { value: SongGenre | "all"; label: string }[] = [
@@ -79,35 +81,23 @@ export default function PracticeGymPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">MIDI Practice Gym</h1>
+        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>
       </div>
 
       <MidiStatusBar />
 
-      <div>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Drills</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {practiceGymDrills.map((drill) => {
-            const isSelected = drill.id === selectedDrillId;
-            return (
-              <button
-                key={drill.id}
-                type="button"
-                onClick={() => selectDrill(drill.id)}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  isSelected
-                    ? "border-slate-800 bg-slate-100 dark:border-sky-500 dark:bg-slate-800"
-                    : "border-slate-200 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
-                }`}
-              >
-                <p className="font-medium text-slate-900 dark:text-slate-100">{drill.label}</p>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{drill.description}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <ListGroup header="Drills" aria-label="Drills">
+        {practiceGymDrills.map((drill) => (
+          <ListRow
+            key={drill.id}
+            title={drill.label}
+            subtitle={drill.description}
+            onClick={() => selectDrill(drill.id)}
+            accessory={drill.id === selectedDrillId ? "Open" : "chevron"}
+          />
+        ))}
+      </ListGroup>
 
       {selectedDrill && (
         <div ref={drillRef} className="scroll-mt-3">
@@ -123,72 +113,58 @@ export default function PracticeGymPage() {
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Practise a song</h2>
-        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Practise a song</h2>
+        <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
           Pick a few bars of any library song and a hand. They open on the song practice screen, looped, with the other hand playing along.
         </p>
 
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-1">
-            {GENRES.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setGenreFilter(item.value)}
-                className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                  genreFilter === item.value
-                    ? "bg-felt-50 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300"
-                    : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+        <div className="mb-3 space-y-2">
+          <SegmentedControl<SongGenre | "all">
+            aria-label="Genre"
+            options={GENRES}
+            value={genreFilter}
+            onChange={setGenreFilter}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              aria-label="Difficulty filter"
+              value={difficultyFilter}
+              onChange={(e) => setDifficultyFilter(Number(e.target.value))}
+              className="settings-field"
+              style={{ width: "auto" }}
+            >
+              <option value={0}>Any difficulty</option>
+              {[1, 2, 3, 4, 5].map((level) => (
+                <option key={level} value={level}>Difficulty {level}</option>
+              ))}
+            </select>
+            {visibleSongs && <span className="text-xs text-slate-500 dark:text-slate-400">{visibleSongs.length} songs</span>}
           </div>
-          <select
-            aria-label="Difficulty filter"
-            value={difficultyFilter}
-            onChange={(e) => setDifficultyFilter(Number(e.target.value))}
-            className="rounded-md border border-slate-300 bg-transparent px-2 py-1 text-sm dark:border-slate-600"
-          >
-            <option value={0}>Any difficulty</option>
-            {[1, 2, 3, 4, 5].map((level) => (
-              <option key={level} value={level}>Difficulty {level}</option>
-            ))}
-          </select>
-          {visibleSongs && <span className="text-xs text-slate-400">{visibleSongs.length} songs</span>}
         </div>
 
         {songsError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{songsError}</p>}
         {!songs && !songsError && <p className="text-sm text-slate-500 dark:text-slate-400">Loading song library…</p>}
 
         {visibleSongs && (
-          <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-            {visibleSongs.map((song) => {
-              const isSelected = song.id === selectedSongId;
-              return (
-                <li key={song.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectSong(song.id)}
-                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                      isSelected ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-ivory-50 dark:hover:bg-slate-800/60"
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{song.title}</p>
-                      <p className="truncate text-xs text-slate-500">{song.artist}</p>
-                    </div>
-                    <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-xs capitalize text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
-                      {song.genre}
-                    </span>
-                    <DifficultyDots level={song.difficulty} />
-                  </button>
-                </li>
-              );
-            })}
-            {visibleSongs.length === 0 && <li className="px-4 py-2.5 text-sm text-slate-500">No songs match those filters.</li>}
-          </ul>
+          <div className="max-h-96 overflow-y-auto rounded-[var(--r-group)]">
+            <ListGroup aria-label="Songs">
+              {visibleSongs.map((song) => (
+                <ListRow
+                  key={song.id}
+                  title={song.title}
+                  subtitle={song.artist}
+                  onClick={() => selectSong(song.id)}
+                  accessory={
+                    <>
+                      <DifficultyDots level={song.difficulty} />
+                      {song.id === selectedSongId && <span>Open</span>}
+                    </>
+                  }
+                />
+              ))}
+              {visibleSongs.length === 0 && <ListRow title="No songs match those filters." />}
+            </ListGroup>
+          </div>
         )}
       </div>
 
