@@ -23,6 +23,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { Midi } from "@tonejs/midi";
 import bcrypt from "bcryptjs";
+import type { NextFunction, Request, Response } from "express";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const enabled = Boolean(TEST_DATABASE_URL);
@@ -1578,6 +1579,198 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
       await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
       await m.prisma.song.delete({ where: { id: "practice-song" } });
+    });
+  });
+
+  describe("daily challenge", () => {
+    // The challenge router on its own app (with the real auth middleware), so these tests
+    // don't depend on where app.ts mounts it.
+    let challengeUrl = "";
+    let challengeServer: ReturnType<Modules["app"]["listen"]>;
+    let service: typeof import("./challenge/service.js");
+    let gen: typeof import("@keyboard-sensei/challenge-gen");
+
+    beforeAll(async () => {
+      const express = (await import("express")).default;
+      const { requireAuth } = await import("./auth.js");
+      const { challengeRouter } = await import("./challenge/router.js");
+      service = await import("./challenge/service.js");
+      gen = await import("@keyboard-sensei/challenge-gen");
+      const app = express();
+      app.use(express.json());
+      app.use(requireAuth);
+      app.use(challengeRouter);
+      // Like app.ts: a Zod validation failure is a 400, anything else a 500.
+      const { ZodError } = await import("zod");
+      app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+        if (error instanceof ZodError) res.status(400).json({ error: { code: "validation_error" } });
+        else res.status(500).json({ error: { code: "internal", message: String(error).slice(-200) } });
+      });
+      challengeServer = app.listen(0);
+      await new Promise<void>((resolve) => challengeServer.once("listening", () => resolve()));
+      challengeUrl = `http://127.0.0.1:${(challengeServer.address() as AddressInfo).port}`;
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => challengeServer.close(() => resolve()));
+    });
+
+    const call = async (method: string, path: string, token: string, body?: unknown) => {
+      const response = await fetch(`${challengeUrl}${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: await response.json().catch(() => null) };
+    };
+
+    const complete = (userId: string, lessonIds: string[]) =>
+      m.prisma.userProgress.createMany({
+        data: lessonIds.map((lessonId) => ({ user_id: userId, lesson_id: lessonId, status: "completed" as const, best_score: 90, completed_at: new Date() })),
+      });
+    const STARTER = ["lesson-04", "lesson-05"];
+
+    it("is locked until the lessons it uses are done, then allows exactly three attempts", async () => {
+      const user = await createUser();
+      const locked = await call("GET", "/challenge/today", user.token);
+      expect(locked.status).toBe(200);
+      expect(locked.body.tiers.map((tier: { unlocked: boolean }) => tier.unlocked)).toEqual([false, false, false]);
+      expect(locked.body.tiers[0].needs.map((lesson: { id: string }) => lesson.id)).toEqual(STARTER);
+      const date = locked.body.date;
+      expect((await call("POST", "/challenge/attempts", user.token, { date, tier: 1 })).status).toBe(403);
+
+      await complete(user.id, STARTER);
+      const today = await call("GET", "/challenge/today", user.token);
+      const starter = today.body.tiers[0];
+      expect(starter).toMatchObject({ unlocked: true, attemptsLeft: 3, best: null, stars: 0 });
+      // Only keys this learner has met: C major or A minor.
+      expect(["C", "Am"]).toContain(starter.key.id);
+      // The same piece the client will generate.
+      expect(starter.tempoBpm).toBe(gen.generateChallenge(date, 1, { key: starter.key.id }).tempoBpm);
+      expect((await call("POST", "/challenge/attempts", user.token, { date, tier: 2 })).status).toBe(403);
+
+      const first = await call("POST", "/challenge/attempts", user.token, { date, tier: 1 });
+      expect(first.status).toBe(201);
+      expect(first.body).toMatchObject({ attempt: 1, attemptsLeft: 2, key: starter.key.id });
+      // Started but never finished: the attempt is still used up.
+      expect((await call("POST", "/challenge/attempts", user.token, { date, tier: 1 })).body.attempt).toBe(2);
+      const third = await call("POST", "/challenge/attempts", user.token, { date, tier: 1 });
+      expect(third.body).toMatchObject({ attempt: 3, attemptsLeft: 0 });
+      const fourth = await call("POST", "/challenge/attempts", user.token, { date, tier: 1 });
+      expect(fourth.status).toBe(409);
+      expect(fourth.body.error.code).toBe("no_attempts_left");
+      expect(await m.prisma.challengeAttempt.count({ where: { user_id: user.id } })).toBe(3);
+
+      // A finish pays practice time, and XP once for the day's first clear.
+      const finished = await call("POST", `/challenge/attempts/${third.body.id}/finish`, user.token, { score: 82, accuracy: 82 });
+      expect(finished.status).toBe(200);
+      expect(finished.body).toMatchObject({ best: 82, stars: 1, cleared: true });
+      expect(finished.body.rewards.items).toEqual(expect.arrayContaining([{ amount: 15, reason: "Daily challenge cleared: Starter" }]));
+      expect(finished.body.rewards.newAchievements.map((a: { key: string }) => a.key)).toContain("daily_challenge_first");
+      const day = await m.prisma.practiceDay.findFirstOrThrow({ where: { user_id: user.id } });
+      expect(day.seconds).toBe(Math.round(gen.generateChallenge(date, 1, { key: starter.key.id }).durationSeconds));
+
+      const again = await call("POST", `/challenge/attempts/${first.body.id}/finish`, user.token, { score: 96, accuracy: 96 });
+      expect(again.body).toMatchObject({ best: 96, stars: 3 });
+      expect(again.body.rewards.items.some((item: { reason: string }) => item.reason.startsWith("Daily challenge"))).toBe(false);
+      expect(await m.prisma.xpEvent.count({ where: { user_id: user.id, source: "challenge" } })).toBe(1);
+
+      // Finishing twice, someone else's run, or an impossible score is refused.
+      expect((await call("POST", `/challenge/attempts/${first.body.id}/finish`, user.token, { score: 100, accuracy: 100 })).status).toBe(409);
+      const other = await createUser();
+      expect((await call("POST", `/challenge/attempts/${third.body.id}/finish`, other.token, { score: 100, accuracy: 100 })).status).toBe(404);
+      expect((await call("POST", `/challenge/attempts/${third.body.id}/finish`, user.token, { score: 101, accuracy: 50 })).status).toBe(400);
+
+      const after = (await call("GET", "/challenge/today", user.token)).body.tiers[0];
+      expect(after).toMatchObject({ attemptsLeft: 0, best: 96, stars: 3, cleared: true });
+      expect(after.attempts.map((row: { attempt: number; finished: boolean }) => [row.attempt, row.finished])).toEqual([
+        [1, true],
+        [2, false],
+        [3, true],
+      ]);
+    });
+
+    it("refuses a start for any day but the learner's own today", async () => {
+      const user = await createUser();
+      await complete(user.id, STARTER);
+      const { date } = (await call("GET", "/challenge/today", user.token)).body;
+      const yesterday = new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      const response = await call("POST", "/challenge/attempts", user.token, { date: yesterday, tier: 1 });
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe("day_changed");
+    });
+
+    it("follows the learner's timezone across midnight", async () => {
+      const user = await createUser();
+      await m.prisma.user.update({ where: { id: user.id }, data: { timezone: "Pacific/Auckland" } });
+      await complete(user.id, STARTER);
+      // 11:30 UTC on the 23rd is 00:30 on the 24th in Auckland (NZDT, UTC+13).
+      const justAfterMidnight = new Date("2026-10-23T11:30:00Z");
+      const today = await service.challengeToday(m.prisma, user.id, justAfterMidnight);
+      expect(today.date).toBe("2026-10-24");
+      expect(today.tiers[0]!.tempoBpm).toBe(gen.generateChallenge("2026-10-24", 1, { key: today.tiers[0]!.key.id }).tempoBpm);
+      await expect(service.startAttempt(m.prisma, user.id, { date: "2026-10-23", tier: 1 }, justAfterMidnight)).rejects.toMatchObject({
+        code: "day_changed",
+      });
+      for (let i = 0; i < 3; i++) await service.startAttempt(m.prisma, user.id, { date: "2026-10-24", tier: 1 }, justAfterMidnight);
+
+      // 23:59 the same Auckland day: still used up.
+      const lastMinute = new Date("2026-10-24T10:59:00Z");
+      await expect(service.startAttempt(m.prisma, user.id, { date: "2026-10-24", tier: 1 }, lastMinute)).rejects.toMatchObject({
+        code: "no_attempts_left",
+      });
+      // 00:01 the next Auckland day: a new piece and three fresh attempts.
+      const nextDay = new Date("2026-10-24T11:01:00Z");
+      const tomorrow = await service.challengeToday(m.prisma, user.id, nextDay);
+      expect(tomorrow.date).toBe("2026-10-25");
+      expect(tomorrow.tiers[0]!.attemptsLeft).toBe(3);
+      const started = await service.startAttempt(m.prisma, user.id, { date: "2026-10-25", tier: 1 }, nextDay);
+      expect(started.attempt).toBe(1);
+
+      // The same instant is still the 24th for a learner in UTC.
+      const utcUser = await createUser();
+      expect((await service.challengeToday(m.prisma, utcUser.id, nextDay)).date).toBe("2026-10-24");
+
+      // Practice time lands on the Auckland day the run finished on.
+      await service.finishAttempt(m.prisma, user.id, started.id, { score: 50, accuracy: 50 }, new Date("2026-10-24T11:05:00Z"));
+      const day = await m.prisma.practiceDay.findUniqueOrThrow({ where: { user_id_day: { user_id: user.id, day: "2026-10-25" } } });
+      expect(day.seconds).toBe(Math.round(gen.generateChallenge("2026-10-25", 1, { key: started.key }).durationSeconds));
+    });
+
+    it("never hands out a fourth attempt, even to simultaneous starts", async () => {
+      const user = await createUser();
+      await complete(user.id, STARTER);
+      const { date } = (await call("GET", "/challenge/today", user.token)).body;
+      const results = await Promise.all(Array.from({ length: 6 }, () => call("POST", "/challenge/attempts", user.token, { date, tier: 1 })));
+      const statuses = results.map((result) => result.status).sort().join(",");
+      expect(statuses).toBe("201,201,201,409,409,409");
+      expect(results.filter((result) => result.status === 201).map((result) => result.body.attempt).sort()).toEqual([1, 2, 3]);
+      expect(await m.prisma.challengeAttempt.count({ where: { user_id: user.id } })).toBe(3);
+    });
+
+    it("plays higher tiers in keys the learner knows, and pays their achievements", async () => {
+      const user = await createUser();
+      await complete(
+        user.id,
+        m.content.lessons.map((lesson) => lesson.id),
+      );
+      const today = await service.challengeToday(m.prisma, user.id);
+      expect(today.tiers.every((tier) => tier.unlocked)).toBe(true);
+      expect(gen.TIER_KEYS[3]).toContain(today.tiers[2]!.key.id);
+
+      // Six cleared days before today, then an Advanced clear today: a 7-day streak.
+      const days = Array.from({ length: 6 }, (_, i) =>
+        new Date(Date.parse(`${today.date}T00:00:00Z`) - (6 - i) * 86_400_000).toISOString().slice(0, 10),
+      );
+      await m.prisma.challengeAttempt.createMany({
+        data: days.map((day) => ({ user_id: user.id, day, tier: 1, attempt: 1, key: "C", score: 80, accuracy: 80, finished_at: new Date(`${day}T12:00:00Z`) })),
+      });
+      const run = await service.startAttempt(m.prisma, user.id, { date: today.date, tier: 3 });
+      const result = await service.finishAttempt(m.prisma, user.id, run.id, { score: 74, accuracy: 74 });
+      expect(result.rewards!.items).toEqual(expect.arrayContaining([{ amount: 40, reason: "Daily challenge cleared: Advanced" }]));
+      expect(result.rewards!.newAchievements.map((a) => a.key)).toEqual(
+        expect.arrayContaining(["daily_challenge_first", "daily_challenge_streak_7", "daily_challenge_advanced"]),
+      );
     });
   });
 });

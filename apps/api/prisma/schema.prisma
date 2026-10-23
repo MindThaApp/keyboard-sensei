@@ -52,6 +52,7 @@ model User {
   tts_usage          TtsUserUsage[]
   xp_events          XpEvent[]
   practice_days      PracticeDay[]
+  challenge_attempts ChallengeAttempt[]
   auth_tokens        AuthToken[]
   game_rounds        GameRound[]
 }
@@ -79,7 +80,7 @@ model AuthToken {
 model XpEvent {
   id         String   @id @default(cuid())
   user_id    String
-  // exercise | lesson | quiz | playalong | star | daily_goal | streak
+  // exercise | lesson | quiz | playalong | star | daily_goal | streak | challenge | note_reading_round
   source     String
   amount     Int
   reason     String
@@ -105,6 +106,30 @@ model PracticeDay {
   user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, day])
+}
+
+/// One run at a tier of the daily challenge. A row is created when the run starts, so
+/// leaving a run unfinished still uses up the attempt (three per tier per day).
+model ChallengeAttempt {
+  id          String    @id @default(cuid())
+  user_id     String
+  // The challenge's date: YYYY-MM-DD in the learner's timezone when the run started.
+  day         String
+  // 1 = Starter, 2 = Intermediate, 3 = Advanced.
+  tier        Int
+  // 1–3: which of the tier's attempts this is.
+  attempt     Int
+  // The key it was played in (see @keyboard-sensei/challenge-gen KEYS).
+  key         String
+  // Null until the run is finished.
+  score       Float?
+  accuracy    Float?
+  started_at  DateTime  @default(now())
+  finished_at DateTime?
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, day, tier, attempt])
+  @@index([user_id, finished_at])
 }
 
 model UserAchievement {

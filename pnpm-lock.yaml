@@ -22,6 +22,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@keyboard-sensei/challenge-gen':
+        specifier: workspace:*
+        version: link:../../packages/challenge-gen
       '@keyboard-sensei/lesson-engine':
         specifier: workspace:*
         version: link:../../packages/lesson-engine
@@ -138,6 +141,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.5.3
         version: 8.5.3
+      '@keyboard-sensei/challenge-gen':
+        specifier: workspace:*
+        version: link:../../packages/challenge-gen
       '@keyboard-sensei/lesson-engine':
         specifier: workspace:*
         version: link:../../packages/lesson-engine
@@ -229,6 +235,15 @@ importers:
       vite:
         specifier: ^5.4.3
         version: 5.4.21(@types/node@20.19.43)
+
+  packages/challenge-gen:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(jsdom@30.1.3)(tsx@4.22.4)
 
   packages/lesson-engine:
     dependencies:
