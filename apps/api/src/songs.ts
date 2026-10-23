@@ -13,7 +13,7 @@ import { attemptSchema, levelOf, personalBests } from "./practice-attempts.js";
 import { rewardPlayAlongAttempt, type Rewards } from "./progression/rewards.js";
 import { classifyMidiQuality } from "./midi-quality.js";
 import { storedSignals } from "./catalogue/backfill.js";
-import { importScore, InvalidScoreError } from "./scores/import-score.js";
+import { importScore, InvalidScoreError, type ImportedScore } from "./scores/import-score.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -113,7 +113,7 @@ export const canSeeSong = (
 const songVisibleTo = async (song: EligibilityFields, userId: string): Promise<boolean> =>
   canSeeSong(song, userId, false) || (await isAdminUser(userId));
 
-const songListItem = (song: {
+export const songListItem = (song: {
   id: string;
   title: string;
   artist: string;
@@ -414,6 +414,62 @@ songsRouter.post(
   },
 );
 
+export type SongGenre = z.infer<typeof scoreUploadQuerySchema>["genre"];
+
+/**
+ * Stores an imported score as a private song of `userId`: the MIDI that is played, the
+ * MEI that is shown, and the original score as sent. Shared by score uploads and
+ * recognised sheet music (POST /omr/jobs/:id/save).
+ */
+export async function saveImportedScore(input: {
+  userId: string;
+  original: Uint8Array;
+  imported: ImportedScore;
+  metadata: SongMetadata;
+  title: string;
+  artist: string;
+  genre: SongGenre;
+  contentRights: "user-score-upload" | "user-score-scan";
+}) {
+  const { userId, imported, metadata } = input;
+  const quality = classifyMidiQuality(imported.midi);
+  await mkdir(MIDI_LIBRARY_DIR, { recursive: true });
+  const song = await prisma.song.create({
+    data: {
+      title: input.title,
+      artist: input.artist,
+      genre: input.genre,
+      difficulty: metadata.difficulty,
+      duration_sec: metadata.durationSec,
+      note_count: metadata.noteCount,
+      content_rights: input.contentRights,
+      file_path: "pending",
+      uploader_id: userId,
+      // Catalogue fields, as the backfill would set them for any upload: never public.
+      source_kind: "upload",
+      source_ref: createHash("sha256").update(input.original).digest("hex"),
+      file_licence: "unknown",
+      public_eligible: false,
+      hands: imported.report.playedStaves.length >= 2 ? "both" : null,
+      quality_tier: quality.tier,
+      quality_score: quality.score,
+      quality_signals: quality.signals ? storedSignals(quality.signals) : undefined,
+      quality_checked_at: new Date(),
+    },
+  });
+  const base = path.join(MIDI_LIBRARY_DIR, `score-${song.id}`);
+  const files = { file_path: `${base}.mid`, notation_path: `${base}.mei`, score_path: `${base}.${imported.kind}` };
+  try {
+    await writeFile(files.file_path, imported.midi);
+    await writeFile(files.notation_path, imported.mei);
+    await writeFile(files.score_path, input.original);
+  } catch (error) {
+    await deleteSongRow({ id: song.id, uploader_id: userId, ...files });
+    throw error;
+  }
+  return prisma.song.update({ where: { id: song.id }, data: files });
+}
+
 /**
  * A score (MusicXML, compressed .mxl or MEI) becomes a private song: Verovio's MEI of it
  * is the notation, the MIDI of the expanded score is what is played and scored, and the
@@ -443,43 +499,17 @@ songsRouter.post(
         }
         throw error;
       }
-      const quality = classifyMidiQuality(imported.midi);
-      await mkdir(MIDI_LIBRARY_DIR, { recursive: true });
-      const song = await prisma.song.create({
-        data: {
-          title: query.title ?? imported.title ?? "Untitled score",
-          artist: query.artist ?? imported.composer ?? "Unknown",
-          genre: query.genre,
-          difficulty: metadata.difficulty,
-          duration_sec: metadata.durationSec,
-          note_count: metadata.noteCount,
-          content_rights: "user-score-upload",
-          file_path: "pending",
-          uploader_id: userId,
-          // Catalogue fields, as the backfill would set them for any upload: never public.
-          source_kind: "upload",
-          source_ref: createHash("sha256").update(bytes).digest("hex"),
-          file_licence: "unknown",
-          public_eligible: false,
-          hands: imported.report.playedStaves.length >= 2 ? "both" : null,
-          quality_tier: quality.tier,
-          quality_score: quality.score,
-          quality_signals: quality.signals ? storedSignals(quality.signals) : undefined,
-          quality_checked_at: new Date(),
-        },
+      const song = await saveImportedScore({
+        userId,
+        original: bytes,
+        imported,
+        metadata,
+        title: query.title ?? imported.title ?? "Untitled score",
+        artist: query.artist ?? imported.composer ?? "Unknown",
+        genre: query.genre,
+        contentRights: "user-score-upload",
       });
-      const base = path.join(MIDI_LIBRARY_DIR, `score-${song.id}`);
-      const files = { file_path: `${base}.mid`, notation_path: `${base}.mei`, score_path: `${base}.${imported.kind}` };
-      try {
-        await writeFile(files.file_path, imported.midi);
-        await writeFile(files.notation_path, imported.mei);
-        await writeFile(files.score_path, bytes);
-      } catch (error) {
-        await deleteSongRow({ id: song.id, uploader_id: userId, ...files });
-        throw error;
-      }
-      const updated = await prisma.song.update({ where: { id: song.id }, data: files });
-      res.status(201).json({ ...songListItem(updated, userId), import_report: imported.report });
+      res.status(201).json({ ...songListItem(song, userId), import_report: imported.report });
     } catch (e) {
       next(e);
     }
