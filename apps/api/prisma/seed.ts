@@ -8,6 +8,8 @@ import { PrismaClient, ProgressStatus, type Prisma } from "@prisma/client";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import { exercises, lessons } from "../src/content.js";
 import { seedContent } from "../src/seed-content.js";
+import { backfillUnlocks } from "../src/progress.js";
+import { LEGACY_PREREQUISITES } from "../src/content/legacy-prerequisites.js";
 import { DUPLICATE_OF, prepareLibraryManifest } from "../src/library-titles.js";
 import { extractSongMetadata, type SongMetadata } from "../src/midi-metadata.js";
 import { readEssentialsIndex, supersededLibraryIds } from "../src/essentials/replacements.js";
@@ -154,6 +156,10 @@ async function main(){
   const content=await seedContent(prisma,lessons,exercises);
   if(content.deletedLessonIds.length>0||content.deletedExerciseIds.length>0)console.log(`Pruned unreferenced content: lessons [${content.deletedLessonIds.join(", ")}], exercises [${content.deletedExerciseIds.join(", ")}]`);
   for(const [index,lesson] of lessons.entries())await prisma.userProgress.upsert({where:{user_id_lesson_id:{user_id:demo.id,lesson_id:lesson.id}},create:{user_id:demo.id,lesson_id:lesson.id,status:index===0?ProgressStatus.unlocked:ProgressStatus.locked},update:{status:index===0?ProgressStatus.unlocked:ProgressStatus.locked,best_score:0,completed_at:null}});
+  // Lessons a learner has earned (current or pre-reorder prerequisites complete) get a
+  // stored unlocked row, so reordering the course never takes one away (src/progress.ts).
+  const unlocks=await backfillUnlocks(prisma,lessons,LEGACY_PREREQUISITES);
+  console.log(`Unlock backfill: ${unlocks.unlocked} lessons unlocked across ${unlocks.users} users`);
   await seedSongs();
   const essentials=await seedEssentials(prisma);
   console.log(`Seeded ${essentials.seeded} Essentials versions${essentials.removed.length>0?`, removed ${essentials.removed.length} no longer generated`:""}`);

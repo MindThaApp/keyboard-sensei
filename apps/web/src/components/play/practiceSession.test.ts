@@ -5,11 +5,11 @@ import { afterLoop, levelSources, parsePracticePreset, practicePresetSearch, pra
 describe("practiceSummary", () => {
   it("reads like the brief", () => {
     expect(practiceSummary({ hands: "right", loop: { startBar: 8, endBar: 15 }, tempoPct: 70, level: "easy", waitMode: false })).toBe(
-      "Right hand · Bars 9–16 · 70% · Easy",
+      "Right hand · Bars 9–16 · 70% · Tune + bass",
     );
-    expect(practiceSummary({ hands: "both", loop: null, tempoPct: 100, level: "full", waitMode: true })).toBe("Both hands · 100% · Full · Wait mode");
+    expect(practiceSummary({ hands: "both", loop: null, tempoPct: 100, level: "full", waitMode: true })).toBe("Both hands · 100% · Full · Wait for me");
     expect(practiceSummary({ hands: "left", loop: { startBar: 3, endBar: 3 }, tempoPct: 55.4, level: "melody", waitMode: false })).toBe(
-      "Left hand · Bar 4 · 55% · Melody only",
+      "Left hand · Bar 4 · 55% · Just the tune",
     );
   });
 });

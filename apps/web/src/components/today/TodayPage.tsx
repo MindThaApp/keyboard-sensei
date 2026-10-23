@@ -69,14 +69,14 @@ function GoalCard({ today }: { today: TodayResponse }) {
         )}
         {streak.frozenDays.length > 0 && (
           <p className="text-footnote text-label-2a" data-testid="freeze-used">
-            <span aria-hidden>❄️ </span>A streak freeze covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`}.
+            <span aria-hidden>❄️ </span>A day-off pass covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`}.
           </p>
         )}
         {hasMetGoal && (
           <p className="text-footnote text-label-2a">
             {streak.freezesAvailable > 0
-              ? `${streak.freezesAvailable} streak freeze${streak.freezesAvailable > 1 ? "s" : ""} banked. A missed day won't break your streak.`
-              : `Meet your goal ${streak.daysToNextFreeze} more day${streak.daysToNextFreeze === 1 ? "" : "s"} in a row to earn a streak freeze.`}
+              ? `${streak.freezesAvailable} day-off pass${streak.freezesAvailable > 1 ? "es" : ""} saved. A missed day won't break your streak.`
+              : `Meet your goal ${streak.daysToNextFreeze} more day${streak.daysToNextFreeze === 1 ? "" : "s"} in a row to earn a day-off pass.`}
           </p>
         )}
       </div>
@@ -121,10 +121,15 @@ function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) 
   );
 }
 
+/** Beginners (level 3 or below) get a note-reading nudge once a week, on Wednesdays. */
+const showNoteReading = (today: TodayResponse): boolean =>
+  today.level.level <= 3 && new Date(`${today.today}T00:00:00Z`).getUTCDay() === 3;
+
 function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGymDrill | null }) {
   const { review, song } = today;
   // A new learner sees the ring and one "Up next" card, not an empty list.
-  if (!song && !review && !warmup) return null;
+  const noteReading = showNoteReading(today);
+  if (!song && !review && !warmup && !noteReading) return null;
   return (
     <ListGroup header="Also today" aria-label="Also today">
       {song && (
@@ -167,6 +172,17 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           iconColor="rgb(52 199 89)"
           title="Warm up your fingers"
           subtitle={`${warmup.label} · 2 min`}
+          accessory="chevron"
+        />
+      )}
+      {noteReading && (
+        <ListRow
+          as={Link}
+          to="/practice/notes"
+          icon="♯"
+          iconColor="rgb(255 45 85)"
+          title="Note reading"
+          subtitle="Name notes on the staff · 2 min"
           accessory="chevron"
         />
       )}

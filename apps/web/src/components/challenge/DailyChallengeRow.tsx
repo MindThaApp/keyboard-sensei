@@ -45,7 +45,7 @@ export default function DailyChallengeRow() {
       as={Link}
       to={`/challenge?tier=${tier.tier}`}
       icon="★"
-      iconColor="rgb(255 45 85)"
+      iconColor="rgb(175 82 222)"
       title={
         <span className="flex flex-wrap items-center gap-2" data-testid="daily-challenge-row">
           Daily challenge

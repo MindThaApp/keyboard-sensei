@@ -1,22 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { generateChallenge, type ChallengeTier } from "@keyboard-sensei/challenge-gen";
 import type { PlayAlongResult } from "@keyboard-sensei/midi-engine";
 import type { PlayAlongEngine } from "@keyboard-sensei/playalong-core";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
-import { useTheme } from "../../contexts/ThemeContext";
-import { useDeviceClass } from "../../contexts/AppearanceContext";
+import { useAppearance, useDeviceClass } from "../../contexts/AppearanceContext";
 import { useFocusMode } from "../../hooks/useFocusMode";
 import { useKeyboardSizing, snapRangeToWhiteKeys } from "../piano/useKeyboardSizing";
 import { PlayAlongHud, PlayAlongPiano } from "../play/PlayAlongLive";
 import ScrollingScore, { type ScrollingScoreHandle } from "../play/ScrollingScore";
 import { stageLayout } from "../play/stageLayout";
 import { usePlayAlongRun, type RunSettings } from "../play/usePlayAlongRun";
-import { drawWaterfall, pianoRangeFor, WATERFALL_COLORS_DARK, WATERFALL_COLORS_LIGHT } from "../play/waterfall";
+import { drawWaterfall, pianoRangeFor } from "../play/waterfall";
+import { notePalette, notePaletteCssVars, stageToneFor } from "../play/notePalette";
+import { useExperienceMode } from "../ui/useExperienceMode";
+import { useReducedMotion } from "../../utils/motion";
 import { StarRating } from "../progress/ProgressBits";
 import { formatDuration } from "../../utils/songLibrary";
-import { Button, Card, Chip, ErrorState, ListGroup, ListRow, SegmentedControl, Skeleton, Toggle } from "../ui";
+import { Button, Card, Chip, ErrorState, ListGroup, ListRow, SegmentedControl, Skeleton, Toggle, glossary } from "../ui";
+import { CLICK_EVERY_LABEL } from "../ui/glossary";
 import {
   finishChallengeAttempt,
   getChallengeToday,
@@ -175,7 +178,9 @@ function TierStage({
   const { arrangement, run } = useMemo(() => challengeRun(song), [song]);
 
   const { subscribe, devices, deviceRange } = useMidiContext();
-  const { theme } = useTheme();
+  const { scheme } = useAppearance();
+  const experience = useExperienceMode();
+  const reducedMotion = useReducedMotion();
   const { device } = useDeviceClass();
   const focus = useFocusMode();
 
@@ -208,22 +213,22 @@ function TierStage({
   const tightRange = useMemo(() => snapRangeToWhiteKeys({ lowestNote: song.pitchMin, highestNote: song.pitchMax }), [song]);
   const sizing = useKeyboardSizing({ defaultRange: tightRange, tightRange: paddedRange, deviceRange, hasDevice: devices.length > 0, containerWidthPx: stageSize.width });
   const geometry = sizing.geometry;
-  const colors = theme === "light" ? WATERFALL_COLORS_LIGHT : WATERFALL_COLORS_DARK;
   const { pianoHeightPx, waterfallHeightPx } = stageLayout({
     stageHeightPx: stageSize.height,
     whiteKeyWidthPx: geometry.whiteKeyWidthPx,
     visibilityMode: "note-size",
     lookaheadS: LOOKAHEAD_S,
   });
-  const layoutRef = useRef({ geometry, waterfallHeightPx, colors });
-  layoutRef.current = { geometry, waterfallHeightPx, colors };
+  const palette = notePalette(stageToneFor({ scheme, style: "classic", playing: mode !== null }));
+  const layoutRef = useRef({ geometry, waterfallHeightPx, palette, reducedMotion });
+  layoutRef.current = { geometry, waterfallHeightPx, palette, reducedMotion };
 
   const draw = useCallback(
     (engine: PlayAlongEngine | null, songTimeS: number) => {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
-      const { geometry: g, waterfallHeightPx: height, colors: palette } = layoutRef.current;
+      const { geometry: g, waterfallHeightPx: height, palette: colours, reducedMotion: still } = layoutRef.current;
       const dpr = window.devicePixelRatio || 1;
       // canvas.width is an integer setter: compare rounded sizes or it reallocates every frame.
       const width = Math.round(g.widthPx * dpr);
@@ -240,7 +245,9 @@ function TierStage({
         lookaheadS: LOOKAHEAD_S,
         geometry: g,
         heightPx: height,
-        colors: palette,
+        palette: colours,
+        waitingPitches: engine?.isWaiting ? engine.waitingMidis : undefined,
+        reducedMotion: still,
         bars: run.bars,
       });
     },
@@ -356,7 +363,7 @@ function TierStage({
     if (running) return;
     draw(null, 0);
     scoreRef.current?.setSongTime(0);
-  }, [running, draw, geometry, waterfallHeightPx, colors]);
+  }, [running, draw, geometry, waterfallHeightPx, palette]);
 
   // Leave focus mode with the page.
   useEffect(() => () => focus.exit(), [focus.exit]);
@@ -373,7 +380,9 @@ function TierStage({
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Chip tone="tint">{state.key.name}</Chip>
-              <Chip>Speed {state.tempoBpm}</Chip>
+              <Chip>
+                {glossary.bpm.plain} {state.tempoBpm}
+              </Chip>
               <Chip>{formatDuration(state.durationSeconds)}</Chip>
               {piece.leftHand !== "none" && <Chip>Both hands</Chip>}
             </div>
@@ -406,10 +415,10 @@ function TierStage({
             </div>
             {practiceLocked && (
               <p id="practice-locked" className="text-footnote text-label-2a">
-                Practice (with Wait for me) opens after your first attempt.
+                Practice ({glossary.waitMode.plain}) opens after your first attempt.
               </p>
             )}
-            <Toggle checked={metronome} onChange={setMetronome} label="Click" description="A metronome click on every beat." />
+            <Toggle checked={metronome} onChange={setMetronome} label={`Click every ${CLICK_EVERY_LABEL.beat}`} description="A metronome, to keep you in time." />
           </div>
         </Card>
       )}
@@ -426,10 +435,10 @@ function TierStage({
         </p>
       )}
 
-      <section aria-label="Challenge stage" className={focused ? "fixed inset-0 z-40 flex flex-col gap-2 bg-bg p-3" : "space-y-2"}>
+      <section aria-label="Challenge stage" style={notePaletteCssVars(palette) as CSSProperties} className={focused ? "fixed inset-0 z-40 flex flex-col gap-2 bg-bg p-3" : "space-y-2"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           {running ? (
-            <PlayAlongHud waitMode={mode === "practice"} tempoPct={100} lookaheadS={LOOKAHEAD_S} level="full" hands="both" paused={paused} loopLabel={mode === "listen" ? "Listening" : null} />
+            <PlayAlongHud detailed={experience === "advanced"} waitMode={mode === "practice"} tempoPct={100} lookaheadS={LOOKAHEAD_S} level="full" hands="both" paused={paused} loopLabel={mode === "listen" ? "Listening" : null} />
           ) : (
             <MidiStatusBar variant="chip" />
           )}
@@ -483,7 +492,7 @@ function ResultCard({ result, clearScore }: { result: ChallengeFinishResponse; c
         <div>
           <p className="text-footnote font-semibold uppercase tracking-wide text-tint">Attempt {result.attempt.attempt}</p>
           <p className="text-title2 text-label" data-testid="attempt-score">
-            {score}% of notes · {cleared ? "Cleared!" : `${clearScore} clears it`}
+            {glossary.accuracy.plain}: {score}% · {cleared ? "Cleared!" : `${clearScore} clears it`}
           </p>
         </div>
         <span className="flex items-center gap-2 text-subhead text-label-2a">

@@ -148,7 +148,7 @@ export async function startAttempt(
       data: { user_id: userId, day: today.date, tier, attempt: used + 1, key: view.key.id, started_at: now },
       select: { id: true, attempt: true },
     });
-  });
+  }, { maxWait: 10_000, timeout: 10_000 });
   if (!row) throw new ChallengeError(409, "no_attempts_left", `All ${MAX_ATTEMPTS} attempts at ${view.name} are used today`);
   return { id: row.id, attempt: row.attempt, attemptsLeft: MAX_ATTEMPTS - row.attempt, key: view.key.id };
 }

@@ -7,7 +7,7 @@ export const coreExercises: MidiExercise[] = [
   ex("exercise-06",[48,47,45,43,41].map((n,i)=>note(`lh-${i}`,n,i,1,"left",i+1,"", "bass")).map(n=>({...n,chordGroupId:null}))),
   ex("exercise-07",[note("l-c",48,0,1,"left",5,null,"bass"),note("r-c",60,1,1,"right",1),note("l-g",43,2,1,"left",5,null,"bass"),note("r-g",67,3,1,"right",5)]),
   ex("exercise-08",[60,62,64,65,67,65,64,62,60].map((n,i)=>note(`pattern-${i}`,n,i,1,"right",[1,2,3,4,5,4,3,2,1][i]!))),
-  ex("exercise-09",[note("third-c",60,0,2,"right",1,"third","chord"),note("third-e",64,0,2,"right",3,"third","chord"),note("fifth-c",60,3,2,"left",5,"fifth","chord"),note("fifth-g",67,3,2,"right",5,"fifth","chord")],true),
+  ex("exercise-09",[note("third-c",60,0,2,"right",1,"third","chord"),note("third-e",64,0,2,"right",3,"third","chord"),note("fifth-c",60,3,2,"right",1,"fifth","chord"),note("fifth-g",67,3,2,"right",5,"fifth","chord")],true),
   ex("exercise-10",[note("cmaj-c",60,0,2,"right",1,"c-major","chord"),note("cmaj-e",64,0,2,"right",3,"c-major","chord"),note("cmaj-g",67,0,2,"right",5,"c-major","chord"),note("amin-a",57,3,2,"left",5,"a-minor","chord"),note("amin-c",60,3,2,"right",1,"a-minor","chord"),note("amin-e",64,3,2,"right",3,"a-minor","chord")],true),
   ex("exercise-11",[note("sr1",60,0),note("sr2",62,1),note("sr3",64,2,2),note("sr4",62,4),note("sr5",60,5,2)],true),
   ex("exercise-12",[note("a1",60,0),note("a2",62,1),note("int-c",60,2,2,"left",5,"assessment-interval","chord"),note("int-e",64,2,2,"right",3,"assessment-interval","chord"),note("a3",67,5),note("triad-c",60,6,2,"left",5,"assessment-triad","chord"),note("triad-e",64,6,2,"right",3,"assessment-triad","chord"),note("triad-g",67,6,2,"right",5,"assessment-triad","chord")],true),

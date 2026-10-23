@@ -288,8 +288,8 @@ export default function InstrumentSection() {
             }`}
           >
             <div>
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Built-in synth</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">The default voice; no download required.</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Piano (basic)</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">The default sound; no download needed.</p>
             </div>
             <button
               type="button"
