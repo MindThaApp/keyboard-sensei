@@ -728,10 +728,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     it("finishing a lesson opens the next lesson AND any path that branches from it", async () => {
       const user = await createUser();
-      const course = m.content.lessons.map((lesson) => lesson.id);
       // Lessons 1–10 already done (written directly; their unlock writes are not under test here).
+      const firstTen = Array.from({ length: 10 }, (_, index) => `lesson-${String(index + 1).padStart(2, "0")}`);
       await m.prisma.userProgress.createMany({
-        data: course.slice(0, 10).map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
+        data: firstTen.map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
       });
       expect(await statusOf(user.token, "lesson-11")).toBe("unlocked");
       expect(await statusOf(user.token, "lesson-reading-c-position")).toBe("locked");
@@ -750,9 +750,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       // Completing lesson 12 behind the API's back (as if the Modern Chords path had been
       // added after the learner finished it) writes no unlock row, yet its first lesson
       // opens at read time.
-      await m.prisma.userProgress.update({
+      await m.prisma.userProgress.upsert({
         where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-12" } },
-        data: { status: "completed", best_score: 90 },
+        create: { user_id: user.id, lesson_id: "lesson-12", status: "completed", best_score: 90 },
+        update: { status: "completed", best_score: 90 },
       });
       expect(await statusOf(user.token, "lesson-chords-major-symbols")).toBe("unlocked");
       const detail = await api("GET", "/lessons/lesson-chords-major-symbols", { token: user.token });

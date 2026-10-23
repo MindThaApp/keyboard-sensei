@@ -9,8 +9,8 @@ import { exercises, lessons } from "./content.js";
  *
  * Adding content: append the new ids to the matching list. Never edit or reorder an
  * existing entry to make this test pass — that is precisely the bug it guards against.
- * (Order in these lists is the order the ids appear in content, which is allowed to
- * change; the comparison below is order-sensitive only so a diff is easy to read.)
+ * (Lesson order is allowed to change, so lesson ids are compared as a set. Exercise ids
+ * are compared in order only so a diff is easy to read.)
  */
 const FROZEN_LESSON_IDS = [
   "lesson-01", "lesson-02", "lesson-03", "lesson-04", "lesson-05", "lesson-06", "lesson-07",
@@ -300,7 +300,8 @@ const questionOwners = () =>
 
 describe("content ids are stable database keys", () => {
   it("lesson ids are identical to the ids live user data is keyed on", () => {
-    expect(lessons.map((lesson) => lesson.id)).toEqual(FROZEN_LESSON_IDS);
+    // Compared as sets: lessons are ordered by tier (content.ts), so their order may change.
+    expect(lessons.map((lesson) => lesson.id).sort()).toEqual([...FROZEN_LESSON_IDS].sort());
   });
 
   it("exercise ids and their owning lessons are unchanged", () => {
