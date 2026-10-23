@@ -36,13 +36,15 @@ import {
   ladderPosition,
   ladderStep,
   LEVEL_LABELS,
+  loadSongChoices,
   loadSongMemory,
   parsePracticePreset,
   PRACTICE_LADDER,
   practiceSummary,
   runStars,
+  saveSongChoices,
   saveSongMemory,
-  simpleStart,
+  simpleOpening,
   type LadderState,
 } from "./practiceSession";
 import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, type Settings } from "./practiceSettings";
@@ -159,7 +161,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     const hands: PracticeHands = preset.hands ?? "both";
     const hasPreset = preset.level !== undefined || preset.hands !== undefined || preset.loop !== undefined;
     if (experience === "simple" && !hasPreset) {
-      const start = simpleStart(loadSongMemory(sources.baseId), { level, hands, tempoPct: saved.tempoPct, waitMode: saved.waitMode });
+      const start = simpleOpening(loadSongMemory(sources.baseId), loadSongChoices(sources.baseId), { level, hands, tempoPct: saved.tempoPct, waitMode: saved.waitMode });
       return { settings: { ...saved, tempoPct: start.tempoPct, waitMode: start.waitMode }, level: start.level, hands: start.hands };
     }
     return { settings: saved, level, hands };
@@ -195,6 +197,18 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [stageHeight, setStageHeight] = useState(0);
 
   useEffect(() => saveSettings(settings), [settings]);
+
+  // Opening a song marks it as opened, so the beginner start only happens the first time.
+  // Done here, not in the state initialiser above: StrictMode runs that twice, and the
+  // second run would see the mark and skip the beginner start.
+  useEffect(() => {
+    if (!loadSongChoices(sources.baseId)) saveSongChoices(sources.baseId, {});
+  }, [sources.baseId]);
+
+  /** Wait for me as the user set it (toggle, result sheet or ladder): kept for this song's next open. */
+  const rememberWaitChoice = (on: boolean) => {
+    saveSongChoices(sources.baseId, { ...loadSongChoices(sources.baseId), waitMode: on });
+  };
 
   // Fetch real MusicXML/.mxl notation for archive-imported songs when there is some
   // (notation_path is a presence flag). Everything else uses ScrollingScore below.
@@ -509,6 +523,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     setLevel(next.level);
     setHands(next.hands);
     setSettings((s) => ({ ...s, tempoPct: next.tempoPct, waitMode: next.waitMode }));
+    rememberWaitChoice(next.waitMode);
     setToast({ id: Date.now(), title: `${direction === 1 ? "Harder" : "Easier"}: ${rung.label}`, body: rung.detail });
   };
 
@@ -523,6 +538,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const resetSettings = () => {
     const defaults = experience === "simple" ? defaultSettingsFor("simple") : DEFAULT_SETTINGS;
     setSettings((s) => ({ ...defaults, notesStyle: s.notesStyle }));
+    rememberWaitChoice(defaults.waitMode);
     setLoopOn(false);
   };
 
@@ -712,7 +728,11 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
                   Harder
                 </Button>
                 <span className="ks-practice-transport__divider" aria-hidden="true" />
-                <Toggle label="Wait for me" checked={settings.waitMode} onChange={(on) => setSettings((s) => ({ ...s, waitMode: on }))} className="ks-practice-wait" />
+                <Toggle label="Wait for me" checked={settings.waitMode} onChange={(on) => {
+                    setSettings((s) => ({ ...s, waitMode: on }));
+                    rememberWaitChoice(on);
+                  }}
+                  className="ks-practice-wait" />
                 {finished && (
                   <Button variant="plain" onClick={() => setResultOpen(true)}>
                     Result
@@ -774,10 +794,12 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
         onPlayAgain={start}
         onPlayForStars={() => {
           setSettings((s) => ({ ...s, waitMode: false }));
+          rememberWaitChoice(false);
           startAfterChange();
         }}
         onTryWait={() => {
           setSettings((s) => ({ ...s, waitMode: true }));
+          rememberWaitChoice(true);
           startAfterChange();
         }}
         onStepLadder={(rung) => {

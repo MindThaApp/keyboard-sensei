@@ -50,6 +50,30 @@ describe("PianoSynth instrument cache", () => {
   });
 });
 
+describe("releaseInactiveInstruments", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    disposed.length = 0;
+  });
+
+  it("frees every cached instrument except the active one", async () => {
+    const synth = new PianoSynth();
+    for (const id of ["a", "b", "c"]) await synth.useInstrument(id);
+    synth.releaseInactiveInstruments();
+    expect(synth.cachedInstrumentIds).toEqual(["c"]);
+    expect(disposed).toEqual(["a", "b"]);
+    expect(synth.currentInstrumentId).toBe("c");
+  });
+
+  it("frees everything cached once the built-in synth is selected", async () => {
+    const synth = new PianoSynth();
+    await synth.useInstrument("a");
+    await synth.useInstrument(null);
+    synth.releaseInactiveInstruments();
+    expect(synth.cachedInstrumentIds).toEqual([]);
+  });
+});
+
 describe("maxCachedInstruments", () => {
   const desktopChrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36";
   const iPadSafari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";

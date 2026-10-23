@@ -6,7 +6,7 @@ import type { User } from "@prisma/client";
 import { createAccessToken, requireAuth } from "./auth.js";
 import { env } from "./config.js";
 import { prisma } from "./db.js";
-import { AccountDeletionRefused, deleteUserAccount } from "./account.js";
+import { AccountDeletionRefused, DEMO_EMAIL, deleteUserAccount } from "./account.js";
 import { GoogleTokenError, googleSignInConfigured, verifyGoogleIdToken } from "./google.js";
 import { appUrl, sendMailInBackground } from "./mailer.js";
 import {
@@ -141,7 +141,10 @@ authRouter.post("/auth/login", loginRateLimit, async (req, res, next) => {
   try {
     const input = credentials.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
-    if (!user || !(await bcrypt.compare(input.password, user.password_hash))) {
+    // The shared demo account has a published password, so a public deployment refuses it
+    // outright (same answer as any wrong password) even if the row was seeded there.
+    const demoBlocked = env.PUBLIC_CATALOGUE && user?.email === DEMO_EMAIL;
+    if (!user || demoBlocked || !(await bcrypt.compare(input.password, user.password_hash))) {
       res.status(401).json({ error: { code: "invalid_credentials", message: "Email or password is incorrect" } });
       return;
     }

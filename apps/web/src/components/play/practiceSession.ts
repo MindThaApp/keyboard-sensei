@@ -398,3 +398,45 @@ export function simpleStart(memory: SongMemory | null, current: LadderState): La
   // Step from the remembered rung itself, so leaving Learn it turns Wait for me off.
   return applyRung(applyRung(current, memory.rung), rung);
 }
+
+/**
+ * What the user chose themselves on one song. Its existence also marks the song as
+ * opened: the beginner start is for the first open only. A later open keeps an
+ * explicit choice instead of the ladder or the defaults putting it back.
+ */
+export interface SongChoices {
+  /** "Wait for me" as the user last set it; undefined until they touch it. */
+  waitMode?: boolean;
+}
+
+const SONG_CHOICES_PREFIX = "ks-practice-song-choices:";
+
+export function loadSongChoices(songId: string): SongChoices | null {
+  try {
+    const raw = localStorage.getItem(SONG_CHOICES_PREFIX + songId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SongChoices>;
+    return typeof parsed.waitMode === "boolean" ? { waitMode: parsed.waitMode } : {};
+  } catch {
+    return null;
+  }
+}
+
+export function saveSongChoices(songId: string, choices: SongChoices): void {
+  try {
+    localStorage.setItem(SONG_CHOICES_PREFIX + songId, JSON.stringify(choices));
+  } catch {
+    // Storage full or blocked: the song just falls back to the ladder next time.
+  }
+}
+
+/**
+ * Where a song opens in Simple mode. The beginner start applies to the very first
+ * open only; after that the remembered rung applies (a finished run), and what the
+ * user set by hand (Wait for me) is never put back by the defaults.
+ */
+export function simpleOpening(memory: SongMemory | null, choices: SongChoices | null, current: LadderState): LadderState {
+  if (!memory && !choices) return BEGINNER_START;
+  const start = memory ? simpleStart(memory, current) : current;
+  return choices?.waitMode === undefined ? start : { ...start, waitMode: choices.waitMode };
+}

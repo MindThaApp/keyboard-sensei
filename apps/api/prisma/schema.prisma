@@ -37,6 +37,9 @@ model User {
   // IANA zone the browser reported, so "today" and streak days follow the
   // learner's own midnight. NULL until the web app first reports it (UTC).
   timezone           String?
+  // "simple" | "advanced": the interface mode, synced so a new device picks it up.
+  // NULL until the user has chosen one.
+  experience_mode    String?
   created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]
