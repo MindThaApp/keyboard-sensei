@@ -32,6 +32,8 @@ export interface VirtualPianoProps {
   recommendedRange?: KeyRange;
   /** Notes to highlight as "play these next" — never shown as raw MIDI numbers, just visual key highlighting. */
   expectedNotes?: number[];
+  /** The notes a scrolling keyboard keeps in view (the next note due). Defaults to the expected notes. */
+  followNotes?: number[];
   /** Notes the app is playing (e.g. a Listen preview), drawn as held down. */
   soundingNotes?: number[];
   /** Post-attempt feedback coloring, keyed by MIDI note number. */
@@ -131,6 +133,8 @@ const PianoKey = memo(function PianoKey({
 const DEFAULT_MAX_WHITE_KEY_HEIGHT_PX = 180;
 /** An upright phone is narrow but tall: keys keep a playable height however many are fitted in. */
 const PHONE_PORTRAIT_MIN_WHITE_KEY_HEIGHT_PX = 168;
+/** Narrowest white key a finger can hit reliably. */
+const PHONE_MIN_TAP_KEY_PX = 24;
 
 /**
  * Key count + range label, instrument picker, key-size slider and the Auto-fit cycle
@@ -181,6 +185,7 @@ function VirtualPiano({
   range: rangeProp,
   recommendedRange,
   expectedNotes = [],
+  followNotes,
   soundingNotes = [],
   feedbackByNote = {},
   showLabels = true,
@@ -249,9 +254,10 @@ function VirtualPiano({
     onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
     keepTightRangeVisible: true,
     simpleFit: experience === "simple" && !sizingProp && !flat,
-    // On an upright phone the exercise's whole range fits on screen (narrow keys, no
-    // sideways scroll) instead of stopping at the comfortable-key-width floor.
-    fitFloorPx: phonePortrait ? ZOOM_MIN_PX : undefined,
+    // On an upright phone the whole exercise range fits when keys stay finger-sized
+    // (>= 24px); otherwise the keys stay 24px and the window follows the notes. With a
+    // MIDI keyboard connected nobody taps the screen, so a smaller fit is fine.
+    fitFloorPx: phonePortrait ? (hasDevice ? ZOOM_MIN_PX : PHONE_MIN_TAP_KEY_PX) : undefined,
   });
   const sizing = sizingProp ?? ownSizing;
   const { geometry } = sizing;
@@ -277,6 +283,25 @@ function VirtualPiano({
     const keysOffset = keys.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
     scroller.scrollLeft = Math.max(0, Math.round(keysOffset + centre - scroller.clientWidth / 2));
   }, [geometry, focusLow, focusHigh, scrollable, containerWidth]);
+
+  // Keep the next expected notes and the ones sounding in view when the keyboard scrolls.
+  // Instant (scrollLeft), never smooth: this fires on every note change.
+  const followKey = [...(followNotes ?? expectedNotes), ...soundingNotes].join(",");
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || !scrollable || followKey === "" || scroller.scrollWidth <= scroller.clientWidth) return;
+    const followed = followKey.split(",").map(Number);
+    const low = geometry.xFor(Math.min(...followed));
+    const high = geometry.xFor(Math.max(...followed));
+    const keys = scroller.firstElementChild;
+    if (!low || !high || !keys) return;
+    const keysOffset = keys.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
+    const left = keysOffset + low.x;
+    const right = keysOffset + high.x + high.width;
+    const margin = Math.min(24, scroller.clientWidth / 8);
+    if (left - margin >= scroller.scrollLeft && right + margin <= scroller.scrollLeft + scroller.clientWidth) return;
+    scroller.scrollLeft = Math.max(0, Math.round((left + right) / 2 - scroller.clientWidth / 2));
+  }, [followKey, geometry, scrollable]);
 
   const notes: number[] = [];
   for (let n = geometry.lowestNote; n <= geometry.highestNote; n++) notes.push(n);
