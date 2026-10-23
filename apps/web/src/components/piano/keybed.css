@@ -3,15 +3,6 @@
  * tint layer's `background-color`, so there is no layout and no repaint of the gradients.
  */
 .ks-keybed {
-  --key-lit-right: rgb(255 209 216 / 0.92);
-  --key-lit-left: rgb(211 225 255 / 0.92);
-  --key-lit-right-black: rgb(242 71 95 / 0.8);
-  --key-lit-left-black: rgb(76 125 255 / 0.8);
-  --key-ok: rgb(110 231 183 / 0.9);
-  --key-ok-black: rgb(5 150 105 / 0.85);
-  --key-bad: rgb(253 164 175 / 0.92);
-  --key-bad-black: rgb(225 29 72 / 0.85);
-  --key-dot: #f2475f;
   position: relative;
 }
 
@@ -62,12 +53,12 @@
   background-color: transparent;
   transition: background-color 200ms ease-out;
 }
-.ks-key[data-tint="right"]::before { background-color: var(--key-lit-right); }
-.ks-key[data-tint="left"]::before { background-color: var(--key-lit-left); }
+.ks-key[data-tint="right"]::before { background-color: color-mix(in srgb, var(--key-lit-right) 92%, transparent); }
+.ks-key[data-tint="left"]::before { background-color: color-mix(in srgb, var(--key-lit-left) 92%, transparent); }
 .ks-key[data-tint="ok"]::before { background-color: var(--key-ok); }
 .ks-key[data-tint="bad"]::before { background-color: var(--key-bad); }
-.ks-key-black[data-tint="right"]::before { background-color: var(--key-lit-right-black); }
-.ks-key-black[data-tint="left"]::before { background-color: var(--key-lit-left-black); }
+.ks-key-black[data-tint="right"]::before { background-color: color-mix(in srgb, var(--note-right) 80%, transparent); }
+.ks-key-black[data-tint="left"]::before { background-color: color-mix(in srgb, var(--note-left) 80%, transparent); }
 .ks-key-black[data-tint="ok"]::before { background-color: var(--key-ok-black); }
 .ks-key-black[data-tint="bad"]::before { background-color: var(--key-bad-black); }
 
@@ -133,11 +124,11 @@
   height: 8px;
   margin-left: -4px;
   border-radius: 50%;
-  background: var(--key-dot);
-  box-shadow: 0 0 0 3px rgb(242 71 95 / 0.3);
+  background: var(--note-right);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--note-right) 30%, transparent);
   pointer-events: none;
 }
-.ks-key-black .ks-key-dot { bottom: 12px; box-shadow: 0 0 0 3px rgb(242 71 95 / 0.4); }
+.ks-key-black .ks-key-dot { bottom: 12px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--note-right) 40%, transparent); }
 
 /* Flat variant (thumbnails): no depth, no lips, no case. */
 .ks-flat .ks-key { transform: none; transition: background-color 200ms ease-out; }

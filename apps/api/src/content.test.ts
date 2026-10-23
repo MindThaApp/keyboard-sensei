@@ -148,3 +148,35 @@ describe("authoring helpers", () => {
     expect(vexKey(70, true)).toBe("bb/4");
   });
 });
+
+describe("lesson tiers", () => {
+  const countsByTier = () => {
+    const counts: Record<number, number> = {};
+    for (const lesson of lessons) counts[lesson.tier] = (counts[lesson.tier] ?? 0) + 1;
+    return counts;
+  };
+
+  it("puts the specified number of lessons in each tier, with tiers 6 and 7 empty", () => {
+    expect(countsByTier()).toEqual({ 0: 6, 1: 6, 2: 9, 3: 10, 4: 15, 5: 13 });
+  });
+
+  it("gives every lesson a valid tier and at least one skill chip", () => {
+    for (const lesson of lessons) {
+      expect(lesson.tier, lesson.id).toBeGreaterThanOrEqual(0);
+      expect(lesson.tier, lesson.id).toBeLessThanOrEqual(7);
+      expect(lesson.skills.length, lesson.id).toBeGreaterThan(0);
+      expect(validateLesson(lesson).skills, lesson.id).toEqual(lesson.skills);
+    }
+  });
+
+  it("keeps the first-steps tier to the six foundation lessons", () => {
+    expect(lessons.filter((lesson) => lesson.tier === 0).map((lesson) => lesson.id)).toEqual([
+      "lesson-01",
+      "lesson-02",
+      "lesson-03",
+      "lesson-04",
+      "lesson-05",
+      "lesson-06",
+    ]);
+  });
+});

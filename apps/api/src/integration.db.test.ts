@@ -1007,6 +1007,23 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
       expect(await m.prisma.lesson.count({ where: { id: "lesson-dummy-retire" } })).toBe(0);
     });
+
+    it("stores tier and skills on the lesson row and returns them from GET /lessons", async () => {
+      const user = await createUser();
+      await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
+      const res = await api("GET", "/lessons", { token: user.token });
+      expect(res.status).toBe(200);
+      const perTier = new Map<number, number>();
+      for (const item of res.body as Array<{ id: string; tier: number; skills: string[] }>) {
+        const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
+        expect(item.tier, item.id).toBe(expected.tier);
+        expect(item.skills, item.id).toEqual(expected.skills);
+        perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
+      }
+      expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
+      const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
+      expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
+    });
   });
 
   describe("Essentials replacements", () => {

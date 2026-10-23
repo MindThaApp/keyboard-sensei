@@ -10,8 +10,18 @@ html[data-device="desktop"] .ks-shell-main {
   padding-top: 88px;
   padding-bottom: 48px;
 }
-html[data-device="desktop"] {
-  --ui-toast-bottom: 24px;
+
+/*
+ * Toasts sit just below the floating navigation, not above the tab bar: at the bottom
+ * they covered the keybed and the exercise's primary action. They are transient and
+ * dismissible, so briefly covering a page heading costs far less.
+ */
+html .ks-toast-viewport {
+  top: calc(72px + env(safe-area-inset-top));
+  bottom: auto;
+}
+html[data-device="desktop"] .ks-toast-viewport {
+  top: 80px;
 }
 
 /* ------------------------------------------------------------ scroll edges */
@@ -124,28 +134,6 @@ html[data-device="desktop"] {
   background: var(--fill);
 }
 
-/* ------------------------------------------------------------ back circle (stage) */
-.glass.ks-back-circle {
-  position: fixed;
-  z-index: 41;
-  top: calc(12px + env(safe-area-inset-top));
-  left: 12px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-}
-.ks-back-circle a {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  color: var(--label);
-  font-size: 28px;
-  line-height: 1;
-  text-decoration: none;
-}
-
 /* ------------------------------------------------------------ feedback launcher (admins) */
 .ks-feedback-launcher {
   position: fixed;
@@ -201,7 +189,6 @@ html[data-device="desktop"] .ks-feedback-launcher {
 /* Only the stage, the keyboard and the practice screen's own two controls stay. */
 html[data-focus-mode] .ks-tabbar,
 html[data-focus-mode] .ks-float-cluster,
-html[data-focus-mode] .ks-back-circle,
 html[data-focus-mode] .ks-edge,
 html[data-focus-mode] .ks-feedback-launcher,
 html[data-focus-mode] .ks-toast-viewport {
