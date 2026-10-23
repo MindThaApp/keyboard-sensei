@@ -238,7 +238,7 @@ export default function LessonListPage() {
         <section className="card relative overflow-hidden p-5 sm:p-6">
           <div className="felt-strip absolute inset-x-0 top-0" />
           <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-            {nextLesson.progress.bestScore > 0 ? "Continue practicing" : "Up next"}
+            {nextLesson.progress.bestScore > 0 ? "Continue practising" : "Up next"}
           </p>
           <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
             <div>

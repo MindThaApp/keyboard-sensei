@@ -6,6 +6,8 @@ import { useRewardsVersion } from "../../state/rewards";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { pathLabel, pathsInOrder } from "../../utils/paths";
 import { songPracticeLink } from "../../utils/practiceLinks";
+import { LEVEL_LABELS } from "../play/practiceSession";
+import { levelTitle } from "../ui/glossary";
 import { Advanced, Button, Card, EmptyState, ErrorState, ProgressRing, SegmentedControl, Skeleton } from "../ui";
 import PracticeHistory from "./PracticeHistory";
 import { buildWeek, formatMinutes, StarRating, WeekDots } from "./ProgressBits";
@@ -18,7 +20,6 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.value === value);
 
-const LEVEL_NAME = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
 const MEDALS_SHOWN = 6;
 
 /**
@@ -52,12 +53,12 @@ function LevelCard({ progression }: { progression: ProgressionResponse }) {
           stroke={9}
           label={level.level}
           sublabel="level"
-          aria-label={`Level ${level.level}, ${level.xpIntoLevel} of ${level.xpForNextLevel} XP to the next level`}
+          aria-label={`Level ${level.level}, ${level.xpIntoLevel} of ${level.xpForNextLevel} points to the next level`}
         />
         <div className="min-w-0">
-          <h2 className="text-title3 text-label">{level.title}</h2>
+          <h2 className="text-title3 text-label">{levelTitle(level.level, level.tier)}</h2>
           <p className="text-subhead text-label-2a">
-            {level.xpIntoLevel} / {level.xpForNextLevel} XP to level {level.level + 1}
+            {level.xpIntoLevel} / {level.xpForNextLevel} points to level {level.level + 1}
           </p>
         </div>
       </div>
@@ -191,7 +192,7 @@ function StarsCard({ progression }: { progression: ProgressionResponse }) {
                   {Object.keys(stars.byLevel).some((level) => level !== "full") && (
                     <span className="text-footnote text-label-2a">
                       {Object.entries(stars.byLevel)
-                        .map(([level, count]) => `${LEVEL_NAME[level as keyof typeof LEVEL_NAME]} ${count}★`)
+                        .map(([level, count]) => `${LEVEL_LABELS[level as keyof typeof LEVEL_LABELS]} ${count}★`)
                         .join(" · ")}
                     </span>
                   )}
@@ -221,7 +222,7 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
         <div className="space-y-4">
           <LevelCard progression={progression} />
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Practice" value={formatMinutes(progression.practiceMinutes)} hint={`${progression.level.totalXp.toLocaleString()} XP total`} />
+            <StatCard label="Practice" value={formatMinutes(progression.practiceMinutes)} hint={`${progression.level.totalXp.toLocaleString()} points total`} />
             <StatCard
               label="Streak"
               value={`${streak.current} day${streak.current === 1 ? "" : "s"}`}
@@ -243,8 +244,8 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
             <p className="mt-3 text-footnote text-label-2a">Earned from completed lessons (more for more stars) and from song stars.</p>
           </Card>
           {progression.recentXp.length > 0 && (
-            <Card as="section" aria-label="Recent XP">
-              <h2 className="mb-2 text-headline text-label">Recent XP</h2>
+            <Card as="section" aria-label="Recent points">
+              <h2 className="mb-2 text-headline text-label">Recent points</h2>
               <ul className="space-y-1.5">
                 {progression.recentXp.map((entry, index) => (
                   <li key={index} className="flex justify-between gap-3 text-subhead text-label-2">

@@ -346,8 +346,8 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
 
   const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
   return (
-    <section aria-label="Upload MIDI" className="card space-y-3 p-4">
-      <h2 className="text-sm font-semibold">Upload your own MIDI</h2>
+    <section aria-label="Upload song file" className="card space-y-3 p-4">
+      <h2 className="text-sm font-semibold">Upload your own song file</h2>
       <input
         type="file"
         accept=".mid,.midi,audio/midi"
@@ -481,7 +481,7 @@ export default function SongLibrarySection() {
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "file" ? null : "file")); }}>
-            Upload MIDI
+            Upload song file
           </button>
           <button className="secondary-button text-sm" onClick={() => { setUploading((v) => (v === "url" ? null : "url")); }}>
             Import from URL
