@@ -49,7 +49,15 @@ import {
   type WorkMeta,
 } from "./works-data.js";
 
-export type SourceKind = "essentials" | "beginner" | "adl" | "upload" | "recording" | "archive" | "unknown";
+export type SourceKind = "essentials" | "beginner" | "piano-midi-de" | "mutopia" | "adl" | "upload" | "recording" | "archive" | "unknown";
+
+/**
+ * Songs written by the source-pack importer (src/catalogue/packs/import.ts).
+ * It holds facts the backfill cannot see (the incipit check against a second
+ * source, the licence read from the file), so it owns their quality fields and
+ * the backfill leaves them alone.
+ */
+export const PACK_SOURCE_KINDS: ReadonlySet<string> = new Set(["piano-midi-de", "mutopia"]);
 export type PdStatus = "pd-worldwide" | "pd-us-eu" | "copyrighted" | "unknown";
 
 /** The columns the backfill reads. */
@@ -149,12 +157,19 @@ export function pdStatus(input: { traditional: boolean; died: number | null; pub
 const PUBLIC_DOMAIN = new Set<string>(["pd-worldwide", "pd-us-eu"]);
 const FREE_LICENCE_FAMILIES = new Set<FileLicence>(["public-domain", "cc-by", "cc-by-sa"]);
 const NEVER_PUBLIC = new Set<string>(["adl", "archive", "upload", "recording", "unknown"]);
+/**
+ * Sources whose licence the owner has not yet confirmed. piano-midi.de publishes
+ * under CC BY-SA 3.0 DE; until that is confirmed on its copyright page, nothing
+ * from it may reach a public build. Remove "piano-midi-de" here once it is.
+ */
+export const UNCONFIRMED_LICENCE_SOURCES = new Set<string>(["piano-midi-de"]);
 
 /** Library spec 4.2: may this song ever be served by a public build? */
 export function isPublicEligible(input: { sourceKind: string | null; fileLicence: string | null; workPdStatus: string | null }): boolean {
   return (
     input.sourceKind !== null &&
     !NEVER_PUBLIC.has(input.sourceKind) &&
+    !UNCONFIRMED_LICENCE_SOURCES.has(input.sourceKind) &&
     FREE_LICENCE_FAMILIES.has(licenceFamily(input.fileLicence)) &&
     input.workPdStatus !== null &&
     PUBLIC_DOMAIN.has(input.workPdStatus)
@@ -263,7 +278,7 @@ export function emptyWorkFieldsToFill(stored: StoredWorkFields, seed: Omit<WorkS
 }
 
 /** Stable JSON, for comparing what is stored (jsonb reorders keys) with what was computed. */
-function stableJson(value: unknown): string {
+export function stableJson(value: unknown): string {
   return JSON.stringify(value, (_key, inner) =>
     inner && typeof inner === "object" && !Array.isArray(inner)
       ? Object.fromEntries(Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
@@ -276,7 +291,7 @@ function stableJson(value: unknown): string {
  * significant digits, so an unrounded double would read back different and
  * every re-run would rewrite every song.
  */
-function storedSignals(signals: QualitySignals): Record<string, number | boolean> {
+export function storedSignals(signals: QualitySignals): Record<string, number | boolean> {
   return Object.fromEntries(
     Object.entries(signals).map(([key, value]) => [key, typeof value === "number" ? Math.round(value * 1e4) / 1e4 : value]),
   );
@@ -468,7 +483,9 @@ export async function backfillCatalogue(prisma: PrismaClient, options: Catalogue
     if (grade_band !== song.grade_band) data.grade_band = grade_band;
 
     const bytes = readSongFile(song.file_path);
-    if (bytes) {
+    if (bytes && PACK_SOURCE_KINDS.has(source_kind)) {
+      // Classified by the pack importer, which knows the incipit result and the licence.
+    } else if (bytes) {
       const curated = source_kind === "essentials" || source_kind === "beginner";
       const authored =
         source_kind === "beginner" ||

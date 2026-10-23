@@ -54,7 +54,9 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "georges-bizet", name: "Georges Bizet", sort_name: "Bizet, Georges", born: 1838, died: 1875, aliases: ["Bizet"], era: "romantic" },
   { id: "giuseppe-verdi", name: "Giuseppe Verdi", sort_name: "Verdi, Giuseppe", born: 1813, died: 1901, aliases: ["Verdi"], era: "romantic" },
   { id: "gustav-holst", name: "Gustav Holst", sort_name: "Holst, Gustav", born: 1874, died: 1934, aliases: ["Holst"], era: "early-20th-c" },
+  { id: "isaac-albeniz", name: "Isaac Albéniz", sort_name: "Albéniz, Isaac", born: 1860, died: 1909, aliases: ["Albeniz", "Isaac Albeniz"], era: "romantic" },
   { id: "jacques-offenbach", name: "Jacques Offenbach", sort_name: "Offenbach, Jacques", born: 1819, died: 1880, aliases: ["Offenbach"], era: "romantic" },
+  { id: "joseph-haydn", name: "Joseph Haydn", sort_name: "Haydn, Joseph", born: 1732, died: 1809, aliases: ["Haydn", "Franz Joseph Haydn", "Josef Haydn"], era: "classical-era" },
   { id: "james-lord-pierpont", name: "James Lord Pierpont", sort_name: "Pierpont, James Lord", born: 1822, died: 1893, aliases: ["Pierpont", "James Pierpont"], era: "romantic" },
   { id: "james-r-murray", name: "James R. Murray", sort_name: "Murray, James R.", born: 1841, died: 1905, aliases: ["James Ramsey Murray"], era: "romantic" },
   { id: "johann-pachelbel", name: "Johann Pachelbel", sort_name: "Pachelbel, Johann", born: 1653, died: 1706, aliases: ["Pachelbel"], era: "baroque" },
@@ -280,6 +282,7 @@ export const BEGINNER_WORKS: Record<string, WorkMeta> = {
 export const COLLECTION_TAGS = {
   essentials: { id: "essentials", label: "Essentials", kind: "collection" },
   beginner: { id: "beginner-pack", label: "Beginner pack", kind: "collection" },
+  midiano: { id: "midiano-classics", label: "Midiano classics", kind: "collection" },
 } as const;
 
 /**
