@@ -7,10 +7,14 @@ import { useProgressStore } from "../../state/progressStore";
 import { metronome } from "../../utils/metronome";
 import { playSequence } from "../../audio/noteSequence";
 import { latencyOffsetMs } from "../../audio/latency";
+import { coveredNoteIds } from "./exerciseCoverage";
 
 export type ExercisePhase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
 
 export const COUNT_IN_BEATS = 4;
+
+/** How long the last key stays lit before an untimed exercise finishes by itself (also lets its note-off arrive). */
+export const AUTO_FINISH_DELAY_MS = 450;
 
 /**
  * Converts a raw MIDI event's wall-clock timestamp (performance.now() basis)
@@ -90,6 +94,8 @@ export function useExerciseAttempt({
   const [result, setResult] = useState<ScoringResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
+  /** Every key pressed in this attempt, in order (drives the live note chips and untimed auto-finish). */
+  const [pressedNotes, setPressedNotes] = useState<number[]>([]);
   const [activeNoteIds, setActiveNoteIds] = useState<Set<string>>(new Set());
   const [liveScore, setLiveScore] = useState(0);
   const [liveCombo, setLiveCombo] = useState(0);
@@ -114,6 +120,7 @@ export function useExerciseAttempt({
   const liveRafRef = useRef(0);
   const activeNoteIdsRef = useRef<string>("");
   const lastDeltaTimeoutRef = useRef<number | null>(null);
+  const submitRef = useRef<() => Promise<void>>(async () => undefined);
   const onRecordingClockRef = useRef(onRecordingClock);
   onRecordingClockRef.current = onRecordingClock;
 
@@ -138,6 +145,7 @@ export function useExerciseAttempt({
         raw.current.push({ ...event, timestampMs: elapsedMs });
         if (event.type !== "noteon") return;
         setPlayed(true);
+        setPressedNotes((current) => [...current, event.note]);
         if (exercise?.scoring === "untimed") return;
         const songTimeS = elapsedMs / 1000;
         const match = judgeNextPress(liveNotesRef.current, liveJudgmentsRef.current, event.note, songTimeS);
@@ -266,6 +274,7 @@ export function useExerciseAttempt({
     stopPreview();
     raw.current = [];
     setPlayed(false);
+    setPressedNotes([]);
     setResult(null);
     setError(null);
     setBeat(null);
@@ -390,7 +399,20 @@ export function useExerciseAttempt({
     }
   };
 
+  submitRef.current = submit;
+
+  // Untimed exercises have no clock to run out, so they finish once every expected note has
+  // been found. Timed exercises never auto-finish: stopping early would cut off the music.
+  const allFound =
+    untimed && !!exercise && exercise.expected.length > 0 && coveredNoteIds(exercise.expected, pressedNotes).size === exercise.expected.length;
+  useEffect(() => {
+    if (!allFound || phase !== "recording") return;
+    const timer = window.setTimeout(() => void submitRef.current(), AUTO_FINISH_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [allFound, phase]);
+
   return {
+    pressedNotes,
     phase,
     beat,
     result,
