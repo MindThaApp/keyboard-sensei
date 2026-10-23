@@ -28,6 +28,12 @@ describe("scrubString", () => {
     expect(scrubString("/auth/verify?code=123456")).toBe("/auth/verify?code=[redacted]");
   });
 
+  it("redacts secrets written in free text", () => {
+    expect(scrubString("bad token=abc123 and password: hunter2, ok")).toBe(
+      "bad token=[redacted] and password: [redacted], ok",
+    );
+  });
+
   it("removes account names from file-system paths", () => {
     expect(scrubString("at run (/Users/ada/dev/Keyboard Sensei/apps/api/src/app.ts:12:3)")).not.toContain("ada");
     expect(scrubString("/home/ramin/apps/keyboard-sensei/server.js")).toBe("/~/apps/keyboard-sensei/server.js");
@@ -35,6 +41,10 @@ describe("scrubString", () => {
     expect(scrubString("file:///data/user/0/com.keyboardsensei.app/files/a.mid")).toBe(
       "file:///data/app/files/a.mid",
     );
+  });
+
+  it("does not mistake a release name for an email", () => {
+    expect(scrubString("keyboard-sensei@0.1.0+9451eecabcde")).toBe("keyboard-sensei@0.1.0+9451eecabcde");
   });
 
   it("leaves ordinary text alone", () => {
