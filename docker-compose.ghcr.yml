@@ -47,6 +47,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      # Error monitoring (Sentry, EU). All optional; unset DSN = off. docs/operations.md.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TUNNEL_DSNS: ${SENTRY_TUNNEL_DSNS:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      GIT_SHA: ${GIT_SHA:-}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library

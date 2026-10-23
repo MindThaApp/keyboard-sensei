@@ -37,6 +37,8 @@ import { exerciseSeconds } from "./progression/practice-time.js";
 import { dayKey, isValidTimeZone } from "./progression/days.js";
 import { exerciseBestsFor, recordLessonOutcome, scoreFromResult, unlockLesson } from "./progress.js";
 import { narrationVoiceIdSchema } from "./narration-voices.js";
+import { createSentryTunnelRouter, parseAllowedDsns } from "./sentry-tunnel.js";
+import { reportServerError } from "./sentry.js";
 import { instrumentUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
 
 const updateProfileSchema = z
@@ -168,6 +170,8 @@ app.use(
     exposedHeaders: ["x-song-duration-sec", "x-song-note-count", "x-song-difficulty"],
   }),
 );
+// Before the JSON parser: envelopes are not JSON, and the tunnel reads its own raw body.
+app.use(createSentryTunnelRouter(() => parseAllowedDsns(env.SENTRY_TUNNEL_DSNS)));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -668,7 +672,7 @@ app.use((req, res) =>
   res.status(404).json({ error: { code: "not_found", message: `No route for ${req.method} ${req.path}` } }),
 );
 
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (error instanceof ZodError) {
     res.status(400).json({
       error: { code: "validation_error", message: "Request validation failed", details: error.flatten() },
@@ -692,6 +696,8 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(statusCode).json({ error: { code, message: (error as Error).message } });
     return;
   }
+  // Only unexpected failures reach Sentry; every 4xx above is the client's doing.
+  reportServerError(error, req);
   console.error(error);
   res.status(500).json({ error: { code: "internal_error", message: "An unexpected error occurred" } });
 });
