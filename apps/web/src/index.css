@@ -81,75 +81,75 @@ body {
 /* ── Glass (§3.3) ──────────────────────────────────────────────────────────
    Only GlassSurface applies .glass: navigation and controls, never content.
    Layers, back to front: blur → saturate → fill → milk → lift → rim/specular →
-   sheen → text scrim → content. */
-@layer components {
-  .glass {
-    position: relative;
-    isolation: isolate;
-    color: var(--label);
-    background:
-      linear-gradient(rgb(255 255 255 / var(--glass-lift)) 0 0),
-      linear-gradient(rgb(var(--glass-base) / var(--glass-milk-a)) 0 0),
-      linear-gradient(180deg, rgb(var(--glass-base) / var(--glass-a)), rgb(var(--glass-base) / var(--glass-a2)));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-    box-shadow:
-      inset 0 1px 0 var(--glass-rim-top),
-      inset 0 -1px 0 var(--glass-rim-bottom),
-      inset 0 0 0 0.5px var(--glass-hairline),
-      var(--glass-shadow);
-  }
-
-  /* Specular sheen: a soft highlight lit from the top-left. */
-  .glass::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-      radial-gradient(120% 70% at 20% -10%, rgb(255 255 255 / 0.55), transparent 55%),
-      linear-gradient(115deg, rgb(255 255 255 / 0.18), transparent 35%, transparent 70%, rgb(255 255 255 / 0.1));
-    mix-blend-mode: soft-light;
-    opacity: var(--glass-sheen);
-  }
-
-  /* Inputs on glass sit a step more opaque; panes behind cards a step less. Nested
-     glass is a translucent fill only, never a second blur. */
-  .glass-input { background: rgb(var(--glass-base) / var(--glass-input-a)); }
-  .glass-pane { background: rgb(var(--glass-base) / var(--glass-pane-a)); }
-  .glass .glass {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  /* Selected item on glass (tab, segment): the only place tint text may sit on glass. */
-  .glass-selection { background: var(--glass-selection); color: var(--tint); }
-
-  /* Clear style: a local backing behind each text run keeps 4.5:1 while the panel
-     itself stays see-through. Solid under the glyphs, feathered by the shadow. */
-  .glass-text {
-    border-radius: 0.5em;
-    background: rgb(var(--glass-base) / var(--glass-scrim-a));
-    box-shadow: 0 0 10px 4px rgb(var(--glass-base) / var(--glass-scrim-a));
-  }
-  html[data-glass-style="clear"] .glass { text-shadow: 0 0 1px rgb(var(--glass-base)); }
-
-  .glass-pressable {
-    transition:
-      transform var(--dur-spring) var(--spring),
-      box-shadow var(--dur-base) var(--ease-out);
-  }
-  .glass-pressable:active { transform: scale(var(--press-scale-glass)); }
-
-  /* Scroll edges: content fades as it passes under the floating bars. The shell
-     positions them; these only paint. */
-  .edge-top,
-  .edge-bottom { pointer-events: none; }
-  .edge-top { top: 0; height: 110px; background: linear-gradient(var(--bg) 35%, rgb(var(--bg-rgb) / 0)); }
-  .edge-bottom { bottom: 0; height: 120px; background: linear-gradient(rgb(var(--bg-rgb) / 0), var(--bg) 70%); }
+   sheen → text scrim → content.
+   Plain CSS, not @layer components: Tailwind drops component classes it cannot
+   find in source, and several of these are only ever built at runtime. */
+.glass {
+  position: relative;
+  isolation: isolate;
+  color: var(--label);
+  background:
+    linear-gradient(rgb(255 255 255 / var(--glass-lift)) 0 0),
+    linear-gradient(rgb(var(--glass-base) / var(--glass-milk-a)) 0 0),
+    linear-gradient(180deg, rgb(var(--glass-base) / var(--glass-a)), rgb(var(--glass-base) / var(--glass-a2)));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim-top),
+    inset 0 -1px 0 var(--glass-rim-bottom),
+    inset 0 0 0 0.5px var(--glass-hairline),
+    var(--glass-shadow);
 }
+
+/* Specular sheen: a soft highlight lit from the top-left. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 20% -10%, rgb(255 255 255 / 0.55), transparent 55%),
+    linear-gradient(115deg, rgb(255 255 255 / 0.18), transparent 35%, transparent 70%, rgb(255 255 255 / 0.1));
+  mix-blend-mode: soft-light;
+  opacity: var(--glass-sheen);
+}
+
+/* Inputs on glass sit a step more opaque; panes behind cards a step less. Nested
+   glass is a translucent fill only, never a second blur. */
+.glass-input { background: rgb(var(--glass-base) / var(--glass-input-a)); }
+.glass-pane { background: rgb(var(--glass-base) / var(--glass-pane-a)); }
+.glass .glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Selected item on glass (tab, segment): the only place tint text may sit on glass. */
+.glass-selection { background: var(--glass-selection); color: var(--tint); }
+
+/* Clear style: a local backing behind each text run keeps 4.5:1 while the panel
+   itself stays see-through. Solid under the glyphs, feathered by the shadow. */
+.glass-text {
+  border-radius: 0.5em;
+  background: rgb(var(--glass-base) / var(--glass-scrim-a));
+  box-shadow: 0 0 10px 4px rgb(var(--glass-base) / var(--glass-scrim-a));
+}
+html[data-glass-style="clear"] .glass { text-shadow: 0 0 1px rgb(var(--glass-base)); }
+
+.glass-pressable {
+  transition:
+    transform var(--dur-spring) var(--spring),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.glass-pressable:active { transform: scale(var(--press-scale-glass)); }
+
+/* Scroll edges: content fades as it passes under the floating bars. The shell
+   positions them; these only paint. */
+.edge-top,
+.edge-bottom { pointer-events: none; }
+.edge-top { height: 110px; background: linear-gradient(var(--bg) 35%, rgb(var(--bg-rgb) / 0)); }
+.edge-bottom { height: 120px; background: linear-gradient(rgb(var(--bg-rgb) / 0), var(--bg) 70%); }
 
 /* ── Glass fallbacks: one place ────────────────────────────────────────────
    The system asks for less transparency or more contrast, the user picked Solid,

@@ -286,9 +286,11 @@ export default function KitPreview() {
           </header>
 
           <div style={BANNER}>
-            <GlassSurface style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>Regular glass</GlassSurface>
+            <GlassSurface style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>
+              <span className="glass-text">Regular glass</span>
+            </GlassSurface>
             <GlassSurface variant="clear-dark" style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>
-              Clear glass + dimming
+              <span className="glass-text">Clear glass + dimming</span>
             </GlassSurface>
           </div>
 

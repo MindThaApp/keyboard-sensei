@@ -967,6 +967,11 @@ a.ks-row__main:active {
 .ks-toast[data-tone="error"] .ks-toast__icon {
   background: var(--danger);
 }
+/* The dark-theme warning and danger colours are light; white on them is under 3:1. */
+html.dark .ks-toast[data-tone="reward"] .ks-toast__icon,
+html.dark .ks-toast[data-tone="error"] .ks-toast__icon {
+  color: #000000;
+}
 .ks-toast__text {
   flex: 1;
   min-width: 0;
