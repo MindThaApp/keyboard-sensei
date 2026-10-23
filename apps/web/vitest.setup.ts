@@ -14,3 +14,11 @@ Object.defineProperty(globalThis, "localStorage", {
     setItem: (name: string, value: string) => store.set(name, String(value)),
   },
 });
+
+// Component tests opt into jsdom with a `@vitest-environment jsdom` docblock. Testing Library
+// only auto-cleans when test globals are enabled, so unmount between tests explicitly.
+if (typeof document !== "undefined") {
+  const { afterEach } = await import("vitest");
+  const { cleanup } = await import("@testing-library/react");
+  afterEach(() => cleanup());
+}

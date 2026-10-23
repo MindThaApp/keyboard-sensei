@@ -19,6 +19,7 @@ import {
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 import AudioLatencySection from "./AudioLatencySection";
 import DailyGoalSection from "./DailyGoalSection";
+import CrashReportingSection from "./CrashReportingSection";
 import DeleteAccountSection from "./DeleteAccountSection";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
@@ -544,6 +545,7 @@ export default function SettingsPage() {
         <>
           <DailyGoalSection />
           <AccountSection />
+          <CrashReportingSection />
           <DeleteAccountSection />
         </>
       )}

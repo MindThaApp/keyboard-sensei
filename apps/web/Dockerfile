@@ -27,6 +27,17 @@ ENV VITE_API_URL=${VITE_API_URL}
 ARG VITE_GOOGLE_CLIENT_ID
 ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
 
+# Optional error monitoring (Sentry). All unset = no monitoring and no source-map upload.
+# The auth token only exists in this build stage; the nginx image below never sees it.
+ARG VITE_SENTRY_DSN
+ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
+ARG GIT_SHA
+ENV GIT_SHA=${GIT_SHA}
+ARG SENTRY_AUTH_TOKEN
+ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+ARG SENTRY_PROJECT
+ENV SENTRY_PROJECT=${SENTRY_PROJECT}
+
 WORKDIR /app/apps/web
 RUN pnpm build
 
