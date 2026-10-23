@@ -18,9 +18,14 @@ RUN pnpm install --no-frozen-lockfile
 
 COPY apps/web apps/web
 COPY packages packages
+# The third-party licences page lists the Essentials editions from the API's manifest.
+COPY apps/api/src/essentials/manifest.ts apps/api/src/essentials/manifest.ts
 
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
+# Optional: the Google OAuth Web client ID. Unset = no "Sign in with Google" button.
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
 
 WORKDIR /app/apps/web
 RUN pnpm build

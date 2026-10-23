@@ -33,7 +33,7 @@
       "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "scripts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
 
