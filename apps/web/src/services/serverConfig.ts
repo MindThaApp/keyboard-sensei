@@ -6,6 +6,8 @@ export interface ServerConfig {
   publicCatalogue: boolean;
   googleSignIn: boolean;
   registrationOpen: boolean;
+  /** Sheet music from a photo or PDF (beta); absent from older servers. */
+  sheetMusicRecognition?: boolean;
 }
 
 let cached: Promise<ServerConfig> | null = null;

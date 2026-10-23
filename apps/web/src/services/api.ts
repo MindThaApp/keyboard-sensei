@@ -564,6 +564,62 @@ export const uploadScore = async (
   return body as Song & { import_report: ScoreImportReport };
 };
 
+/** Sheet music being recognised from a photo or PDF (beta); see apps/api/src/omr/omr-routes.ts. */
+export interface OmrJob {
+  id: string;
+  status: "queued" | "recognising" | "ready" | "failed";
+  /** Jobs ahead of this one; 0 once it is being recognised. */
+  position: number;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: { code: string; message: string } | null;
+  result: {
+    title: string | null;
+    composer: string | null;
+    pages: number;
+    bars: number;
+    played_bars: number;
+    staff_count: number;
+    note_count: number;
+    duration_sec: number;
+    difficulty: number;
+    warnings: string[];
+  } | null;
+}
+
+/** Photos and PDFs the recognition takes (the server checks the bytes, not the name). */
+export const SHEET_MUSIC_ACCEPT = "application/pdf,.pdf,image/jpeg,image/png,.jpg,.jpeg,.png";
+export const SHEET_MUSIC_LIMIT_BYTES = 20 * 1024 * 1024;
+
+export const submitSheetMusic = async (file: Blob): Promise<OmrJob> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/songs/upload/omr`, {
+    method: "POST",
+    headers: { "content-type": file.type || "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const body = (await response.json().catch(() => null)) as (OmrJob & { error?: { message?: string } }) | null;
+  if (response.status === 413) throw new Error("That file is too large (the limit is 20 MB)");
+  if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
+  return body as OmrJob;
+};
+
+export const getOmrJob = (id: string) => request<OmrJob>(`/omr/jobs/${encodeURIComponent(id)}`);
+export const discardOmrJob = (id: string) => request<{ ok: true }>(`/omr/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const saveOmrJob = (id: string, fields: { title: string; artist: string; genre: SongGenre }) =>
+  request<Song & { import_report: ScoreImportReport }>(`/omr/jobs/${encodeURIComponent(id)}/save`, { method: "POST", body: JSON.stringify(fields) });
+
+/** The recognised score as MEI, for the review screen. */
+export const getOmrJobNotation = async (id: string): Promise<string> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/omr/jobs/${encodeURIComponent(id)}/notation`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error("The recognised score has expired. Upload it again.");
+  return response.text();
+};
+
 export interface UrlPreview {
   bytes: ArrayBuffer;
   durationSec: number;

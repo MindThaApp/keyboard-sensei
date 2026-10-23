@@ -59,10 +59,44 @@ export interface LgplNotice {
   licenseUrls: string[];
 }
 
+/**
+ * A program the server runs as its own process, in its own container, and talks to over
+ * HTTP: not linked into the app, so its licence covers that program only. The notice says
+ * what it does here and where the source of the exact version is.
+ */
+export interface ServiceNotice {
+  name: string;
+  version: string;
+  license: string;
+  usedFor: string;
+  sourceUrl: string;
+  licenseUrl: string;
+  /** Libraries it bundles, with their licences. */
+  bundles: string;
+}
+
+/** The commit services/omr/Dockerfile installs; a test keeps the two in step. */
+export const HOMR_COMMIT = "b549203bb030cb031d8b73ae3918f35638713cc2";
+
+export const SERVICES: ServiceNotice[] = [
+  {
+    name: "homr",
+    version: `commit ${HOMR_COMMIT.slice(0, 7)}`,
+    license: "AGPL-3.0",
+    usedFor:
+      "Reads printed sheet music from photos and PDFs (the beta \"Photo or PDF of sheet music\" import). It runs unmodified as a separate service on the server; uploads are sent to it and the MusicXML it writes comes back.",
+    sourceUrl: `https://github.com/liebharc/homr/tree/${HOMR_COMMIT}`,
+    licenseUrl: "https://www.gnu.org/licenses/agpl-3.0.html",
+    bundles:
+      "Its trained models (AGPL-3.0, from the same project), ONNX Runtime (MIT), OpenCV (Apache-2.0), RapidOCR (Apache-2.0), pypdfium2 and PDFium (Apache-2.0 / BSD-3-Clause), Pillow (MIT-CMU) and NumPy (BSD-3-Clause).",
+  },
+];
+
 export interface ThirdPartyLicenses {
   generatedAt: string;
   packages: PackageLicense[];
   lgpl: LgplNotice[];
+  services: ServiceNotice[];
   assets: ThirdPartyAsset[];
   music: MusicLicense[];
 }
@@ -177,6 +211,7 @@ export function buildThirdPartyLicenses(): ThirdPartyLicenses {
     generatedAt: new Date().toISOString(),
     packages,
     lgpl: collectLgplNotices(packages),
+    services: SERVICES,
     assets: THIRD_PARTY_ASSETS,
     music: collectMusicLicenses(),
   };

@@ -8,6 +8,8 @@ interface ThirdPartyLicenses {
   packages: { name: string; version: string; license: string; author: string | null; homepage: string | null; licenseText: string | null }[];
   /** LGPL libraries: what they do here, the licence texts and where their source is. Absent from older builds. */
   lgpl?: { name: string; version: string; license: string; usedFor: string; sourceUrl: string; licenseUrls: string[] }[];
+  /** Programs the server runs as separate services (sheet-music recognition). Absent from older builds. */
+  services?: { name: string; version: string; license: string; usedFor: string; sourceUrl: string; licenseUrl: string; bundles: string }[];
   assets: { name: string; usedFor: string; license: string; attribution: string; url: string; licenseUrl: string }[];
   music: { title: string; composer: string; license: string; attribution: string; attributionRequired: boolean; url: string }[];
 }
@@ -228,6 +230,38 @@ export default function ThirdPartyLicensesPage() {
                         </span>
                       ))}
                     </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {(data.services ?? []).length > 0 && (
+            <section aria-labelledby="services-heading">
+              <h2 id="services-heading" className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">
+                Separate programs on the server
+              </h2>
+              <ul className="mt-4 space-y-4">
+                {data.services!.map((service) => (
+                  <li key={service.name} className="card space-y-1 p-4 text-sm text-slate-600 dark:text-slate-300">
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {service.name} {service.version} <span className="font-normal text-slate-500">({service.license})</span>
+                    </p>
+                    <p>{service.usedFor}</p>
+                    <p>
+                      It is free software under the{" "}
+                      <a className="text-felt-700 underline dark:text-felt-300" href={service.licenseUrl} target="_blank" rel="noreferrer">
+                        GNU Affero General Public License v3
+                      </a>
+                      , distributed without any warranty. It is not part of the app's own code.
+                    </p>
+                    <p>
+                      Source code of this version:{" "}
+                      <a className="break-all text-felt-700 underline dark:text-felt-300" href={service.sourceUrl} target="_blank" rel="noreferrer">
+                        {service.sourceUrl}
+                      </a>
+                    </p>
+                    <p className="text-xs text-slate-500">{service.bundles}</p>
                   </li>
                 ))}
               </ul>

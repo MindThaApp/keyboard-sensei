@@ -63,9 +63,12 @@ export const DIFFICULTY_LABELS = ["Beginner", "Easy", "Intermediate", "Advanced"
 
 export const difficultyLabel = (level: number): string => DIFFICULTY_LABELS[Math.min(5, Math.max(1, level)) - 1]!;
 
+/** How a song of your own got here, other than by recording it: a file, a URL, a score or a scan. */
+const UPLOAD_RIGHTS = new Set(["user-upload", "user-import-url", "user-score-upload", "user-score-scan"]);
+
 export const matchesSource = (song: Song, source: SourceFilter): boolean => {
   if (source === "recordings") return song.mine && song.content_rights === "user-recording";
-  if (source === "uploads") return song.mine && (song.content_rights === "user-upload" || song.content_rights === "user-import-url");
+  if (source === "uploads") return song.mine && UPLOAD_RIGHTS.has(song.content_rights);
   if (source === "library") return !song.mine;
   return true;
 };
