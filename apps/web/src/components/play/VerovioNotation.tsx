@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import createVerovioModule from "verovio/wasm";
-import { enableLogToBuffer, VerovioToolkit } from "verovio/esm";
 import { safeSvgPage } from "./verovio/safeSvg";
+import { engrave } from "./verovio/engraveClient";
 import "./verovio/verovio.css";
 import { activeAt, buildScoreTimeline, type ScoreTimeline } from "./verovio/scoreTimeline";
 
 /**
  * Engraved sheet music for score-imported songs, by Verovio (LGPL-3.0; see the
- * third-party licences page). This module is only reached through React.lazy, so the
- * ~7 MB WASM toolkit is a separate chunk, fetched the first time a score is shown.
+ * third-party licences page). The ~7 MB WASM toolkit runs in a Web Worker
+ * (verovio/verovioWorker.ts), created and fetched the first time a score is shown, so
+ * engraving never blocks the page; only the finished SVG is handled here.
  *
  * The MEI is laid out for the panel's width with repeats as printed; the timemap comes
  * from the same load with repeats played out (Verovio expands for timing, not for
@@ -17,28 +17,13 @@ import { activeAt, buildScoreTimeline, type ScoreTimeline } from "./verovio/scor
  * elements, never a re-render.
  */
 
-let toolkitPromise: Promise<VerovioToolkit> | null = null;
-const loadToolkit = (): Promise<VerovioToolkit> => {
-  const pending =
-    toolkitPromise ??
-    createVerovioModule().then((module) => {
-      enableLogToBuffer(true, module);
-      return new VerovioToolkit(module);
-    });
-  toolkitPromise = pending;
-  pending.catch(() => {
-    toolkitPromise = null;
-  });
-  return pending;
-};
-
 const ACTIVE_CLASS = "ks-score-on";
 /** Narrow panels get a smaller staff so a system still holds a few bars. */
 const scaleFor = (widthPx: number): number => (widthPx < 600 ? 30 : 38);
 /** Re-lay out only when the width really changed (not on sub-pixel jitter). */
 const RELAYOUT_PX = 24;
 
-interface Engraving {
+interface Engraved {
   timeline: ScoreTimeline;
   elements: Map<string, Element>;
 }
@@ -47,7 +32,7 @@ export default function VerovioNotation({ mei, songTimeS }: { mei: string; songT
   const containerRef = useRef<HTMLDivElement>(null);
   // The SVG goes in its own element, which React never renders children into.
   const svgRef = useRef<HTMLDivElement>(null);
-  const engravingRef = useRef<Engraving | null>(null);
+  const engravingRef = useRef<Engraved | null>(null);
   const highlightedRef = useRef<Element[]>([]);
   const activeRef = useRef<string[] | null>(null);
   const [width, setWidth] = useState(0);
@@ -69,27 +54,12 @@ export default function VerovioNotation({ mei, songTimeS }: { mei: string; songT
     const target = svgRef.current;
     if (!target || width === 0) return;
     let cancelled = false;
-    loadToolkit()
-      .then((tk) => {
+    const scale = scaleFor(width);
+    engrave({ mei, scale, pageWidth: Math.max(100, Math.floor((width * 100) / scale)) })
+      .then(({ pages, timemap }) => {
         if (cancelled) return;
-        const scale = scaleFor(width);
-        tk.setOptions({
-          inputFrom: "mei",
-          scale,
-          pageWidth: Math.max(100, Math.floor((width * 100) / scale)),
-          adjustPageHeight: true,
-          breaks: "auto",
-          header: "none",
-          footer: "none",
-          pageMarginTop: 20,
-          pageMarginBottom: 20,
-          pageMarginLeft: 20,
-          pageMarginRight: 20,
-        });
-        if (!tk.loadData(mei)) throw new Error("Verovio could not read the notation");
-        const pages = Array.from({ length: tk.getPageCount() }, (_, index) => safeSvgPage(tk.renderToSVG(index + 1)));
-        const timeline = buildScoreTimeline(tk.renderToTimemap({}));
-        target.replaceChildren(...pages.filter((page): page is SVGSVGElement => page !== null));
+        const timeline = buildScoreTimeline(timemap);
+        target.replaceChildren(...pages.map(safeSvgPage).filter((page): page is SVGSVGElement => page !== null));
         const elements = new Map<string, Element>();
         target.querySelectorAll("g.note[id]").forEach((element) => elements.set(element.id, element));
         engravingRef.current = { timeline, elements };

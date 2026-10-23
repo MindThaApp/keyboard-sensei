@@ -28,8 +28,9 @@
 /* ------------------------------------------------------------ stage */
 .ks-practice__notation {
   flex: none;
-  /* Room for the floating modules above the score. */
-  padding: 72px 12px 0;
+  /* Room for the floating modules above the score: their measured height (they wrap
+     on a phone) plus their 12px inset and a gap, never less than the single-row 72px. */
+  padding: max(72px, calc(var(--ks-top-height, 0px) + 16px)) 12px 0;
 }
 .ks-practice__osmd {
   max-height: 35vh;
