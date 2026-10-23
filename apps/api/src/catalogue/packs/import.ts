@@ -22,17 +22,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import ToneMidi from "@tonejs/midi";
+import { buildAuthoredMidi } from "../../essentials/authored/notation.js";
 import { unzipMember } from "../../essentials/build.js";
 import { InvalidMidiError, extractSongMetadata } from "../../midi-metadata.js";
 import { classifyMidiQuality, type QualityResult } from "../../midi-quality.js";
 import { isPublicEligible, licenceFamily, pdStatus, storedSignals, stableJson } from "../backfill.js";
 import { buildSearchText } from "../search-text.js";
-import { COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, composerIdFor, gradeBandFor, type MoodTagId } from "../works-data.js";
+import { COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, TRADITIONAL, composerIdFor, gradeBandFor, type MoodTagId } from "../works-data.js";
+import { abcMelody, splitAbcTunes } from "./abc.js";
 import { INCIPIT_REJECT_BELOW, compareIncipits, skylineIncipit } from "./incipit.js";
 import {
   attributionFor,
   fileLicenceOf,
+  isAuthoredPrimary,
   isPianoMidiDe,
+  type AbcSecondSource,
   pianoMidiDeCopyrightYear,
   songIdOf,
   sourceKindOf,
@@ -158,12 +162,42 @@ function compareWithSecond(primary: Uint8Array, second: Uint8Array, source: Muto
   };
 }
 
+/** The opening of an ABC transcription, shifted into the score's key, as the second source of an authored piece. */
+function compareWithAbc(primary: Uint8Array, source: AbcSecondSource): IncipitOutcome {
+  const tune = splitAbcTunes(source.abc)[0];
+  if (!tune) throw new Rejected(`${source.reference}: the ABC excerpt has no X: line`);
+  const notes = abcMelody(tune).map((pitch) => pitch + (source.transpose ?? 0));
+  if (notes.length < 8) throw new Rejected(`${source.reference}: the ABC excerpt holds only ${notes.length} notes`);
+  const comparison = compareIncipits(skylineIncipit(primary), notes.slice(0, 16));
+  return {
+    result: comparison.result,
+    matched: comparison.matched,
+    lcs: comparison.lcs,
+    primary: comparison.primary,
+    second: comparison.second,
+    note: source.reference,
+  };
+}
+
+/** Public-domain status as the pipeline reads it: traditional tunes are always public domain. */
+const pdStatusOf = (piece: PackPiece, composerId: string, died: number | null, year: number): ReturnType<typeof pdStatus> =>
+  pdStatus({ traditional: composerId === TRADITIONAL, died, publishedYear: piece.publishedYear ?? null }, year);
+
 async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, year: number): Promise<CheckedPiece> {
   const composerId = composerIdFor(piece.composer);
   const composer = COMPOSERS.find((candidate) => candidate.id === composerId);
   if (!composer) throw new Rejected(`unknown composer "${piece.composer}" (add it to COMPOSERS)`);
 
-  const bytes = await pinnedBytes(piece.primary, cacheDir, fetcher);
+  let bytes: Buffer;
+  if (isAuthoredPrimary(piece.primary)) {
+    try {
+      bytes = buildAuthoredMidi(piece.primary.score);
+    } catch (error) {
+      throw new Rejected(`score does not build: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    bytes = await pinnedBytes(piece.primary, cacheDir, fetcher);
+  }
   let meta: ReturnType<typeof extractSongMetadata>;
   try {
     meta = extractSongMetadata(new Uint8Array(bytes));
@@ -181,6 +215,11 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
   let incipit: IncipitOutcome;
   if (piece.second.kind === "scan") {
     incipit = { result: "none", note: `${piece.second.reference}: ${piece.second.reason}` };
+  } else if (piece.second.kind === "abc") {
+    incipit = compareWithAbc(bytes, piece.second);
+    if (incipit.result === "fail" && (incipit.lcs ?? 0) < INCIPIT_REJECT_BELOW) {
+      throw new Rejected(`opening does not match ${incipit.note} (${incipit.matched} leading and ${incipit.lcs} shared notes of 16): not the same tune`);
+    }
   } else {
     const secondBytes = await pinnedBytes(piece.second, cacheDir, fetcher);
     incipit = compareWithSecond(bytes, secondBytes, piece.second);
@@ -192,9 +231,10 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
   const fileLicence = fileLicenceOf(piece);
   const quality = classifyMidiQuality(new Uint8Array(bytes), {
     curated: true,
+    authored: isAuthoredPrimary(piece.primary),
     incipitCheck: incipit.result,
     fileLicence: licenceFamily(fileLicence),
-    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatus({ traditional: false, died: composer.died, publishedYear: null }, year)),
+    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatusOf(piece, composerId!, composer.died, year)),
     metadata: "complete",
     reviewerApproved: false,
   });
@@ -252,7 +292,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   const signals = quality.signals
     ? { ...storedSignals(quality.signals), incipitCheck: checked.incipit.result, incipitSource: checked.incipit.note }
     : null;
-  const pd = pdStatus({ traditional: false, died: composer.died, publishedYear: null }, options.year);
+  const pd = pdStatusOf(piece, composerId, composer.died, options.year);
   const pinned = {
     difficulty: checked.meta.difficulty,
     duration_sec: checked.meta.durationSec,
@@ -334,7 +374,8 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
         ...pinned,
         title: piece.title,
         artist: piece.composer,
-        genre: "classical",
+        // Song.genre is the coarse filter the Essentials use (classical, jazz, other).
+        genre: piece.genre === "classical" ? "classical" : "other",
         uploader_id: null,
         work_id: piece.slug,
         grade_band: gradeBandFor(piece.level),
@@ -352,7 +393,8 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
         after: {
           pack: pack.id,
           source: `${source_kind}:${sourceRefOf(piece)}`,
-          sha256: piece.primary.sha256,
+          // An authored file has no upstream pin: its hash is that of the file generated from the score.
+          sha256: isAuthoredPrimary(piece.primary) ? sha256Of(checked.bytes) : piece.primary.sha256,
           tier: quality.tier,
           tierReasons: quality.reasons,
           incipit: { result: checked.incipit.result, matched: checked.incipit.matched ?? null, lcs: checked.incipit.lcs ?? null, note: checked.incipit.note },

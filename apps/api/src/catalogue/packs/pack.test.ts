@@ -17,6 +17,7 @@ describe("Batch A pins", () => {
 
   it("pins every file by exact URL and sha256, once", () => {
     for (const piece of pieces) {
+      if (!isPianoMidiDe(piece.primary)) throw new Error(`${piece.slug} is not a piano-midi.de piece`);
       expect(piece.primary.url, piece.slug).toMatch(/^https:\/\//);
       expect(piece.primary.sha256, piece.slug).toMatch(/^[0-9a-f]{64}$/);
       if (piece.second.kind === "mutopia") {
