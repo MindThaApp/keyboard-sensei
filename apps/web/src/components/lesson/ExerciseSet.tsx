@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { MidiExercise as MidiExerciseDef, MidiExerciseSection } from "@keyboard-sensei/shared-types";
 import MidiExercise, { PASS_SCORE } from "../midi/MidiExercise";
 import { firstUnpassedIndex } from "./exerciseRuns";
+import type { FocusMode } from "../midi/useFocusModeShim";
 
 interface Props {
   lessonId: string;
@@ -11,6 +13,10 @@ interface Props {
   initialBests: Record<string, number>;
   /** Open on this exercise (a deep link), when it is part of this set. */
   focusExerciseId?: string | null;
+  /** Where "Next" leads after the last exercise is passed (the next lesson), when there is one. */
+  afterLast?: { label: string; to: string } | null;
+  /** Focus mode state shared with the page, so the exercise can offer it and the page can hide its chrome. */
+  focus?: FocusMode;
 }
 
 /**
@@ -19,7 +25,8 @@ interface Props {
  * the page holds one keyboard and one MIDI listener at a time. The lesson is passed
  * once every exercise here reaches the pass score.
  */
-export default function ExerciseSet({ lessonId, sections, exercises, initialBests, focusExerciseId }: Props) {
+export default function ExerciseSet({ lessonId, sections, exercises, initialBests, focusExerciseId, afterLast, focus }: Props) {
+  const navigate = useNavigate();
   const [bests, setBests] = useState<Record<string, number>>(initialBests);
   const [selected, setSelected] = useState(() => {
     const focused = sections.findIndex((item) => item.exerciseId === focusExerciseId);
@@ -28,57 +35,64 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
   const section = sections[selected]!;
   const passedCount = sections.filter((item) => (bests[item.exerciseId] ?? 0) >= PASS_SCORE).length;
 
+  const exercise = exercises?.find((item) => item.exerciseId === section.exerciseId);
+  const isLast = selected + 1 >= sections.length;
+  const nextAction = isLast
+    ? afterLast
+      ? { label: afterLast.label, onClick: () => navigate(afterLast.to) }
+      : undefined
+    : { label: `Next: ${sections[selected + 1]!.title}`, onClick: () => setSelected(selected + 1) };
+
   return (
-    <section className="space-y-3" aria-label="Exercises">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Exercises</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="exercise-set-progress">
-          {passedCount} of {sections.length} passed · pass every exercise ({PASS_SCORE}+) to complete the lesson
-        </p>
-      </div>
-      <ol className="flex flex-wrap gap-2" role="tablist">
-        {sections.map((item, index) => {
-          const best = bests[item.exerciseId];
-          const passed = (best ?? 0) >= PASS_SCORE;
-          const active = index === selected;
-          return (
-            <li key={item.exerciseId}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSelected(index)}
-                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-left text-xs transition-colors ${
-                  active
-                    ? "border-felt-500 bg-felt-50 text-felt-800 dark:border-felt-500 dark:bg-felt-900/40 dark:text-felt-200"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                }`}
-              >
-                <span className="font-medium tabular-nums">{index + 1}</span>
-                <span className="max-w-[14rem] truncate">{item.title}</span>
-                {best !== undefined && (
-                  <span
-                    className={`rounded-full px-1.5 tabular-nums ${
-                      passed ? "bg-brass-100 text-brass-700 dark:bg-brass-700/20 dark:text-brass-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                    }`}
+    <section className="space-y-4" aria-label="Exercises">
+      {!focus?.active && (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="font-display text-lg font-semibold">
+              Step {selected + 1} of {sections.length}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="exercise-set-progress">
+              {passedCount} of {sections.length} done
+            </p>
+          </div>
+          <ol className="flex gap-2" role="tablist" aria-label="Steps">
+            {sections.map((item, index) => {
+              const best = bests[item.exerciseId];
+              const passed = (best ?? 0) >= PASS_SCORE;
+              const active = index === selected;
+              return (
+                <li key={item.exerciseId} className="flex-1">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    aria-label={`Step ${index + 1}: ${item.title}${passed ? ", passed" : ""}`}
+                    title={item.title}
+                    onClick={() => setSelected(index)}
+                    className="group flex min-h-11 w-full items-center"
                   >
-                    {passed ? "✓ " : ""}
-                    {best}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+                    <span
+                      className={`h-1.5 w-full rounded-full transition-colors ${
+                        passed || active ? "bg-felt-600 dark:bg-felt-400" : "bg-slate-300 dark:bg-slate-600"
+                      } ${active && !passed ? "opacity-60" : ""} group-focus-visible:ring-2 group-focus-visible:ring-felt-500`}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
       <MidiExercise
         key={section.exerciseId}
         exerciseId={section.exerciseId}
         title={section.title}
         instructions={section.instructions}
         lessonId={lessonId}
-        exercise={exercises?.find((item) => item.exerciseId === section.exerciseId)}
-        notationKey={exercises?.find((item) => item.exerciseId === section.exerciseId)?.keySignature}
+        exercise={exercise}
+        notationKey={exercise?.keySignature}
+        nextAction={nextAction}
+        focus={focus}
         onCompleted={(result) =>
           setBests((current) => ({
             ...current,
@@ -86,13 +100,6 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
           }))
         }
       />
-      {selected + 1 < sections.length && (bests[section.exerciseId] ?? 0) >= PASS_SCORE && (
-        <div className="flex justify-end">
-          <button type="button" className="primary-button" onClick={() => setSelected(selected + 1)}>
-            Next exercise: {sections[selected + 1]!.title} →
-          </button>
-        </div>
-      )}
     </section>
   );
 }
