@@ -15,7 +15,7 @@
  */
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +26,7 @@ import bcrypt from "bcryptjs";
 import type { NextFunction, Request, Response } from "express";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
+const SCORE_FIXTURE = join(import.meta.dirname, "scores/fixtures/liliuokalani-aloha-oe.mxl");
 const enabled = Boolean(TEST_DATABASE_URL);
 
 if (enabled && !/test/i.test(new URL(TEST_DATABASE_URL!).pathname)) {
@@ -352,6 +353,72 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("score import", () => {
+    const upload = (token: string, bytes: Uint8Array<ArrayBuffer>, query = "") =>
+      fetch(`${baseUrl}/songs/upload/score${query}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream" },
+        body: bytes,
+      });
+
+    it("turns a score into a private song with MEI notation, a derived MIDI and the original kept", async () => {
+      const owner = await createUser();
+      const stranger = await createUser();
+      const original = new Uint8Array(readFileSync(SCORE_FIXTURE));
+      const res = await upload(owner.token, original, "?genre=classical");
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown> & { id: string; import_report: { playedStaves: number[]; warnings: string[] } };
+      // Title and composer come from the score when the uploader gives none.
+      expect(body).toMatchObject({ title: "Aloha Oe", artist: "H.R.H.Liliuokalani", genre: "classical", mine: true, notation_path: "available", notation_format: "mei" });
+      expect(body.import_report.playedStaves).toEqual([5, 6]);
+
+      const row = await m.prisma.song.findUniqueOrThrow({ where: { id: body.id } });
+      expect(row).toMatchObject({ uploader_id: owner.id, content_rights: "user-score-upload", source_kind: "upload", file_licence: "unknown", public_eligible: false, hands: "both" });
+      expect(row.note_count).toBe(265);
+      expect(["good", "unrated"]).toContain(row.quality_tier);
+      expect(row.quality_checked_at).not.toBeNull();
+      expect(readFileSync(row.score_path!)).toEqual(Buffer.from(original));
+      expect(row.source_ref).toBe(createHash("sha256").update(original).digest("hex"));
+
+      // The notation is the MEI, with its own type; the file is the MIDI.
+      const notation = await fetch(`${baseUrl}/songs/${body.id}/notation`, { headers: { authorization: `Bearer ${owner.token}` } });
+      expect(notation.headers.get("content-type")).toContain("application/mei+xml");
+      expect(await notation.text()).toContain("<mei");
+      const file = await fetch(`${baseUrl}/songs/${body.id}/file`, { headers: { authorization: `Bearer ${owner.token}` } });
+      expect(new Midi(new Uint8Array(await file.arrayBuffer())).tracks.map((track) => track.name)).toEqual(["Right hand", "Left hand"]);
+
+      try {
+        // Private, with or without the public catalogue.
+        for (const publicCatalogue of [false, true]) {
+          m.env.PUBLIC_CATALOGUE = publicCatalogue;
+          const listed = ((await api("GET", "/songs", { token: stranger.token })).body.songs as { id: string }[]).map((song) => song.id);
+          expect(listed).not.toContain(body.id);
+          for (const path of [`/songs/${body.id}/file`, `/songs/${body.id}/notation`]) {
+            expect((await api("GET", path, { token: stranger.token })).status, path).toBe(404);
+          }
+          expect(((await api("GET", "/songs", { token: owner.token })).body.songs as { id: string }[]).map((song) => song.id)).toContain(body.id);
+        }
+      } finally {
+        m.env.PUBLIC_CATALOGUE = false;
+      }
+
+      // Deleting it removes all three files.
+      expect((await api("DELETE", `/songs/${body.id}`, { token: stranger.token })).status).toBe(403);
+      expect((await api("DELETE", `/songs/${body.id}`, { token: owner.token })).status).toBe(200);
+      for (const path of [row.file_path, row.notation_path!, row.score_path!]) expect(existsSync(path), path).toBe(false);
+    });
+
+    it("refuses files that aren't scores, and empty or oversized bodies", async () => {
+      const user = await createUser();
+      const notScore = await upload(user.token, new TextEncoder().encode("<html/>"));
+      expect(notScore.status).toBe(422);
+      expect(((await notScore.json()) as { error: { code: string } }).error.code).toBe("invalid_score");
+      expect((await upload(user.token, new Uint8Array(0))).status).toBe(400);
+      expect((await upload(user.token, new Uint8Array(m.songs.SCORE_UPLOAD_LIMIT_BYTES + 1))).status).toBe(413);
+      expect(await m.prisma.song.count({ where: { uploader_id: user.id } })).toBe(0);
+    });
+  });
+
   describe("account deletion", () => {
     /** A user with something in every per-user table, and a file in every data folder. */
     async function userWithEverything() {
@@ -373,6 +440,14 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
       expect((await api("POST", `/songs/${uploaded.id}/attempts`, { token: user.token, body: attempt })).status).toBe(201);
       await m.prisma.playAlongAttempt.create({ data: { user_id: other.id, song_id: uploaded.id, ...attempt } });
+      // A score import (MusicXML in, MEI + MIDI + the original kept), through the real route.
+      const scoreUpload = await fetch(`${baseUrl}/songs/upload/score`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${user.token}`, "content-type": "application/octet-stream" },
+        body: new Uint8Array(readFileSync(SCORE_FIXTURE)),
+      });
+      expect(scoreUpload.status).toBe(201);
+      const scoreSong = await m.prisma.song.findUniqueOrThrow({ where: { id: ((await scoreUpload.json()) as { id: string }).id } });
       // An archive import: MIDI + MusicXML on disk.
       const archive = await m.prisma.song.create({
         data: { title: "Archive", artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8, content_rights: "archive-import", file_path: "pending", uploader_id: user.id },
@@ -412,6 +487,9 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         (await m.prisma.song.findUniqueOrThrow({ where: { id: uploaded.id } })).file_path,
         archiveMidi,
         archiveXml,
+        scoreSong.file_path,
+        scoreSong.notation_path!,
+        scoreSong.score_path!,
         join(m.feedback.FEEDBACK_SCREENSHOT_DIR, `feedback-${feedback.body.id}.png`),
         packDir,
       ];

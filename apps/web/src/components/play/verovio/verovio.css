@@ -1,0 +1,26 @@
+/* Engraved scores (VerovioNotation). Loaded with the lazy chunk.
+   Sheet music sits on a paper-coloured panel in every theme: the practice stage is
+   dark, and engraving reads best as dark ink on a light ground, as printed. */
+.ks-verovio {
+  max-height: 35vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 12px;
+  background: #fbfaf6;
+  color: #1c1c1e;
+}
+.ks-verovio svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+/* The sounding notes. CSS beats Verovio's presentation attributes. */
+.ks-verovio g.note.ks-score-on {
+  color: #c42b3e;
+  fill: #c42b3e;
+}
+.ks-verovio__message {
+  padding: 16px;
+  font-size: 0.875rem;
+  color: #3c3c43;
+}

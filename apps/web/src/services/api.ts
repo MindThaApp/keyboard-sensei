@@ -178,6 +178,8 @@ export interface Song {
   note_count: number;
   content_rights: string;
   notation_path: string | null;
+  /** What the notation file is: MEI (score imports, engraved by Verovio) or MusicXML (archive imports, OSMD). */
+  notation_format?: "mei" | "musicxml" | null;
   mine: boolean;
   /** Curated collection for the /play shelves; null for everything else. */
   collection: "beginner" | "essentials" | null;
@@ -523,6 +525,43 @@ export const uploadSong = async (
   const body = await response.json().catch(() => null) as (Song & { error?: { message?: string } }) | null;
   if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
   return body as Song;
+};
+
+/** What the server made of an uploaded score (see apps/api/src/scores/import-score.ts). */
+export interface ScoreImportReport {
+  printedMeasures: number;
+  playedMeasures: number;
+  /** The played order matches an independent reading of the repeat signs (null for MEI). */
+  repeatsVerified: boolean | null;
+  repairedRepeats: number;
+  overfullMeasures: number;
+  playedStaves: number[];
+  staffCount: number;
+  warnings: string[];
+}
+
+/** Score files the server turns into songs: MusicXML (plain or compressed) and MEI. */
+export const SCORE_FILE_EXTENSIONS = [".musicxml", ".xml", ".mxl", ".mei"] as const;
+export const isScoreFile = (name: string): boolean => SCORE_FILE_EXTENSIONS.some((extension) => name.toLowerCase().endsWith(extension));
+
+/** Uploads a MusicXML / MXL / MEI score. Title and artist default to what the score names. */
+export const uploadScore = async (
+  file: File | Blob,
+  meta: { title?: string; artist?: string; genre: SongGenre },
+): Promise<Song & { import_report: ScoreImportReport }> => {
+  const token = getToken();
+  const params = new URLSearchParams({ genre: meta.genre });
+  if (meta.title) params.set("title", meta.title);
+  if (meta.artist) params.set("artist", meta.artist);
+  const response = await fetch(`${API_URL}/songs/upload/score?${params}`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const body = (await response.json().catch(() => null)) as (Song & { import_report: ScoreImportReport; error?: { message?: string } }) | null;
+  if (response.status === 413) throw new Error("That score is too large (the limit is 5 MB)");
+  if (!response.ok) throw new Error(body?.error?.message ?? `Upload failed (${response.status})`);
+  return body as Song & { import_report: ScoreImportReport };
 };
 
 export interface UrlPreview {
