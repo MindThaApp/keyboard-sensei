@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Song } from "../services/api";
+import type { Song, WorkSummary } from "../services/api";
 import {
   DEFAULT_FILTERS,
   DEFAULT_WORK_FILTERS,
@@ -7,6 +7,8 @@ import {
   firstUnratedIndex,
   isBrowsing,
   isChristmasSeason,
+  levelChipText,
+  moreSongs,
   shelvesToLoad,
   workFiltersFromParams,
   workFiltersToParams,
@@ -194,5 +196,44 @@ describe("work filters", () => {
   it("shortens the composer to a surname", () => {
     expect(composerShort({ id: "x", name: "Ludwig van Beethoven", sort_name: "Beethoven, Ludwig van" })).toBe("Beethoven");
     expect(composerShort(null)).toBe("");
+  });
+});
+
+describe("levelChipText", () => {
+  const work = (min: number, max: number, bands: (string | null)[]) =>
+    ({ level_min: min, level_max: max, versions: bands.map((grade_band) => ({ grade_band })) }) as unknown as WorkSummary;
+
+  it("shows the grade band for a single-level piece, else the level's name", () => {
+    expect(levelChipText(work(2, 2, ["≈ Grades 2–3"]))).toBe("Level 2 · ≈ Grades 2–3");
+    expect(levelChipText(work(2, 2, [null]))).toBe("Level 2 · Easy");
+  });
+
+  it("does not pin a multi-level piece to one version's band", () => {
+    expect(levelChipText(work(1, 3, ["≈ Initial–Grade 1", null]))).toBe("Levels 1–3");
+  });
+});
+
+describe("moreSongs", () => {
+  const library = [
+    song({ id: "low", title: "Aardvark Rag", quality_tier: "low" }),
+    song({ id: "unrated", title: "Zebra Waltz", quality_tier: "unrated" }),
+    song({ id: "good-b", title: "Bolero", quality_tier: "good" }),
+    song({ id: "good-a", title: "Adagio", quality_tier: "good" }),
+    song({ id: "linked", title: "Linked", work_id: "w1", quality_tier: "verified" }),
+    song({ id: "untiered", title: "Old server song" }),
+  ];
+
+  it("lists unlinked songs Good, then Unrated, then nothing Low for a non-admin", () => {
+    expect(moreSongs(library, { isAdmin: false }).map((s) => s.id)).toEqual(["good-a", "good-b", "untiered", "unrated"]);
+  });
+
+  it("puts Low last and only for admins", () => {
+    expect(moreSongs(library, { isAdmin: true }).map((s) => s.id)).toEqual(["good-a", "good-b", "untiered", "unrated", "low"]);
+  });
+
+  it("searches title and artist ignoring accents and case", () => {
+    const rows = [song({ id: "a", title: "Für Elise", artist: "Beethoven" }), song({ id: "b", title: "Other", artist: "Satie" })];
+    expect(moreSongs(rows, { isAdmin: false, query: "fur elise" }).map((s) => s.id)).toEqual(["a"]);
+    expect(moreSongs(rows, { isAdmin: false, query: "SATIE" }).map((s) => s.id)).toEqual(["b"]);
   });
 });

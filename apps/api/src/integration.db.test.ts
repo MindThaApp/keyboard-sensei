@@ -1451,7 +1451,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(rows.get(libraryFurElise)).toMatchObject({ source_kind: "adl", file_licence: "unknown", public_eligible: false, quality_tier: "low" });
       expect(rows.get(bethena)).toMatchObject({ source_kind: "adl", work_id: null, source_ref: "scott-joplin-bethena", public_eligible: false });
       expect(rows.get(upload)).toMatchObject({ source_kind: "upload", work_id: null, public_eligible: false });
-      expect(await m.prisma.tag.findMany({ where: { works: { some: { work_id: "fur-elise" } } } })).toEqual([expect.objectContaining({ id: "essentials" })]);
+      expect(await m.prisma.tag.findMany({ where: { works: { some: { work_id: "fur-elise" } } }, orderBy: { id: "asc" } })).toEqual([expect.objectContaining({ id: "essentials" })]);
+      // Shelf curation: mood tags, a featured rank, and an approximate grade band for curated versions only.
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "silent-night" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["christmas", "relaxing"]);
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "hot-cross-buns" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["beginner-pack", "kids"]);
+      expect(furElise.featured_rank).toBe(9);
+      expect(rows.get("essentials-fur-elise-full")?.grade_band).toBe("≈ Grades 2–3");
+      expect(rows.get(hotCrossBuns)?.grade_band).toBe("≈ Grades 2–3");
+      expect(rows.get(bethena)?.grade_band).toBeNull();
+      expect(rows.get(upload)?.grade_band).toBeNull();
 
       // Search goes through ks_unaccent and the indexed expressions (unaccent + pg_trgm installed).
       const search = (q: string) =>
@@ -1471,6 +1479,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(isNoOp(second)).toBe(true);
       expect(await m.prisma.song.findMany({ where: { id: { in: ids } }, select: { id: true, quality_checked_at: true }, orderBy: { id: "asc" } })).toEqual(updatedAt);
       expect(await protectedState()).toEqual(before);
+
+      // Editors' choices are kept: their rank, grade band and mood tags are not refilled over.
+      await m.prisma.work.update({ where: { id: "fur-elise" }, data: { featured_rank: 3 } });
+      await m.prisma.song.update({ where: { id: "essentials-fur-elise-full" }, data: { grade_band: "Grade 5" } });
+      await m.prisma.workTag.deleteMany({ where: { work_id: "silent-night", tag_id: "christmas" } });
+      await backfillCatalogue(m.prisma, { year: 2026 });
+      expect((await m.prisma.work.findUniqueOrThrow({ where: { id: "fur-elise" } })).featured_rank).toBe(3);
+      expect((await m.prisma.song.findUniqueOrThrow({ where: { id: "essentials-fur-elise-full" } })).grade_band).toBe("Grade 5");
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "silent-night" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["relaxing"]);
 
       // Curated choices made later are kept: a song moved to another Work stays there.
       await m.prisma.song.update({ where: { id: bethena }, data: { work: { connect: { id: "hot-cross-buns" } } } });
