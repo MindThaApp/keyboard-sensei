@@ -18,11 +18,8 @@ function subtitle(tier: ChallengeTierState): string {
   return `${tier.name} · ${tier.key.name} · ${tier.attemptsLeft} of 3 attempts left`;
 }
 
-/**
- * Today's "Also today" row for the daily challenge. Renders nothing until the
- * learner has unlocked the first tier (or if it can't load).
- */
-export default function DailyChallengeRow() {
+/** Today's challenge, or null while it loads (or if it can't). Refreshes after any reward. */
+export function useChallengeToday(): ChallengeTodayResponse | null {
   const [today, setToday] = useState<ChallengeTodayResponse | null>(null);
   const version = useRewardsVersion();
 
@@ -38,6 +35,14 @@ export default function DailyChallengeRow() {
     };
   }, [version]);
 
+  return today;
+}
+
+/**
+ * Today's "Also today" row for the daily challenge. Renders nothing until
+ * the challenge has loaded and a tier is open.
+ */
+export default function DailyChallengeRow({ today }: { today: ChallengeTodayResponse | null }) {
   const tier = today ? rowTier(today) : null;
   if (!tier) return null;
   return (

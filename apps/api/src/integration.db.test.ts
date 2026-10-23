@@ -1708,14 +1708,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       });
     const STARTER = ["lesson-04", "lesson-05"];
 
-    it("is locked until the lessons it uses are done, then allows exactly three attempts", async () => {
+    it("opens Starter at once, keeps the higher tiers until their lessons are done, and allows exactly three attempts", async () => {
       const user = await createUser();
       const locked = await call("GET", "/challenge/today", user.token);
       expect(locked.status).toBe(200);
-      expect(locked.body.tiers.map((tier: { unlocked: boolean }) => tier.unlocked)).toEqual([false, false, false]);
-      expect(locked.body.tiers[0].needs.map((lesson: { id: string }) => lesson.id)).toEqual(STARTER);
+      expect(locked.body.tiers.map((tier: { unlocked: boolean }) => tier.unlocked)).toEqual([true, false, false]);
+      expect(locked.body.tiers[0].needs).toEqual([]);
+      expect(locked.body.tiers[1].needs.map((lesson: { id: string }) => lesson.id)).toEqual(expect.arrayContaining(STARTER));
       const date = locked.body.date;
-      expect((await call("POST", "/challenge/attempts", user.token, { date, tier: 1 })).status).toBe(403);
+      expect((await call("POST", "/challenge/attempts", user.token, { date, tier: 2 })).status).toBe(403);
 
       await complete(user.id, STARTER);
       const today = await call("GET", "/challenge/today", user.token);
