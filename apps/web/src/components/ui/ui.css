@@ -6,18 +6,27 @@
  */
 
 /* ---------------------------------------------------------------- density tokens */
-:root {
-  --ui-hit: 44px;
-  --ui-fs-body: 17px;
-  --ui-lh-body: 22px;
-  --ui-fs-sub: 15px;
-  --ui-lh-sub: 20px;
-  --ui-fs-foot: 13px;
-  --ui-lh-foot: 18px;
-  --ui-fs-title: 20px;
-  --ui-btn-sm-h: 34px;
-  --ui-btn-md-h: 44px;
-  --ui-btn-lg-h: 50px;
+/* Type, control heights and the hit size come from the shared density tokens in
+   styles/tokens.css. The aliases are redeclared on every density scope so a
+   DensityScope inside a page of the other density re-resolves them. */
+:root,
+[data-density] {
+  --ui-hit: var(--hit-min);
+  --ui-fs-body: var(--fs-body);
+  --ui-lh-body: var(--lh-body);
+  --ui-fs-sub: var(--fs-subhead);
+  --ui-lh-sub: var(--lh-subhead);
+  --ui-fs-foot: var(--fs-footnote);
+  --ui-lh-foot: var(--lh-footnote);
+  --ui-fs-title: var(--fs-title3);
+  --ui-btn-sm-h: var(--control-h-sm);
+  --ui-btn-md-h: var(--control-h);
+  --ui-btn-lg-h: var(--control-h-lg);
+}
+
+/* Kit-local spacing inside components. */
+:root,
+[data-density="regular"] {
   --ui-btn-pad-x: 20px;
   --ui-seg-h: 36px;
   --ui-seg-pad-x: 14px;
@@ -31,25 +40,18 @@
 
 /* Coarse pointers always get full-size targets, even at regular density. */
 @media (pointer: coarse) {
-  :root {
-    --ui-btn-sm-h: 44px;
-    --ui-seg-h: 44px;
+  :root,
+  [data-density] {
+    --ui-btn-sm-h: var(--hit-min);
+    --ui-seg-h: var(--hit-min);
   }
 }
 
 [data-density="compact"] {
-  --ui-fs-body: 16px;
-  --ui-lh-body: 21px;
-  --ui-fs-sub: 14px;
-  --ui-lh-sub: 19px;
-  --ui-fs-foot: 12px;
-  --ui-lh-foot: 16px;
-  --ui-fs-title: 18px;
-  --ui-btn-sm-h: 44px;
-  --ui-btn-md-h: 44px;
-  --ui-btn-lg-h: 48px;
+  /* Compact visuals are smaller, but small buttons and segments keep a full hit size. */
+  --ui-btn-sm-h: var(--hit-min);
   --ui-btn-pad-x: 16px;
-  --ui-seg-h: 44px;
+  --ui-seg-h: var(--hit-min);
   --ui-seg-pad-x: 12px;
   --ui-row-pad-y: 9px;
   --ui-row-pad-x: 14px;
@@ -58,7 +60,7 @@
   --ui-sheet-pad: 14px;
 }
 
-:where(.dark, [data-theme="dark"]) {
+html.dark {
   --ui-focus-halo: transparent;
 }
 
@@ -100,50 +102,10 @@
 }
 
 /* ---------------------------------------------------------------- GlassSurface */
-.ks-glass {
-  position: relative;
-  isolation: isolate;
-  background: linear-gradient(
-    180deg,
-    rgb(var(--glass-base) / var(--glass-a)),
-    rgb(var(--glass-base) / calc(var(--glass-a) * 0.85))
-  );
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-  box-shadow:
-    inset 0 1px 0 var(--glass-rim-top),
-    inset 0 -1px 0 var(--glass-rim-bottom),
-    inset 0 0 0 0.5px var(--glass-hairline),
-    var(--glass-shadow);
-}
-
-.ks-glass::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: -1;
-  opacity: var(--glass-sheen);
-  background: radial-gradient(120% 70% at 20% -10%, rgb(255 255 255 / 0.55), transparent 55%);
-  mix-blend-mode: soft-light;
-}
-
-/* Clear-dark: for bars over dark content. White text and a built-in dimming layer. */
+/* The material itself (.glass, the clear-dark variant, sheen, fallbacks) lives in
+   index.css and tokens.css, driven by the appearance engine. Only kit specifics here. */
 .ks-glass[data-glass="on-dark"] {
-  --glass-base: 20 20 22;
-  --glass-a: 0.5;
-  --glass-blur: 8px;
-  --glass-rim-top: rgb(255 255 255 / 0.4);
-  --glass-rim-bottom: rgb(255 255 255 / 0.08);
-  --glass-hairline: rgb(255 255 255 / 0.1);
-  --label: #ffffff;
-  --label-2: #ebebf5;
-  --fill: rgb(255 255 255 / 0.14);
-  --fill-strong: rgb(255 255 255 / 0.24);
-  --separator: rgb(255 255 255 / 0.2);
   --ui-focus-halo: transparent;
-  color: var(--label);
 }
 
 /* Tint text fails contrast on glass (spec 3.3), so text buttons on glass use the label colour. */
@@ -154,35 +116,23 @@
 
 /* Nested glass is a translucent fill only, never a second blur (spec 3.8). */
 .ks-glass[data-nested="true"] {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: rgb(var(--glass-base) / 0.9);
+  background: rgb(var(--glass-base) / var(--glass-input-a));
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .ks-glass {
-    background: var(--glass-solid);
-  }
+/* Surfaces that carry paragraphs and lists (sheet, toast, overflow menu) always use the
+   Frosted floor, even when the user picks Clear; only bars and controls go see-through. */
+.ks-sheet,
+.ks-toast,
+.ks-toolbar__menu {
+  --glass-a: var(--glass-frosted-a);
+  --glass-a2: var(--glass-frosted-a2);
 }
 
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
-  .ks-glass {
-    background: var(--glass-solid);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .ks-glass::before {
-    display: none;
-  }
-}
-
-.appearance-solid .ks-glass {
-  background: var(--glass-solid);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-.appearance-solid .ks-glass::before {
-  display: none;
+/* Clear glass: each label on a bar gets the local scrim (see .glass-text). */
+html[data-glass-style="clear"] .ks-glass:not(.ks-sheet, .ks-toast, .ks-toolbar__menu) :is(.ks-tab__label, .ks-btn__label) {
+  border-radius: 0.5em;
+  background: rgb(var(--glass-base) / var(--glass-scrim-a));
+  box-shadow: 0 0 10px 4px rgb(var(--glass-base) / var(--glass-scrim-a));
 }
 
 /* ---------------------------------------------------------------- Button */
@@ -720,7 +670,6 @@ a.ks-row__main:active {
   color: var(--label);
   overflow: hidden;
   animation: ks-sheet-in 280ms var(--spring);
-  --glass-a: 0.82;
 }
 .ks-sheet[data-detent="medium"] {
   height: min(60dvh, 560px);
@@ -847,7 +796,6 @@ a.ks-row__main:active {
   min-width: 180px;
   padding: 8px;
   border-radius: 22px;
-  --glass-a: 0.85;
   animation: ks-sheet-in 200ms var(--spring);
 }
 .ks-toolbar[data-placement="top"] .ks-toolbar__menu {
@@ -947,10 +895,7 @@ a.ks-row__main:active {
 }
 .ks-tab[aria-current="page"] {
   color: var(--tint);
-  background: rgb(var(--glass-selection-base, 255 255 255) / 0.92);
-}
-:where(.dark, [data-theme="dark"]) .ks-tab[aria-current="page"] {
-  --glass-selection-base: 28 28 30;
+  background: var(--glass-selection);
 }
 .ks-tab__icon {
   display: inline-flex;
@@ -1004,7 +949,6 @@ a.ks-row__main:active {
   font-family: var(--font-text);
   touch-action: pan-y;
   animation: ks-sheet-in 280ms var(--spring);
-  --glass-a: 0.8;
 }
 .ks-toast__icon {
   flex: none;
@@ -1022,6 +966,11 @@ a.ks-row__main:active {
 }
 .ks-toast[data-tone="error"] .ks-toast__icon {
   background: var(--danger);
+}
+/* The dark-theme warning and danger colours are light; white on them is under 3:1. */
+html.dark .ks-toast[data-tone="reward"] .ks-toast__icon,
+html.dark .ks-toast[data-tone="error"] .ks-toast__icon {
+  color: #000000;
 }
 .ks-toast__text {
   flex: 1;

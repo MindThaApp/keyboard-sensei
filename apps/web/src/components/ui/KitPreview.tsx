@@ -4,8 +4,8 @@
  */
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { MemoryRouter, useInRouterContext } from "react-router-dom";
-import "./ui-fallbacks.css";
 import "./ui.css";
+import { useAppearance } from "../../contexts/AppearanceContext";
 import { Advanced } from "./Advanced";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -250,18 +250,12 @@ function Sections({ density }: { density: Density }) {
 }
 
 function ThemeSwitch() {
-  const [theme, setTheme] = useState<"light" | "dark">(() =>
-    document.documentElement.classList.contains("dark") ? "dark" : "light",
-  );
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-    document.documentElement.style.colorScheme = theme;
-  }, [theme]);
+  const { scheme, update } = useAppearance();
   return (
     <SegmentedControl
       aria-label="Theme"
-      value={theme}
-      onChange={setTheme}
+      value={scheme}
+      onChange={(theme) => update({ theme })}
       options={[
         { value: "light", label: "Light" },
         { value: "dark", label: "Dark" },
@@ -292,9 +286,11 @@ export default function KitPreview() {
           </header>
 
           <div style={BANNER}>
-            <GlassSurface style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>Regular glass</GlassSurface>
+            <GlassSurface style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>
+              <span className="glass-text">Regular glass</span>
+            </GlassSurface>
             <GlassSurface variant="clear-dark" style={{ padding: "14px 24px", borderRadius: 999, font: "600 17px/22px var(--font-text)" }}>
-              Clear glass + dimming
+              <span className="glass-text">Clear glass + dimming</span>
             </GlassSurface>
           </div>
 

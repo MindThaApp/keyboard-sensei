@@ -4,7 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { MidiProvider } from "./components/midi/MidiContext";
 import { AuthProvider } from "./contexts/AuthContext";
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { AppearanceProvider } from "./contexts/AppearanceContext";
+import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { monitoring, startMonitoring } from "./monitoring";
 import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import { installNativeBackButton } from "./native/nativeShell";
@@ -15,7 +16,20 @@ startMonitoring();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AppErrorBoundary><ThemeProvider><BrowserRouter><AuthProvider><MonitoringBridge /><MidiProvider><App /></MidiProvider></AuthProvider></BrowserRouter></ThemeProvider></AppErrorBoundary>
+    <AppErrorBoundary>
+      <AppearanceProvider>
+        <ExperienceProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <MonitoringBridge />
+              <MidiProvider>
+                <App />
+              </MidiProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </ExperienceProvider>
+      </AppearanceProvider>
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
 
