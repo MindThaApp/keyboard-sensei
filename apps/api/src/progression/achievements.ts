@@ -36,7 +36,7 @@ export const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   songs: "Songs & stars",
   streaks: "Streaks",
   practice: "Practice time",
-  accuracy: "Accuracy",
+  accuracy: "Notes hit",
   exploration: "Exploration",
   mastery: "Mastery",
 };
@@ -176,7 +176,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   // Paths
   ...KNOWN_PATHS.map(pathComplete),
   // Songs & stars
-  count("first_song", "songs", "First Song", "Play a song to the end at 70% accuracy or better", 1, (s) => s.songsCompleted),
+  count("first_song", "songs", "First Song", "Play a song to the end, hitting 70% of the notes or more", 1, (s) => s.songsCompleted),
   count("songs_10", "songs", "Repertoire Builder", "Earn a star on 10 different songs", 10, (s) => s.songsCompleted),
   count("song_stars_25", "songs", "Star Collector", "Collect 25 song stars", 25, (s) => s.songStars),
   count("song_three_star", "songs", "Concert Ready", "Earn 3★ on a song (Full level, both hands)", 1, (s) => s.threeStarSongs),
@@ -196,8 +196,8 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   // Accuracy
   count("perfect_exercise", "accuracy", "Flawless", "Score 100 on a lesson exercise", 1, (s) => s.perfectExercises),
   count("perfect_exercises_10", "accuracy", "Precision Player", "Score 100 on 10 different exercises", 10, (s) => s.perfectExercises),
-  count("playalong_high_score", "accuracy", "Sharpshooter", "Play a whole song at 95% accuracy or better", 95, (s) => Math.floor(s.bestRunAccuracy)),
-  count("perfect_song", "accuracy", "Not a Note Out of Place", "Play a whole song at 100% accuracy (Full level, both hands)", 1, (s) => s.perfectSongRuns),
+  count("playalong_high_score", "accuracy", "Sharpshooter", "Play a whole song hitting 95% of the notes or more", 95, (s) => Math.floor(s.bestRunAccuracy)),
+  count("perfect_song", "accuracy", "Not a Note Out of Place", "Play a whole song hitting every note (Full level, both hands)", 1, (s) => s.perfectSongRuns),
   // Exploration
   count("first_quiz_attempt", "exploration", "Curious Mind", "Answer your first quiz question", 1, (s) => s.quizAttempts),
   count("quizzes_10", "exploration", "Quiz Whiz", "Get every question right in 10 lesson quizzes", 10, (s) => s.quizzesCompleted, (s) => s.quizLessons >= 10),

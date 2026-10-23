@@ -197,7 +197,7 @@ function PlayAlongHistory() {
             subtitle={[
               attempt.artist,
               attempt.tempo_bpm ? `Speed ${Math.round(attempt.tempo_bpm)}` : `${Math.round(attempt.tempo_pct)}% tempo`,
-              attempt.wait_mode ? null : `accuracy ${Math.round(attempt.accuracy)}%`,
+              attempt.wait_mode ? null : `${Math.round(attempt.accuracy)}% of notes hit`,
               new Date(attempt.created_at).toLocaleString(),
             ].filter(Boolean).join(" · ")}
             accessory={attempt.wait_mode ? <WaitBadge /> : <ScoreBadge score={Math.round(attempt.score)} />}
