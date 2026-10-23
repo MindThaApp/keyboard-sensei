@@ -1272,6 +1272,136 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("catalogue backfill", () => {
+    /** Two hands, every onset on the beat: a score-like file. */
+    const twoHandMidi = (): Buffer => {
+      const midi = new Midi();
+      const right = midi.addTrack();
+      right.name = "Right hand";
+      const left = midi.addTrack();
+      left.name = "Left hand";
+      for (let i = 0; i < 64; i += 1) {
+        right.addNote({ midi: 72 + (i % 8), time: i * 0.5, duration: 0.45 });
+        if (i % 2 === 0) left.addNote({ midi: 48 + (i % 5), time: i * 0.5, duration: 0.9 });
+      }
+      return Buffer.from(midi.toArray());
+    };
+
+    /** Every pre-existing Song column, every attempt and XP row: what the backfill must never change. */
+    const protectedState = async () => ({
+      songs: await m.prisma.song.findMany({
+        select: {
+          id: true, title: true, artist: true, genre: true, difficulty: true, duration_sec: true, note_count: true, content_rights: true,
+          source_url: true, notation_path: true, file_path: true, uploader_id: true, created_at: true, arrangement_group: true,
+          arrangement_level: true, attribution: true, retired_at: true,
+        },
+        orderBy: { id: "asc" },
+      }),
+      attempts: await m.prisma.playAlongAttempt.findMany({ orderBy: { id: "asc" } }),
+      xp: await m.prisma.xpEvent.findMany({ orderBy: { id: "asc" } }),
+    });
+
+    it("groups songs into Works without touching ids or history, and a second run changes nothing", async () => {
+      const { backfillCatalogue, isNoOp } = await import("./catalogue/backfill.js");
+      const dir = await mkdtemp(join(tmpdir(), "ks-backfill-"));
+      await mkdir(join(dir, "essentials"));
+      const bytes = twoHandMidi();
+      const user = await createUser();
+      const owner = await createUser();
+      const ids: string[] = [];
+      const song = async (id: string | undefined, file: string, data: Record<string, unknown> = {}) => {
+        const file_path = join(dir, file);
+        await writeFile(file_path, bytes);
+        const created = await m.prisma.song.create({
+          data: { id, title: id ?? file, artist: "Ludwig van Beethoven", genre: "classical", difficulty: 2, duration_sec: 32, note_count: 96, content_rights: "public-domain", file_path, ...data },
+        });
+        ids.push(created.id);
+        return created.id;
+      };
+      for (const level of ["beginner", "intermediate", "full"]) {
+        await song(`essentials-fur-elise-${level}`, `essentials/fur-elise-${level}.mid`, { arrangement_group: "fur-elise", arrangement_level: level, content_rights: "cc-by-sa-3.0" });
+      }
+      const libraryFurElise = await song("seed-ludwig-van-beethoven-fur-elise", "ludwig-van-beethoven-fur-elise.mid", { retired_at: new Date() });
+      const bethena = await song("seed-scott-joplin-bethena", "scott-joplin-bethena.mid", { artist: "Scott Joplin" });
+      const silentNight = await song(undefined, "beginner-silent-night.mid", { artist: "Franz Xaver Gruber", title: "Silent Night", retired_at: new Date() });
+      const hotCrossBuns = await song(undefined, "beginner-hot-cross-buns.mid", { artist: "Traditional", title: "Hot Cross Buns" });
+      const upload = await song(undefined, "upload-mine.mid", { uploader_id: owner.id, content_rights: "user-upload" });
+      const missing = await song(undefined, "beginner-gone.mid", { artist: "Traditional", title: "Gone" });
+      await rm(join(dir, "beginner-gone.mid"));
+
+      for (const [songId, score] of [[libraryFurElise, 81], [libraryFurElise, 64], ["essentials-fur-elise-full", 92], [bethena, 55], [upload, 70], [silentNight, 40]] as const) {
+        await m.prisma.playAlongAttempt.create({ data: { user_id: user.id, song_id: songId, score, accuracy: score, tempo_pct: 100, lookahead_s: 4, wait_mode: false } });
+      }
+      await m.prisma.xpEvent.create({ data: { user_id: user.id, source: "playalong", amount: 25, reason: "test", dedupe_key: `playalong:${libraryFurElise}` } });
+
+      const before = await protectedState();
+      const bestsBefore = (await api("GET", "/songs/attempts/me", { token: user.token })).body.bests;
+
+      const first = await backfillCatalogue(m.prisma, { year: 2026 });
+      expect(first.worksCreated).toBeGreaterThanOrEqual(3);
+      expect(first.unreadable).toEqual([missing]);
+
+      expect(await protectedState()).toEqual(before);
+      expect((await api("GET", "/songs/attempts/me", { token: user.token })).body.bests).toEqual(bestsBefore);
+
+      const rows = new Map((await m.prisma.song.findMany({ where: { id: { in: ids } } })).map((row) => [row.id, row]));
+      // Every song has a source and a tier.
+      for (const row of rows.values()) {
+        expect(row.source_kind, row.id).not.toBeNull();
+        expect(row.quality_tier, row.id).toBeTruthy();
+      }
+      // One Work holds all three Essentials levels and the retired library copy.
+      const furElise = await m.prisma.work.findUniqueOrThrow({ where: { id: "fur-elise" }, include: { songs: { select: { id: true } }, aliases: true, composer: true } });
+      expect(furElise.songs.map((s) => s.id).sort()).toEqual(["essentials-fur-elise-beginner", "essentials-fur-elise-full", "essentials-fur-elise-intermediate", libraryFurElise].sort());
+      expect(furElise).toMatchObject({ composer_id: "ludwig-van-beethoven", catalogue: "WoO 59", pd_status: "pd-worldwide", curation_status: "published", recognisability: 1 });
+      expect(furElise.aliases.map((alias) => alias.alias)).toContain("Fuer Elise");
+      expect(furElise.search_text).toContain("woo59");
+      // The superseded beginner-pack row joins the Essentials Work; another tune gets its own.
+      expect(rows.get(silentNight)).toMatchObject({ work_id: "silent-night", source_kind: "beginner", source_ref: "beginner-pack:silent-night" });
+      expect(rows.get(hotCrossBuns)).toMatchObject({ work_id: "hot-cross-buns", source_kind: "beginner", public_eligible: true, quality_tier: "verified" });
+      expect(await m.prisma.work.findUniqueOrThrow({ where: { id: "hot-cross-buns" } })).toMatchObject({ genre: "childrens", composer_id: "traditional", curation_status: "published" });
+      // Sources, licences and eligibility.
+      expect(rows.get("essentials-fur-elise-full")).toMatchObject({ source_kind: "essentials", file_licence: "cc-by-sa-3.0", public_eligible: true, quality_tier: "verified" });
+      expect(rows.get(libraryFurElise)).toMatchObject({ source_kind: "adl", file_licence: "unknown", public_eligible: false, quality_tier: "low" });
+      expect(rows.get(bethena)).toMatchObject({ source_kind: "adl", work_id: null, source_ref: "scott-joplin-bethena", public_eligible: false });
+      expect(rows.get(upload)).toMatchObject({ source_kind: "upload", work_id: null, public_eligible: false });
+      expect(await m.prisma.tag.findMany({ where: { works: { some: { work_id: "fur-elise" } } } })).toEqual([expect.objectContaining({ id: "essentials" })]);
+
+      // Search goes through ks_unaccent and the indexed expressions (unaccent + pg_trgm installed).
+      const search = (q: string) =>
+        m.prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "Work"
+          WHERE to_tsvector('simple', ks_unaccent("search_text")) @@ websearch_to_tsquery('simple', ks_unaccent(${q}))
+             OR word_similarity(ks_unaccent(lower(${q})), ks_unaccent(lower("search_text"))) > 0.6
+          ORDER BY id`;
+      expect((await search("fur elise")).map((r) => r.id)).toContain("fur-elise");
+      expect((await search("Für Elise")).map((r) => r.id)).toContain("fur-elise");
+      expect((await search("fuer elise")).map((r) => r.id)).toContain("fur-elise");
+      expect((await search("woo59")).map((r) => r.id)).toEqual(["fur-elise"]);
+
+      // Idempotent: the second run writes nothing at all.
+      const updatedAt = (await m.prisma.song.findMany({ where: { id: { in: ids } }, select: { id: true, quality_checked_at: true }, orderBy: { id: "asc" } }));
+      const second = await backfillCatalogue(m.prisma, { year: 2026 });
+      expect(isNoOp(second)).toBe(true);
+      expect(await m.prisma.song.findMany({ where: { id: { in: ids } }, select: { id: true, quality_checked_at: true }, orderBy: { id: "asc" } })).toEqual(updatedAt);
+      expect(await protectedState()).toEqual(before);
+
+      // Curated choices made later are kept: a song moved to another Work stays there.
+      await m.prisma.song.update({ where: { id: bethena }, data: { work: { connect: { id: "hot-cross-buns" } } } });
+      await backfillCatalogue(m.prisma, { year: 2026 });
+      expect((await m.prisma.song.findUniqueOrThrow({ where: { id: bethena } })).work_id).toBe("hot-cross-buns");
+
+      await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.xpEvent.deleteMany({ where: { user_id: user.id } });
+      await m.prisma.song.deleteMany({ where: { id: { in: ids } } });
+      await m.prisma.work.deleteMany({});
+      await m.prisma.composer.deleteMany({});
+      await m.prisma.tag.deleteMany({});
+      await m.prisma.catalogueEvent.deleteMany({});
+      await rm(dir, { recursive: true, force: true });
+    });
+  });
+
   describe("song practice attempts", () => {
     it("stores the practice fields, keeps loop runs out of bests, and tracks bests per level", async () => {
       const user = await createUser();
