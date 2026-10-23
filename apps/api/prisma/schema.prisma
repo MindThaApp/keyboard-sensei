@@ -30,6 +30,8 @@ model User {
   // Google account subject id ("sub" claim), set when the user signs in with Google.
   google_sub         String?            @unique
   role               Role               @default(user)
+  // Bumped to void every access token issued before it (password change/reset, sign out everywhere).
+  token_version      Int                @default(0)
   // Minutes of practice a day the learner aims for (5 / 10 / 15 / 20).
   daily_goal_minutes Int                @default(10)
   // IANA zone the browser reported, so "today" and streak days follow the
