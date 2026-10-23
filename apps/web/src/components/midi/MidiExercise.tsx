@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MidiExercise as MidiExerciseDef, ScoringResult } from "@keyboard-sensei/shared-types";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import MetronomeControls, { loadMetronomeSettings, saveMetronomeSettings, type MetronomeSettings } from "./MetronomeControls";
 import VirtualPiano from "../piano/VirtualPiano";
+import { Advanced, Button, Card, Chip, Slider, Toggle, Toolbar } from "../ui";
+import { useExperienceMode } from "../ui/useExperienceMode";
+import { coveredNoteIds, groupByStart } from "./exerciseCoverage";
+import type { FocusMode } from "./useFocusModeShim";
 import NotationRenderer from "../notation/NotationRenderer";
 import { COUNT_IN_BEATS, useExerciseAttempt, type RecordingClock } from "./useExerciseAttempt";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
@@ -49,6 +53,10 @@ interface Props {
   onRecordingClock?: (clock: RecordingClock | null) => void;
   /** Key of the song an excerpt comes from — drawn as a key signature (see notationFor). */
   notationKey?: KeyInfo;
+  /** Primary action shown inside the result card once the exercise is passed (e.g. "Next step"). */
+  nextAction?: { label: string; onClick: () => void };
+  /** When given, the exercise offers focus mode and reduces itself to the essentials while it is active. */
+  focus?: FocusMode;
 }
 
 // Re-exported: the pause-invisible-to-scoring clock is tested from here.
@@ -109,7 +117,8 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey }: Props) {
+export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey, nextAction, focus }: Props) {
+  const experience = useExperienceMode();
   // The span this exercise actually uses — drives VirtualPiano's "Fit to piece"
   // button, so the user can widen a too-narrow keyboard in one click.
   const exerciseRange = useMemo(() => {
@@ -133,6 +142,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const [highlightEnabled, setHighlightEnabled] = useState<boolean>(loadHighlightEnabled);
   const [tempoBpm, setTempoBpm] = useState<number | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
+  // Focus mode lifts the exercise out of the page flow; this keeps its place so the page does not jump.
+  const [heldHeight, setHeldHeight] = useState<number | undefined>(undefined);
 
   const writtenBpm = exercise?.tempoBpm ?? 100;
   const { min: sliderMinBpm, max: sliderMaxBpm } = tempoBpmBounds(writtenBpm);
@@ -153,6 +164,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     liveCombo,
     lastDelta,
     listenNotes,
+    pressedNotes,
     listen,
     begin: beginAttempt,
     pause,
@@ -191,6 +203,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     return byNote;
   }, [result, notes]);
   const emptyNotes = useMemo<number[]>(() => [], []);
+  const covered = useMemo(() => coveredNoteIds(exercise?.expected ?? [], pressedNotes), [exercise, pressedNotes]);
 
   if (!exercise) {
     return <section className="card p-4 text-sm">Loading exercise…</section>;
@@ -210,57 +223,172 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     sectionRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
     beginAttempt();
   };
+  const restart = () => {
+    cancel();
+    begin();
+  };
 
   const passed = result !== null && result.score >= PASS_SCORE;
   const capturing = phase === "recording";
+  const inFocus = focus?.active ?? false;
+  const advanced = experience === "advanced";
+  const running = phase === "counting-in" || capturing || phase === "paused";
+
+  const noteGroups = groupByStart(exercise.expected);
+  const nextGroup = running ? noteGroups.find((group) => group.notes.some((n) => !covered.has(n.id))) : undefined;
+
+  const speedWord = chosenBpm < 70 ? "slow" : chosenBpm < 110 ? "medium" : "fast";
+
+  // The toolbar's buttons per phase. `main` is the one filled action; focus mode keeps only it.
+  let main: ReactNode = null;
+  const others: ReactNode[] = [];
+  if (phase === "idle" || phase === "scored" || phase === "listening") {
+    others.push(
+      <Button key="listen" variant="gray" onClick={listen} disabled={phase === "listening"} icon={<span aria-hidden>▶</span>}>
+        {phase === "listening" ? "Playing…" : "Listen"}
+      </Button>,
+    );
+    main = (
+      <Button key="start" variant="filled" onClick={begin}>
+        {phase === "scored" ? "Try again" : "Start"}
+      </Button>
+    );
+  } else if (phase === "counting-in") {
+    main = (
+      <Button key="cancel" variant="filled" onClick={cancel}>
+        Cancel
+      </Button>
+    );
+  } else if (capturing) {
+    main = (
+      <Button key="finish" variant="filled" disabled={!played} onClick={() => void submit()}>
+        Finish
+      </Button>
+    );
+    if (untimed) {
+      others.push(
+        <Button key="restart" variant="gray" onClick={restart}>
+          Restart
+        </Button>,
+      );
+    } else {
+      others.push(
+        <Button key="pause" variant="gray" onClick={pause}>
+          Pause
+        </Button>,
+        <Button key="cancel" variant="gray" onClick={cancel}>
+          Cancel
+        </Button>,
+      );
+    }
+  } else if (phase === "paused") {
+    main = (
+      <Button key="resume" variant="filled" onClick={resume}>
+        Resume
+      </Button>
+    );
+    others.push(
+      <Button key="cancel" variant="gray" onClick={cancel}>
+        Cancel
+      </Button>,
+    );
+  }
+  const toolbarButtons = inFocus
+    ? [
+        main,
+        <Button key="exit" variant="gray" onClick={focus?.exit} aria-label="Exit focus mode">
+          Exit
+        </Button>,
+      ]
+    : [...others.slice(0, 1), main, ...others.slice(1)];
+
+  const statusText =
+    phase === "counting-in"
+      ? `Count-in… ${beat ? beat.index + 1 : ""}`
+      : phase === "paused"
+        ? "Paused. Adjust speed or settings, then resume."
+        : capturing
+          ? untimed
+            ? "Play the notes. This finishes by itself when you have found them all."
+            : "Playing. Tap Finish when you are done."
+          : phase === "submitting"
+            ? "Scoring…"
+            : null;
+
+  const sheetSizeControl = (
+    <div className="flex items-center gap-1 text-xs text-slate-500">
+      <span className="mr-1">Sheet size</span>
+      <button
+        type="button"
+        aria-label="Smaller sheet"
+        onClick={() => setSheetScale((v) => Math.max(0.5, Math.round((v - 0.1) * 10) / 10))}
+        disabled={sheetScale <= 0.5}
+        className="h-8 w-8 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+      >
+        −
+      </button>
+      <span className="w-10 text-center tabular-nums">{Math.round(sheetScale * 100)}%</span>
+      <button
+        type="button"
+        aria-label="Larger sheet"
+        onClick={() => setSheetScale((v) => Math.min(1.6, Math.round((v + 0.1) * 10) / 10))}
+        disabled={sheetScale >= 1.6}
+        className="h-8 w-8 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
+      >
+        +
+      </button>
+    </div>
+  );
+
+  const tempoLocked = capturing || phase === "counting-in";
+
+  const enterFocus = () => {
+    setHeldHeight(sectionRef.current?.offsetHeight);
+    focus?.enter();
+  };
 
   return (
-    <section ref={sectionRef} className="card scroll-mt-3 space-y-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="font-semibold">{title}</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-300">{instructions}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          {!untimed && (
-            <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">
-              {exercise.beatsPerBar ?? 4}/{exercise.beatUnit ?? 4}
-            </span>
-          )}
-          {untimed ? (
-            <span className="rounded-full border border-slate-300 px-2 py-1 dark:border-slate-600">Untimed — find the right keys</span>
-          ) : (
-            <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">♩ = {exercise.tempoBpm}</span>
-          )}
-          {lessonId && <span className="rounded-full border border-slate-300 px-2 py-1 tabular-nums dark:border-slate-600">{PASS_SCORE} to pass</span>}
-        </div>
-      </div>
-
-      {notation && (
-        <div>
-          <div className="mb-1 flex items-center justify-end gap-1 text-xs text-slate-500">
-            <span className="mr-1">Sheet size</span>
-            <button
-              type="button"
-              aria-label="Smaller sheet"
-              onClick={() => setSheetScale((v) => Math.max(0.5, Math.round((v - 0.1) * 10) / 10))}
-              disabled={sheetScale <= 0.5}
-              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
-            >
-              −
-            </button>
-            <span className="w-10 text-center tabular-nums">{Math.round(sheetScale * 100)}%</span>
-            <button
-              type="button"
-              aria-label="Larger sheet"
-              onClick={() => setSheetScale((v) => Math.min(1.6, Math.round((v + 0.1) * 10) / 10))}
-              disabled={sheetScale >= 1.6}
-              className="h-6 w-6 rounded border border-slate-300 leading-none disabled:opacity-40 dark:border-slate-600"
-            >
-              +
-            </button>
+    <div style={inFocus ? { minHeight: heldHeight } : undefined}>
+      <section
+        ref={sectionRef}
+        data-focus={inFocus ? "true" : undefined}
+        className={
+          inFocus
+            ? "fixed inset-0 z-50 flex flex-col justify-end gap-2 overflow-y-auto bg-[var(--bg)] p-2"
+            : "scroll-mt-3 space-y-4"
+        }
+      >
+        {!inFocus && (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-display text-2xl font-semibold leading-tight">{title}</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{instructions}</p>
+            </div>
+            {focus && (
+              <Button variant="gray" size="sm" className="shrink-0" aria-label="Focus mode" onClick={enterFocus}>
+                <span aria-hidden>⤢</span>
+              </Button>
+            )}
           </div>
-          <div className="overflow-x-auto" role="img" aria-label={`Sheet music: ${title}`}>
+        )}
+
+        {!inFocus && (
+          <div className="flex flex-wrap items-center gap-2">
+            {untimed && <Chip>Take your time</Chip>}
+            {!untimed && advanced && (
+              <>
+                <Chip>
+                  {exercise.beatsPerBar ?? 4}/{exercise.beatUnit ?? 4}
+                </Chip>
+                <Chip>♩ = {exercise.tempoBpm}</Chip>
+              </>
+            )}
+            {lessonId && <Chip>Score {PASS_SCORE} to pass</Chip>}
+          </div>
+        )}
+
+        {notation && (
+          <div className="shrink-0 overflow-x-auto" role="img" aria-label={`Sheet music: ${title}`}>
             <div style={{ transform: `scale(${sheetScale})`, transformOrigin: "top left", width: `${100 / sheetScale}%` }}>
               <NotationRenderer
                 data={notation}
@@ -270,202 +398,181 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               />
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex flex-wrap gap-2">
-        {[...new Map(exercise.expected.map((e) => [e.startBeat, exercise.expected.filter((n) => n.startBeat === e.startBeat)])).values()].map(
-          (group, i) => (
-            <span key={i} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-              {group.map((n) => midiNoteToName(n.note)).join(" + ")}
+        <ul className="flex flex-wrap gap-2" aria-label="Notes to play">
+          {noteGroups.map((group) => {
+            const done = group.notes.every((n) => covered.has(n.id));
+            const isNext = group === nextGroup;
+            return (
+              <li key={group.startBeat}>
+                <Chip tone={done ? "success" : isNext ? "tint" : "neutral"} icon={done ? "✓" : undefined}>
+                  {group.notes.map((n) => midiNoteToName(n.note)).join(" + ")}
+                  {done && <span className="sr-only"> (found)</span>}
+                  {isNext && <span className="sr-only"> (next)</span>}
+                </Chip>
+              </li>
+            );
+          })}
+        </ul>
+
+        {!inFocus && phase === "idle" && !result && (
+          <p className="rounded-full bg-[var(--cell)] px-4 py-3 text-sm shadow-sm">
+            <span aria-hidden>👂 </span>Not sure? Tap <strong>Listen</strong> to hear it first.
+          </p>
+        )}
+
+        {statusText && (
+          <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
+            {statusText}
+          </p>
+        )}
+
+        {capturing && !untimed && highlightEnabled && advanced && (
+          <div className="flex items-center gap-3 text-xs">
+            <span className="tabular-nums">
+              <span className="text-slate-500">Live </span>
+              <strong className={liveScore >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}>{liveScore}</strong>
             </span>
-          ),
+            {liveCombo >= 3 && <span className="tabular-nums text-felt-600 dark:text-felt-400">{liveCombo} notes in a row</span>}
+            {lastDelta && (
+              <span key={lastDelta.key} className={lastDelta.value >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}>
+                {lastDelta.value >= 0 ? `+${lastDelta.value}` : lastDelta.value}
+              </span>
+            )}
+          </div>
         )}
-      </div>
 
-      <VirtualPiano
-        lowestNote={lowestNote}
-        highestNote={highestNote}
-        recommendedRange={exerciseRange}
-        expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : emptyNotes}
-        soundingNotes={listenNotes}
-        feedbackByNote={feedback}
-      />
+        {error && <p className="text-sm text-rose-600">{error}</p>}
 
-      <div className="flex flex-wrap items-center gap-3">
-        {(phase === "idle" || phase === "scored" || phase === "listening") && (
-          <>
-            <button className="primary-button" onClick={begin}>
-              {phase === "scored" ? "Try Again" : "Start Exercise"}
-            </button>
-            <button className="secondary-button" onClick={listen} disabled={phase === "listening"}>
-              {phase === "listening" ? "Playing…" : "▶ Listen"}
-            </button>
-          </>
-        )}
-        {(phase === "counting-in" || capturing || phase === "paused") && (
-          <>
-            {!untimed && phase !== "paused" && (
-              <div className="flex items-center gap-1.5" aria-hidden>
-                {Array.from({ length: COUNT_IN_BEATS }, (_, i) => (
-                  <span
-                    key={i}
-                    className={`h-2.5 w-2.5 rounded-full transition-colors ${
-                      beat && beat.index >= i ? (beat.isCountIn ? "bg-felt-500" : "bg-brass-500") : "bg-slate-300 dark:bg-slate-600"
-                    }`}
-                  />
+        {result && (
+          <Card
+            role="status"
+            aria-live="polite"
+            className={passed ? "border border-brass-400/60 bg-brass-100/60 dark:border-brass-600/50 dark:bg-brass-700/10" : undefined}
+          >
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <p className="font-display text-3xl font-semibold tabular-nums">{result.score}</p>
+              <p className={`text-sm font-medium ${passed ? "text-brass-700 dark:text-brass-300" : "text-slate-600 dark:text-slate-300"}`}>
+                {passed ? (lessonId ? "Passed. Nice playing." : "Clean run. Nice playing.") : `Score ${PASS_SCORE} to pass. Keep at it.`}
+              </p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+              <SubmetricBar label="Notes hit" value={result.noteAccuracy} />
+              {!untimed && <SubmetricBar label="Timing" value={result.timingAccuracy} />}
+              {!untimed && <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />}
+              {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
+              {result.dynamics && <SubmetricBar label="Dynamics" value={result.dynamics.score} />}
+            </div>
+            {result.dynamics && advanced && (
+              <p className="mt-2 text-xs tabular-nums text-slate-500" aria-label="Dynamics">
+                {result.dynamics.evenness !== null && `Volume spread ±${result.dynamics.velocitySpread} (evenness ${result.dynamics.evenness}%)`}
+                {result.dynamics.evenness !== null && result.dynamics.chordBalance !== null && " · "}
+                {result.dynamics.chordBalance !== null &&
+                  `Chord tones within ${result.dynamics.chordVelocityRange} of each other (balance ${result.dynamics.chordBalance}%)`}
+              </p>
+            )}
+            {result.feedback.length > 0 && (
+              <ul className="mt-3 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+                {result.feedback.map((line, i) => (
+                  <li key={i}>• {line}</li>
                 ))}
-              </div>
+              </ul>
             )}
-            <span className="text-sm text-slate-600 dark:text-slate-300" role="status">
-              {phase === "counting-in"
-                ? `Count-in… ${beat ? beat.index + 1 : ""}`
-                : phase === "paused"
-                  ? "Paused — adjust tempo or settings, then resume."
-                  : "Recording — play, then submit."}
-            </span>
-            {capturing && !untimed && highlightEnabled && (
-              <div className="flex items-center gap-3 text-xs">
-                <span className="tabular-nums">
-                  <span className="text-slate-500">Live </span>
-                  <strong className={liveScore >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}>
-                    {liveScore}
-                  </strong>
-                </span>
-                {liveCombo >= 3 && (
-                  <span className="tabular-nums text-felt-600 dark:text-felt-400">combo ×{liveCombo}</span>
-                )}
-                {lastDelta && (
-                  <span
-                    key={lastDelta.key}
-                    className={lastDelta.value >= 0 ? "text-brass-600 dark:text-brass-400" : "text-rose-600 dark:text-rose-400"}
-                  >
-                    {lastDelta.value >= 0 ? `+${lastDelta.value}` : lastDelta.value}
-                  </span>
-                )}
-              </div>
+            {passed && nextAction && (
+              <Button className="mt-4 w-full" variant="filled" size="lg" onClick={nextAction.onClick}>
+                {nextAction.label}
+              </Button>
             )}
-            {capturing && (
-              <button className="primary-button" disabled={!played} onClick={() => void submit()}>
-                Submit Attempt
-              </button>
-            )}
-            {capturing && (
-              <button className="secondary-button" onClick={pause}>
-                Pause
-              </button>
-            )}
-            {phase === "paused" && (
-              <button className="primary-button" onClick={resume}>
-                Resume
-              </button>
-            )}
-            <button className="secondary-button" onClick={cancel}>Cancel</button>
-          </>
+          </Card>
         )}
-        {phase === "submitting" && <span className="text-sm text-slate-500 dark:text-slate-400">Scoring…</span>}
-      </div>
 
-      {/* Tempo, metronome and highlighting sit behind a disclosure: they're adjustments,
-          not the task, and on a first visit (the skill assessment) they crowded the
-          prompt and pushed the keyboard below the fold. */}
-      {!untimed && (
-        <details className="group rounded-lg border border-slate-200 text-xs dark:border-slate-700">
-          <summary className="cursor-pointer select-none px-3 py-2 text-slate-700 dark:text-slate-200">
-            Practice settings
-            <span className="ml-2 text-slate-500">
-              {Math.round(chosenBpm)} BPM · metronome {metronomeOn ? "on" : "off"} · highlighting {highlightEnabled ? "on" : "off"}
-            </span>
-          </summary>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-700">
-            <label className="flex flex-wrap items-center gap-2">
-              <span className="text-slate-700 dark:text-slate-200">
-                Tempo <span className="text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
-              </span>
-              <input
-                type="range"
-                min={sliderMinBpm}
-                max={sliderMaxBpm}
-                step={1}
-                value={chosenBpm}
-                disabled={capturing || phase === "counting-in"}
-                onChange={(e) => setTempoBpm(Number(e.target.value))}
-                aria-label="Practice tempo in beats per minute"
-                className="h-1.5 w-32 cursor-pointer disabled:opacity-50 sm:w-40"
-              />
-              <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
-                <strong className="font-medium">{Math.round(chosenBpm)} BPM</strong>{" "}
-                <span className="text-slate-500">({Math.round(tempoPct)}% of written tempo)</span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-200">
-              <input type="checkbox" checked={metronomeOn} onChange={(e) => setMetronomeOn(e.target.checked)} />
-              Metronome while playing
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={highlightEnabled}
-                onChange={(e) => {
-                  setHighlightEnabled(e.target.checked);
-                  saveHighlightEnabled(e.target.checked);
-                }}
-              />
-              Highlight notes while playing
-            </label>
-            <MetronomeControls
-              settings={metronomeSettings}
-              onChange={(next) => {
-                setMetronomeSettings(next);
-                saveMetronomeSettings(next);
-              }}
-            />
-          </div>
-        </details>
-      )}
-
-      {error && <p className="text-sm text-rose-600">{error}</p>}
-
-      {result && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={`rounded-lg border p-4 ${
-            passed
-              ? "border-brass-400/60 bg-brass-100/60 dark:border-brass-600/50 dark:bg-brass-700/10"
-              : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-          }`}
-        >
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="font-display text-3xl font-semibold tabular-nums">{result.score}</p>
-            <p className={`text-sm font-medium ${passed ? "text-brass-700 dark:text-brass-300" : "text-slate-600 dark:text-slate-300"}`}>
-              {passed ? (lessonId ? "Passed — nice playing." : "Clean run — nice playing.") : `${PASS_SCORE} to pass — keep at it.`}
-            </p>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-            <SubmetricBar label="Notes" value={result.noteAccuracy} />
-            {!untimed && <SubmetricBar label="Timing" value={result.timingAccuracy} />}
-            {!untimed && <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />}
-            {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
-            {result.dynamics && <SubmetricBar label="Dynamics" value={result.dynamics.score} />}
-          </div>
-          {result.dynamics && (
-            <p className="mt-2 text-xs tabular-nums text-slate-500" aria-label="Dynamics">
-              {result.dynamics.evenness !== null && `Volume spread ±${result.dynamics.velocitySpread} (evenness ${result.dynamics.evenness}%)`}
-              {result.dynamics.evenness !== null && result.dynamics.chordBalance !== null && " · "}
-              {result.dynamics.chordBalance !== null &&
-                `Chord tones within ${result.dynamics.chordVelocityRange} of each other (balance ${result.dynamics.chordBalance}%)`}
-            </p>
-          )}
-          {result.feedback.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm text-slate-700 dark:text-slate-200">
-              {result.feedback.map((line, i) => (
-                <li key={i}>• {line}</li>
-              ))}
-            </ul>
-          )}
+        <div className="flex justify-center">
+          <Toolbar aria-label="Exercise controls" placement="floating">
+            {toolbarButtons}
+          </Toolbar>
         </div>
-      )}
-    </section>
+
+        <VirtualPiano
+          lowestNote={lowestNote}
+          highestNote={highestNote}
+          recommendedRange={exerciseRange}
+          expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : emptyNotes}
+          soundingNotes={listenNotes}
+          feedbackByNote={feedback}
+          showControls={advanced}
+          showHint={!inFocus}
+          maxWhiteKeyHeightPx={220}
+        />
+
+        {/* Speed, metronome and highlighting sit behind a disclosure: they are adjustments,
+            not the task, and on a first visit they crowded the prompt and pushed the
+            keyboard below the fold. Simple mode keeps only speed and the click. */}
+        {!inFocus && (!untimed || advanced) && (
+          <details className="group rounded-lg border border-slate-200 text-xs dark:border-slate-700">
+            <summary className="min-h-11 cursor-pointer select-none px-3 py-3 text-slate-700 dark:text-slate-200">
+              {advanced ? "Practice settings" : "More options"}
+              {!untimed && (
+                <span className="ml-2 text-slate-500">
+                  {advanced
+                    ? `${Math.round(chosenBpm)} BPM · metronome ${metronomeOn ? "on" : "off"} · highlighting ${highlightEnabled ? "on" : "off"}`
+                    : `Speed: ${Math.round(chosenBpm)} (${speedWord})`}
+                </span>
+              )}
+            </summary>
+            <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-700">
+              {!untimed && (
+                <div className="space-y-1">
+                  <p className="text-slate-700 dark:text-slate-200">
+                    {advanced ? (
+                      <>
+                        Tempo <span className="text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
+                      </>
+                    ) : (
+                      "Speed"
+                    )}
+                  </p>
+                  <Slider
+                    min={sliderMinBpm}
+                    max={sliderMaxBpm}
+                    step={1}
+                    value={chosenBpm}
+                    disabled={tempoLocked}
+                    onChange={(value) => setTempoBpm(value)}
+                    aria-label={advanced ? "Practice tempo in beats per minute" : "Speed"}
+                    formatValue={(value) =>
+                      advanced ? `${Math.round(value)} BPM (${Math.round((value / writtenBpm) * 100)}% of written tempo)` : `Speed: ${Math.round(value)} (${speedWord})`
+                    }
+                  />
+                </div>
+              )}
+              {!untimed && <Toggle label="Metronome while playing" checked={metronomeOn} onChange={setMetronomeOn} />}
+              {advanced && !untimed && (
+                <Toggle
+                  label="Highlight notes while playing"
+                  checked={highlightEnabled}
+                  onChange={(checked) => {
+                    setHighlightEnabled(checked);
+                    saveHighlightEnabled(checked);
+                  }}
+                />
+              )}
+              <Advanced>
+                {notation && sheetSizeControl}
+                {!untimed && (
+                  <MetronomeControls
+                    settings={metronomeSettings}
+                    onChange={(next) => {
+                      setMetronomeSettings(next);
+                      saveMetronomeSettings(next);
+                    }}
+                  />
+                )}
+              </Advanced>
+            </div>
+          </details>
+        )}
+      </section>
+    </div>
   );
 }
