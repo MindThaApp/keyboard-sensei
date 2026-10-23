@@ -49,6 +49,9 @@ const HUD_INTERVAL_MS = 120;
  * playAlongRunStore rather than React state, so the page itself only re-renders
  * when the run starts, pauses or ends.
  */
+/** A note the player actually hit (a miss, or a note not yet reached, is not played). */
+export const isPlayed = (judgment: PlayAlongJudgment | undefined): boolean => judgment !== undefined && judgment !== "miss";
+
 export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, settings, subscribe, onFrame, onFinish, onJudged }: Options<S>) {
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -204,5 +207,20 @@ export function usePlayAlongRun<S extends RunSettings>({ run, clickSafe, setting
     setPaused(false);
   }, [stop]);
 
-  return { running, paused, start, togglePause, cancel, engineRef: engineRef as MutableRefObject<PlayAlongEngine | null> };
+  /**
+   * Stop on purpose. A run with judged notes ends as a finished run (so it gets a result
+   * and is saved like any other); one with none is just abandoned. Returns whether it ended.
+   */
+  const stopRun = useCallback((): boolean => {
+    const engine = engineRef.current;
+    // Wait mode records its confirmations in `judgments`, not in the live stats.
+    if (!engine || !engine.judgments.some(isPlayed)) {
+      cancel();
+      return false;
+    }
+    engine.endNow();
+    return true;
+  }, [cancel]);
+
+  return { running, paused, start, togglePause, cancel, stopRun, engineRef: engineRef as MutableRefObject<PlayAlongEngine | null> };
 }
