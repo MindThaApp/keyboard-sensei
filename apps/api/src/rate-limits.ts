@@ -46,6 +46,16 @@ export const songUploadRateLimit = rateLimit({
   message: rateLimitedBody("Too many uploads — try again later"),
 });
 
+/** Sheet music to recognise (beta): each one is up to four minutes of the OMR service's CPU. */
+export const omrUploadRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  keyGenerator: userOrIpKey,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("You've sent a lot of sheet music to recognise — try again in an hour"),
+});
+
 /** Instrument packs are up to 50 MB each, so far fewer per user. */
 export const instrumentUploadRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,

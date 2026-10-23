@@ -13,13 +13,14 @@
  *   DATABASE_URL=$TEST_DATABASE_URL pnpm --filter @keyboard-sensei/api exec prisma migrate deploy
  *   pnpm --filter @keyboard-sensei/api test
  */
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { Midi } from "@tonejs/midi";
 import bcrypt from "bcryptjs";
@@ -27,6 +28,7 @@ import type { NextFunction, Request, Response } from "express";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const SCORE_FIXTURE = join(import.meta.dirname, "scores/fixtures/liliuokalani-aloha-oe.mxl");
+const OMR_FIXTURE = join(import.meta.dirname, "omr/fixtures/bach-minuet-bwv-anh120.homr.musicxml");
 const enabled = Boolean(TEST_DATABASE_URL);
 
 if (enabled && !/test/i.test(new URL(TEST_DATABASE_URL!).pathname)) {
@@ -416,6 +418,117 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect((await upload(user.token, new Uint8Array(0))).status).toBe(400);
       expect((await upload(user.token, new Uint8Array(m.songs.SCORE_UPLOAD_LIMIT_BYTES + 1))).status).toBe(413);
       expect(await m.prisma.song.count({ where: { uploader_id: user.id } })).toBe(0);
+    });
+  });
+
+  describe("sheet music recognition (beta)", () => {
+    // A stand-in for services/omr: any "PDF" comes back as homr's real recognition of Bach's
+    // Minuet BWV Anh. 120 (see src/omr/fixtures), "%PDF-blank" has no music.
+    let omrServer: Server;
+    const received: Buffer[] = [];
+    /** Holds each recognition until the test lets it finish, so "still running" is not a race. */
+    let gate: Promise<void> = Promise.resolve();
+    beforeAll(async () => {
+      omrServer = createServer(async (req, res) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const body = Buffer.concat(chunks);
+        received.push(body);
+        await gate;
+        if (body.subarray(0, 10).toString() === "%PDF-blank") {
+          res.writeHead(422, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: { code: "no_music", message: "No sheet music was recognised." } }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/vnd.recordare.musicxml+xml", "x-omr-pages": "2" });
+        res.end(readFileSync(OMR_FIXTURE));
+      });
+      await new Promise<void>((resolve) => omrServer.listen(0, "127.0.0.1", resolve));
+    });
+    afterAll(() => new Promise<void>((resolve) => omrServer.close(() => resolve())));
+    beforeEach(() => {
+      m.env.OMR_SERVICE_URL = `http://127.0.0.1:${(omrServer.address() as AddressInfo).port}`;
+    });
+    afterEach(() => {
+      m.env.OMR_SERVICE_URL = undefined;
+    });
+
+    const submit = (token: string, bytes: Uint8Array<ArrayBuffer>) =>
+      fetch(`${baseUrl}/songs/upload/omr`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/pdf" },
+        body: bytes,
+      });
+    const settled = async (token: string, id: string) => {
+      for (let i = 0; i < 200; i += 1) {
+        const job = await api("GET", `/omr/jobs/${id}`, { token });
+        if (job.body?.status === "ready" || job.body?.status === "failed") return job.body;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error("job never finished");
+    };
+
+    it("recognises, shows the result only to its owner, and saves it as a private song", async () => {
+      const owner = await createUser();
+      const stranger = await createUser();
+      expect((await api("GET", "/config")).body.sheetMusicRecognition).toBe(true);
+      const pdf = new TextEncoder().encode("%PDF-1.7 two pages of music");
+      let release = () => {};
+      gate = new Promise((resolve) => (release = resolve));
+      const res = await submit(owner.token, pdf);
+      expect(res.status).toBe(202);
+      const queued = (await res.json()) as { id: string; status: string };
+      expect(["queued", "recognising"]).toContain(queued.status);
+      // One at a time per user.
+      expect((await submit(owner.token, pdf)).status).toBe(429);
+      release();
+
+      const job = await settled(owner.token, queued.id);
+      expect(received.at(-1)).toEqual(Buffer.from(pdf));
+      // Recognised, tidied (src/omr/normalize-musicxml.ts) and imported: both repeats played.
+      expect(job).toMatchObject({ status: "ready", error: null, result: { title: "Minuet in A minor", pages: 2, bars: 30, played_bars: 60, note_count: 330, warnings: [] } });
+      for (const path of [`/omr/jobs/${queued.id}`, `/omr/jobs/${queued.id}/notation`]) {
+        expect((await api("GET", path, { token: stranger.token })).status, path).toBe(404);
+      }
+      expect((await api("POST", `/omr/jobs/${queued.id}/save`, { token: stranger.token, body: { title: "Mine" } })).status).toBe(404);
+      const notation = await fetch(`${baseUrl}/omr/jobs/${queued.id}/notation`, { headers: { authorization: `Bearer ${owner.token}` } });
+      expect(notation.headers.get("content-type")).toContain("application/mei+xml");
+      expect(await notation.text()).toContain("<mei");
+      // Nothing is stored before the review.
+      expect(await m.prisma.song.count({ where: { uploader_id: owner.id } })).toBe(0);
+
+      const saved = await api("POST", `/omr/jobs/${queued.id}/save`, { token: owner.token, body: { title: "Minuet (from a photo)", artist: "J. S. Bach" } });
+      expect(saved.status).toBe(201);
+      expect(saved.body).toMatchObject({ title: "Minuet (from a photo)", mine: true, notation_format: "mei", content_rights: "user-score-scan" });
+      const row = await m.prisma.song.findUniqueOrThrow({ where: { id: saved.body.id } });
+      expect(row).toMatchObject({ uploader_id: owner.id, source_kind: "upload", public_eligible: false, note_count: 330, hands: "both" });
+      expect(existsSync(row.score_path!)).toBe(true);
+      // Saved once: the job is gone.
+      expect((await api("POST", `/omr/jobs/${queued.id}/save`, { token: owner.token, body: { title: "Again" } })).status).toBe(404);
+      const listed = ((await api("GET", "/songs", { token: stranger.token })).body.songs as { id: string }[]).map((song) => song.id);
+      expect(listed).not.toContain(saved.body.id);
+      expect((await api("DELETE", `/songs/${saved.body.id}`, { token: owner.token })).status).toBe(200);
+    });
+
+    it("passes on the service's explanation when no music is found, and refuses non-images", async () => {
+      const user = await createUser();
+      const res = await submit(user.token, new TextEncoder().encode("%PDF-blank page"));
+      expect(res.status).toBe(202);
+      const job = await settled(user.token, ((await res.json()) as { id: string }).id);
+      expect(job).toMatchObject({ status: "failed", result: null, error: { code: "no_music", message: "No sheet music was recognised." } });
+
+      const html = await submit(user.token, new TextEncoder().encode("<html>"));
+      expect(html.status).toBe(415);
+      expect((await submit(user.token, new Uint8Array(0))).status).toBe(400);
+    });
+
+    it("is off, and says so, when no service is configured", async () => {
+      m.env.OMR_SERVICE_URL = undefined;
+      const user = await createUser();
+      expect((await api("GET", "/config")).body.sheetMusicRecognition).toBe(false);
+      const res = await submit(user.token, new TextEncoder().encode("%PDF-1.7"));
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("omr_unavailable");
     });
   });
 

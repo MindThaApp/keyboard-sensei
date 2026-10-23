@@ -89,6 +89,7 @@ export function sourceKindFor(song: Pick<SongRow, "id" | "file_path" | "uploader
     case "user-upload":
     case "user-import-url":
     case "user-score-upload":
+    case "user-score-scan":
       return "upload";
   }
   return song.uploader_id ? "upload" : "unknown";
