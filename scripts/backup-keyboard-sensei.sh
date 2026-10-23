@@ -70,3 +70,22 @@ for file in "${created[@]}"; do
   summary+=("$(basename "$file") $(du -h "$file" | cut -f1)")
 done
 printf 'Backup complete: %s\n' "$(IFS='; '; echo "${summary[*]}")"
+
+# Optional off-box copy of this backup set with rclone (Google Drive, Backblaze B2, ...).
+# RCLONE_REMOTE is an rclone destination such as "ks-b2:my-bucket/keyboard-sensei" or
+# "ks-crypt:" (a crypt remote wrapping one of those). Remote copies older than
+# RCLONE_KEEP_DAYS (default 14, matching the local rotation of 14 sets) are deleted, so a
+# deleted account's data leaves the off-box copies on the same schedule as local ones.
+# Runs after the local backup is complete: an upload failure never costs the local set,
+# but it does make the script exit non-zero so cron mail / the log shows it.
+if [[ -n "${RCLONE_REMOTE:-}" ]]; then
+  if ! command -v rclone >/dev/null 2>&1; then
+    echo "RCLONE_REMOTE is set but rclone is not installed" >&2
+    exit 1
+  fi
+  for file in "${created[@]}"; do
+    rclone copy --checksum -- "$file" "$RCLONE_REMOTE"
+  done
+  rclone delete --min-age "${RCLONE_KEEP_DAYS:-14}d" --include 'ks-*' -- "$RCLONE_REMOTE"
+  printf 'Uploaded %d file(s) to %s\n' "${#created[@]}" "$RCLONE_REMOTE"
+fi
