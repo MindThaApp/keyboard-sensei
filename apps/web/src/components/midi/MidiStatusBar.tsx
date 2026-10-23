@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import BluetoothMidiPicker from "./BluetoothMidiPicker";
 import { useMidiContext } from "./MidiContext";
 
 /** Shows MIDI hardware status and never fails silently on unsupported browsers (Safari/iOS). */
@@ -12,6 +13,7 @@ export default function MidiStatusBar() {
     dismissCalibration,
     subscribe,
     connectWebMidi,
+    bluetoothMidiSupported,
   } = useMidiContext();
 
   // Note activity is held locally rather than on the context: a note-on fires on
@@ -84,6 +86,7 @@ export default function MidiStatusBar() {
           </button>
         )}
       </div>
+      {bluetoothMidiSupported && !webMidiConnected && <BluetoothMidiPicker />}
       {calibrationMessage && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100">
           <span className="flex-1">
