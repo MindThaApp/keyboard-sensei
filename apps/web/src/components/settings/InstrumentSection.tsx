@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
 import { pianoSynth } from "../../utils/synth";
+import { Advanced } from "../ui";
+import { describeInstrument } from "./instrumentText";
 import { clearInstrumentPickerCache, groupInstruments } from "../instruments/InstrumentPicker";
 
 const LOAD_POLL_MS = 150;
@@ -71,7 +73,7 @@ function InstrumentRow({ instrument, selectedId, canDelete, onSelect, onDelete }
     >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{instrument.name}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{instrument.description}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{describeInstrument(instrument)}</p>
         {isSelected && loading && (
           <>
             <div className="mt-1.5 h-1.5 w-full max-w-[10rem] overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -250,14 +252,16 @@ export default function InstrumentSection() {
             Choose the sampled voice used across lessons, Practice Gym, and Play-Along, or manage your custom packs.
           </p>
         </div>
-        <div className="ml-auto flex flex-wrap gap-2">
-          <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "upload" ? null : "upload"))}>
-            Upload pack
-          </button>
-          <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "url" ? null : "url"))}>
-            Import URL
-          </button>
-        </div>
+        <Advanced>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "upload" ? null : "upload"))}>
+              Upload pack
+            </button>
+            <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "url" ? null : "url"))}>
+              Import URL
+            </button>
+          </div>
+        </Advanced>
       </div>
 
       {adding && (
