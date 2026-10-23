@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b tsconfig.build.json && vite build",
+    "dev": "tsx scripts/third-party-licenses.ts && vite",
+    "build": "tsx scripts/third-party-licenses.ts && tsc -b tsconfig.build.json && vite build",
+    "licenses": "tsx scripts/third-party-licenses.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
@@ -35,6 +36,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.4",
     "vite": "^5.4.3"
   }

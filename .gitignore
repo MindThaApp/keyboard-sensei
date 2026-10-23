@@ -15,3 +15,6 @@ apps/api/data/feedback-screenshots
 # downloads. Both the manifest and the packs are volume-mounted, not committed —
 # run that script server-side after a deploy, then reseed.
 apps/api/scripts/instrument-manifest.json
+
+# Generated on every web build/dev start by apps/web/scripts/third-party-licenses.ts.
+apps/web/public/third-party-licenses.json

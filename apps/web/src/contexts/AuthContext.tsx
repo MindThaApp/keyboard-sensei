@@ -7,7 +7,12 @@ type AuthContextValue = {
   authenticated: boolean;
   user: AuthUser | null;
   login(email: string, password: string): Promise<void>;
-  register(email: string, password: string, name: string): Promise<void>;
+  /** Resolves to "verify" when the account must confirm its email before signing in. */
+  register(email: string, password: string, name: string): Promise<"signed-in" | "verify">;
+  /** Google sign-in; resolves true when a new account was created. */
+  loginWithGoogle(credential: string): Promise<boolean>;
+  /** Starts a session from a response the caller already has (e.g. an email verification link). */
+  acceptSession(response: { accessToken: string; user: AuthUser }): void;
   logout(): void;
   setUser(user: AuthUser): void;
 };
@@ -50,7 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authenticated,
       user,
       login: async (email, password) => accept(await api.login(email, password)),
-      register: async (email, password, name) => accept(await api.register(email, password, name)),
+      register: async (email, password, name) => {
+        const response = await api.register(email, password, name);
+        if ("verificationRequired" in response) return "verify";
+        accept(response);
+        return "signed-in";
+      },
+      loginWithGoogle: async (credential) => {
+        const response = await api.googleSignIn(credential);
+        accept(response);
+        return response.created;
+      },
+      acceptSession: accept,
       logout: () => {
         api.clearToken();
         setUser(null);
