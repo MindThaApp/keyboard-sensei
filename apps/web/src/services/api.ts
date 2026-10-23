@@ -60,7 +60,12 @@ export const submitPracticeGymAttempt = (exercise: MidiExercise, payload: Exerci
 export const applyAssessmentPlacement = (scores: number[]) => request<AssessmentPlacement>("/users/me/assessment-placement", { method: "POST", body: JSON.stringify({ scores }) });
 export const getCurrentUser = () => request<AuthUser>("/users/me");
 export const updateProfile = (display_name: string) => request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ display_name }) });
-export const changePassword = (currentPassword: string, newPassword: string) => request<{ ok: true }>("/users/me/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+/** The server revokes every other session on a password change and returns a fresh token for this one. */
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const result = await request<{ ok: true; accessToken?: string }>("/users/me/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+  if (result.accessToken) setToken(result.accessToken);
+  return result;
+};
 
 export const updateNarrationVoice = (narration_voice_id: string | null) => request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ narration_voice_id }) });
 
