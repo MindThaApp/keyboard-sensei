@@ -128,34 +128,154 @@ model Feedback {
 }
 
 model Song {
-  id             String             @id @default(cuid())
-  title          String
-  artist         String
-  genre          String
-  difficulty     Int
-  duration_sec   Float
-  note_count     Int
-  content_rights String
-  source_url     String?
-  notation_path  String?
-  file_path      String
-  uploader_id    String?
-  created_at     DateTime           @default(now())
+  id                   String             @id @default(cuid())
+  title                String
+  artist               String
+  genre                String
+  difficulty           Int
+  duration_sec         Float
+  note_count           Int
+  content_rights       String
+  source_url           String?
+  notation_path        String?
+  file_path            String
+  uploader_id          String?
+  created_at           DateTime           @default(now())
   // One piece offered at several difficulty levels (the Essentials pack):
   // every version of a piece shares `arrangement_group`; `arrangement_level`
   // is "beginner" | "intermediate" | "full". NULL for ordinary songs.
-  arrangement_group String?
-  arrangement_level String?
+  arrangement_group    String?
+  arrangement_level    String?
   // Credit line required by the source's licence (e.g. CC BY typesetting).
-  attribution    String?
+  attribution          String?
   // A library song superseded by a better version of the same piece. Hidden
   // from the song list but kept, because users' play-along history points at it.
-  retired_at     DateTime?
-  uploader       User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
-  attempts       PlayAlongAttempt[]
+  retired_at           DateTime?
+  // Catalogue (library redesign). All nullable or defaulted, filled by
+  // src/catalogue/backfill.ts; nothing above is derived from them yet.
+  // The piece this song is a version of. NULL for uploads and unmapped library songs.
+  work_id              String?
+  // essentials | beginner | piano-midi-de | mutopia | authored | adl | upload | recording | archive
+  source_kind          String?
+  // Mutopia id, piano-midi.de filename, ADL manifest id, or sha256.
+  source_ref           String?
+  // Licence of the FILE (not the composition): public-domain | cc-by-* | cc-by-sa-* | cc-by-nc-* | unknown
+  file_licence         String?
+  public_eligible      Boolean            @default(false)
+  // verified | good | unrated | low
+  quality_tier         String             @default("unrated")
+  quality_score        Float?
+  quality_signals      Json?
+  quality_checked_at   DateTime?
+  tier_override        String?
+  tier_override_reason String?
+  grade_band           String?
+  // both | right-hand-melody | single-line
+  hands                String?
+  uploader             User?              @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
+  work                 Work?              @relation(fields: [work_id], references: [id], onDelete: SetNull)
+  attempts             PlayAlongAttempt[]
 
   @@index([uploader_id])
   @@index([arrangement_group])
+  @@index([work_id])
+  @@index([quality_tier])
+  @@index([public_eligible])
+}
+
+model Composer {
+  // Slug, e.g. "frederic-chopin".
+  id        String   @id
+  name      String
+  // "Chopin, Frédéric"
+  sort_name String
+  born      Int?
+  died      Int?
+  aliases   String[]
+  works     Work[]
+}
+
+/// One piece of music. Its versions (Essentials levels, the beginner-pack
+/// arrangement, library copies) are the Songs that point at it.
+model Work {
+  // Slug, e.g. "fur-elise" (Essentials works use their arrangement_group).
+  id              String      @id
+  // Display title; may already include the catalogue number or movement.
+  title           String
+  composer_id     String?
+  // "Op. 28 No. 4"
+  catalogue       String?
+  movement        String?
+  // baroque | classical-era | romantic | impressionist | early-20th-c | ragtime | traditional | modern
+  era             String?
+  // classical | folk | hymn-carol | ragtime | childrens | teaching | march | other
+  genre           String
+  published_year  Int?
+  // pd-worldwide | pd-us-eu | copyrighted | unknown
+  pd_status       String
+  // Curated rank, lower = more recognisable.
+  recognisability Int?
+  featured_rank   Int?
+  // draft | in_review | published | hidden | retired
+  curation_status String      @default("draft")
+  // Title, aliases, catalogue tokens, composer and tags, maintained by the
+  // application; the search indexes (raw SQL in the migration) are built on it.
+  search_text     String      @default("")
+  notes           String?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+  composer        Composer?   @relation(fields: [composer_id], references: [id])
+  aliases         WorkAlias[]
+  tags            WorkTag[]
+  songs           Song[]
+
+  @@index([genre])
+  @@index([curation_status])
+}
+
+model WorkAlias {
+  id      String @id @default(cuid())
+  work_id String
+  alias   String
+  // title | nickname | catalogue | translation
+  kind    String
+  work    Work   @relation(fields: [work_id], references: [id], onDelete: Cascade)
+
+  @@unique([work_id, alias])
+}
+
+model Tag {
+  id    String    @id
+  label String
+  // collection | mood
+  kind  String
+  works WorkTag[]
+}
+
+model WorkTag {
+  work_id String
+  tag_id  String
+  work    Work   @relation(fields: [work_id], references: [id], onDelete: Cascade)
+  tag     Tag    @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([work_id, tag_id])
+}
+
+/// Audit log of catalogue changes.
+model CatalogueEvent {
+  id       String   @id @default(cuid())
+  actor_id String?
+  work_id  String?
+  song_id  String?
+  // import | classify | publish | retire | unretire | merge | override_tier | edit
+  action   String
+  before   Json?
+  after    Json?
+  reason   String?
+  at       DateTime @default(now())
+
+  @@index([song_id])
+  @@index([work_id])
 }
 
 model Instrument {
@@ -182,23 +302,23 @@ model ArchiveEntry {
 }
 
 model PlayAlongAttempt {
-  id          String   @id @default(cuid())
-  user_id     String
-  song_id     String
-  score       Float
-  accuracy    Float
+  id                String   @id @default(cuid())
+  user_id           String
+  song_id           String
+  score             Float
+  accuracy          Float
   // Playback rate as a percentage of the song's own tempo. Continuous since
   // 2026-07-12 (was Int 25/50/75/100). This is the authoritative field: it is
   // meaningful for every song, including the rubato/tempo-curve performance
   // MIDIs the library is built from.
-  tempo_pct   Float
+  tempo_pct         Float
   // Absolute BPM the user chose, recorded only when the song had a single
   // stable tempo to derive it from. NULL for every pre-2026-07-12 row and for
   // any song whose MIDI has a tempo curve — Song has no bpm column and
   // tempos[0] is a fiction for those, so this is display-only, never scored.
-  tempo_bpm   Float?
-  lookahead_s Float
-  wait_mode   Boolean
+  tempo_bpm         Float?
+  lookahead_s       Float
+  wait_mode         Boolean
   // Song practice (all NULL on rows from before it existed, read as a full,
   // two-handed, whole-song run):
   // "full" | "simplified" | "easy" | "melody" — the "Make it easier" step.
@@ -212,9 +332,9 @@ model PlayAlongAttempt {
   multiplier        Float?
   // A run of a looped section: practice, never a full-song best.
   is_loop           Boolean  @default(false)
-  created_at  DateTime @default(now())
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  song        Song     @relation(fields: [song_id], references: [id], onDelete: Cascade)
+  created_at        DateTime @default(now())
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  song              Song     @relation(fields: [song_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
 }
