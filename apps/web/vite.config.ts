@@ -29,7 +29,7 @@ const neverPrecacheExtensions = new Set([
 /**
  * Chunks only some users ever load, fetched when needed and never downloaded up front
  * by the service worker: an optional notes style and its `three` dependency (~550 KB),
- * and the Verovio engraver (~7 MB of WASM, only for score-imported songs).
+ * and the Verovio engraver worker (~7 MB of WASM, only for score-imported songs).
  */
 const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/, /^verovio-[\w-]+\.js$/];
 
@@ -161,11 +161,12 @@ export default defineConfig({
   define: { __APP_RELEASE__: JSON.stringify(release) },
   build: {
     sourcemap: uploadSourceMaps ? "hidden" : false,
+  },
+  worker: {
+    format: "es",
     rollupOptions: {
-      output: {
-        // A stable name for the lazily loaded engraver, so the service worker can skip it.
-        manualChunks: (id) => (id.includes("/node_modules/verovio/") ? "verovio" : undefined),
-      },
+      // A stable name for the engraver worker, so the service worker can skip it.
+      output: { entryFileNames: "assets/verovio-worker-[hash].js" },
     },
   },
   plugins: [
