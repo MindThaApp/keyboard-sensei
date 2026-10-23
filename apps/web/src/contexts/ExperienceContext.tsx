@@ -53,3 +53,12 @@ export function useExperience(): ExperienceContextValue {
   if (!value) throw new Error("useExperience requires ExperienceProvider");
   return value;
 }
+
+/**
+ * The current mode without requiring the provider (falls back to the stored value),
+ * for leaf components such as the kit's <Advanced> that also render in isolation.
+ */
+export function useExperienceMode(): Experience {
+  const value = useContext(ExperienceContext);
+  return value?.experience ?? loadExperience();
+}

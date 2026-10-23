@@ -334,6 +334,7 @@ export interface ResolvedAppearance {
   density: Density;
   orientation: Orientation;
   regular: GlassMetrics;
+  frosted: GlassMetrics;
   onDark: GlassMetrics;
   vars: Record<string, string>;
 }
@@ -381,6 +382,8 @@ export function resolveAppearance(settings: AppearanceSettings, env: AppearanceE
   const sheen = glass === "solid" ? 0 : SHEEN_OPACITY[scheme][settings.sheen];
   const style = glass === "clear" ? "clear" : "frosted";
   const regular = glassMetrics(GLASS_VARIANTS[scheme], style, GLASS_DESIGN_ALPHA, sheen);
+  // Sheets, toasts and menus carry paragraphs, so they keep the Frosted floor under Clear.
+  const frosted = style === "frosted" ? regular : glassMetrics(GLASS_VARIANTS[scheme], "frosted", GLASS_DESIGN_ALPHA, sheen);
   // Bars over the stage always use the floor, never the Clear look (§3.7 practice cap).
   const onDark = glassMetrics(GLASS_VARIANTS.onDark, "frosted", ON_DARK_DESIGN_ALPHA, sheen);
   const selection = selectionAlpha(scheme, tintText);
@@ -396,6 +399,8 @@ export function resolveAppearance(settings: AppearanceSettings, env: AppearanceE
     ...legacyAccentRamp(tintFill),
     "--glass-a": fmt(regular.alphaTop),
     "--glass-a2": fmt(regular.alphaBottom),
+    "--glass-frosted-a": fmt(frosted.alphaTop),
+    "--glass-frosted-a2": fmt(frosted.alphaBottom),
     "--glass-scrim-a": fmt(regular.scrim),
     "--glass-input-a": fmt(Math.min(regular.alphaTop + 0.1, 0.97)),
     "--glass-pane-a": fmt(regular.alphaTop / 2),
@@ -410,7 +415,7 @@ export function resolveAppearance(settings: AppearanceSettings, env: AppearanceE
     "--refraction-l": fmt(glass === "solid" ? 0 : REFRACTION_LEVEL[settings.sheen]),
   };
 
-  return { scheme, glass, solidReason, device, density, orientation, regular, onDark, vars };
+  return { scheme, glass, solidReason, device, density, orientation, regular, frosted, onDark, vars };
 }
 
 /** Writes a resolved appearance onto <html>. The only place appearance touches the DOM. */
