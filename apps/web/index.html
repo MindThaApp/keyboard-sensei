@@ -2,12 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#b4323e" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Learn piano at your own pace: short daily lessons, play-along songs with falling notes, and instant feedback from your MIDI keyboard or the on-screen piano."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <title>Keyboard Sensei</title>
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <script>
+      // Paint the right theme and density on the first frame, before the app's
+      // script loads. utils/appearance.ts takes over from here and owns the rules;
+      // this only mirrors the two that would otherwise flash.
+      (function () {
+        var root = document.documentElement;
+        var theme = "auto";
+        try {
+          var stored = JSON.parse(localStorage.getItem("ks-appearance") || "null");
+          if (stored && stored.theme) theme = stored.theme;
+          else if (/^(dark|midnight)$/.test(localStorage.getItem("keyboard-sensei-theme") || "")) theme = "dark";
+        } catch (e) {}
+        var dark = theme === "dark" || (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        root.classList.toggle("dark", dark);
+        root.dataset.density = Math.min(window.innerWidth, window.innerHeight) < 600 ? "compact" : "regular";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

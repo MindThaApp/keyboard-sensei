@@ -1,7 +1,12 @@
+@import "./styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Legacy felt-* accent scale, kept as an alias while screens migrate to the tint
+   tokens. appearance.ts derives it from the current tint (felt-600 = tint-fill);
+   these defaults are Piano red. */
 :root {
   --color-felt-50: 253 243 244;
   --color-felt-100: 249 225 227;
@@ -14,7 +19,7 @@
   --color-felt-900: 98 29 36;
 
   /* Muted text (see tailwind.config.js textColor). Light: >= 4.6:1 on white, slate-50/100
-     and ivory; dark: >= 4.5:1 on slate-950/900/800 and the midnight blue. */
+     and ivory; dark: >= 4.5:1 on slate-950/900/800 and black. */
   --text-slate-400: 91 103 121;
   --text-slate-500: 86 98 117;
 }
@@ -30,57 +35,33 @@ html.dark .bg-ivory-50 {
   --text-slate-500: 86 98 117;
 }
 
-/* Accent text on dark surfaces: felt-400 measured 4.2–4.3:1 on slate-900 (3.5:1 on the
-   midnight blue); dark-mode text-felt-400 renders one step lighter, for every accent. */
+/* Accent text on dark surfaces: felt-400 measured 4.2–4.3:1 on slate-900, so dark-mode
+   text-felt-400 renders one step lighter, for every tint. */
 :root { --text-felt-400: var(--color-felt-400); }
 html.dark { --text-felt-400: var(--color-felt-300); }
 
-html[data-accent="ocean"] {
-  --color-felt-50: 239 249 255;
-  --color-felt-100: 224 242 254;
-  --color-felt-300: 125 211 252;
-  --color-felt-400: 56 189 248;
-  --color-felt-500: 14 165 233;
-  --color-felt-600: 2 132 199;
-  --color-felt-700: 3 105 161;
-  --color-felt-800: 7 89 133;
-  --color-felt-900: 12 74 110;
-}
-
-html[data-accent="forest"] {
-  --color-felt-50: 240 253 244;
-  --color-felt-100: 220 252 231;
-  --color-felt-300: 134 239 172;
-  --color-felt-400: 74 222 128;
-  --color-felt-500: 34 197 94;
-  --color-felt-600: 22 163 74;
-  --color-felt-700: 21 128 61;
-  --color-felt-800: 22 101 52;
-  --color-felt-900: 20 83 45;
-}
-
-html[data-accent="violet"] {
-  --color-felt-50: 245 243 255;
-  --color-felt-100: 237 233 254;
-  --color-felt-300: 196 181 253;
-  --color-felt-400: 167 139 250;
-  --color-felt-500: 139 92 246;
-  --color-felt-600: 124 58 237;
-  --color-felt-700: 109 40 217;
-  --color-felt-800: 91 33 182;
-  --color-felt-900: 76 29 149;
-}
-
 html, body, #root { min-height: 100%; }
-body { @apply bg-slate-50 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100; }
-html[data-theme="midnight"] body { background: radial-gradient(circle at top, #172554, #020617 55%); }
+body {
+  background-color: var(--bg);
+  color: var(--label);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
 
 @layer base {
   h1, h2, h3 { @apply font-display; }
-  :focus-visible { @apply outline-none ring-2 ring-felt-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950; }
-  /* One accent for every native control — volume sliders were falling back to the
-     browser's default blue while tempo sliders used the brand colour. */
-  input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--color-felt-600)); }
+  /* 2px tint ring with a 2px offset; the offset ring carries the page colour, so the
+     focus ring reads on glass and on solid surfaces alike. */
+  :focus-visible {
+    outline: 2px solid var(--tint);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgb(var(--bg-rgb) / 0.9);
+  }
+  html:not(.dark) :focus-visible { box-shadow: 0 0 0 4px rgb(255 255 255 / 0.9); }
+  /* One accent for every native control. */
+  input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--tint-fill); }
 }
 
 @layer components {
@@ -94,5 +75,139 @@ html[data-theme="midnight"] body { background: radial-gradient(circle at top, #1
   .vf-stavenote.note-active * {
     fill: #b4323e;
     stroke: #b4323e;
+  }
+}
+
+/* ── Glass (§3.3) ──────────────────────────────────────────────────────────
+   Only GlassSurface applies .glass: navigation and controls, never content.
+   Layers, back to front: blur → saturate → fill → milk → lift → rim/specular →
+   sheen → text scrim → content. */
+@layer components {
+  .glass {
+    position: relative;
+    isolation: isolate;
+    color: var(--label);
+    background:
+      linear-gradient(rgb(255 255 255 / var(--glass-lift)) 0 0),
+      linear-gradient(rgb(var(--glass-base) / var(--glass-milk-a)) 0 0),
+      linear-gradient(180deg, rgb(var(--glass-base) / var(--glass-a)), rgb(var(--glass-base) / var(--glass-a2)));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim-top),
+      inset 0 -1px 0 var(--glass-rim-bottom),
+      inset 0 0 0 0.5px var(--glass-hairline),
+      var(--glass-shadow);
+  }
+
+  /* Specular sheen: a soft highlight lit from the top-left. */
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 70% at 20% -10%, rgb(255 255 255 / 0.55), transparent 55%),
+      linear-gradient(115deg, rgb(255 255 255 / 0.18), transparent 35%, transparent 70%, rgb(255 255 255 / 0.1));
+    mix-blend-mode: soft-light;
+    opacity: var(--glass-sheen);
+  }
+
+  /* Inputs on glass sit a step more opaque; panes behind cards a step less. Nested
+     glass is a translucent fill only, never a second blur. */
+  .glass-input { background: rgb(var(--glass-base) / var(--glass-input-a)); }
+  .glass-pane { background: rgb(var(--glass-base) / var(--glass-pane-a)); }
+  .glass .glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* Selected item on glass (tab, segment): the only place tint text may sit on glass. */
+  .glass-selection { background: var(--glass-selection); color: var(--tint); }
+
+  /* Clear style: a local backing behind each text run keeps 4.5:1 while the panel
+     itself stays see-through. Solid under the glyphs, feathered by the shadow. */
+  .glass-text {
+    border-radius: 0.5em;
+    background: rgb(var(--glass-base) / var(--glass-scrim-a));
+    box-shadow: 0 0 10px 4px rgb(var(--glass-base) / var(--glass-scrim-a));
+  }
+  html[data-glass-style="clear"] .glass { text-shadow: 0 0 1px rgb(var(--glass-base)); }
+
+  .glass-pressable {
+    transition:
+      transform var(--dur-spring) var(--spring),
+      box-shadow var(--dur-base) var(--ease-out);
+  }
+  .glass-pressable:active { transform: scale(var(--press-scale-glass)); }
+
+  /* Scroll edges: content fades as it passes under the floating bars. The shell
+     positions them; these only paint. */
+  .edge-top,
+  .edge-bottom { pointer-events: none; }
+  .edge-top { top: 0; height: 110px; background: linear-gradient(var(--bg) 35%, rgb(var(--bg-rgb) / 0)); }
+  .edge-bottom { bottom: 0; height: 120px; background: linear-gradient(rgb(var(--bg-rgb) / 0), var(--bg) 70%); }
+}
+
+/* ── Glass fallbacks: one place ────────────────────────────────────────────
+   The system asks for less transparency or more contrast, the user picked Solid,
+   or the browser has no backdrop-filter: an opaque fill, no blur, no sheen. The
+   rims stay. appearance.ts also sets .appearance-solid for these, so script-side
+   checks agree with what is painted. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .glass, .glass-input, .glass-pane, .glass-text {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .glass::before { display: none; }
+  .glass-text { box-shadow: none; }
+}
+
+html.appearance-solid .glass,
+html.appearance-solid .glass-input,
+html.appearance-solid .glass-pane,
+html.appearance-solid .glass-text {
+  background: var(--glass-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html.appearance-solid .glass::before { display: none; }
+html.appearance-solid .glass-text { box-shadow: none; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .glass-input, .glass-pane { background: var(--glass-solid); }
+  .glass::before { display: none; }
+}
+
+/* Forced colours: no theming at all, system colours only. */
+@media (forced-colors: active) {
+  .glass, .glass-input, .glass-pane, .glass-text, .glass-selection {
+    background: Canvas;
+    color: CanvasText;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    text-shadow: none;
+    border: 1px solid CanvasText;
+  }
+  .glass::before, .edge-top, .edge-bottom { display: none; }
+  .glass-selection { background: Highlight; color: HighlightText; }
+  :focus-visible { outline-color: Highlight; box-shadow: none; }
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────────────
+   No scale or translate anywhere; transitions collapse to an instant change. The
+   motion tokens are zeroed in tokens.css; this catches everything else. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
