@@ -43,6 +43,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      # Error monitoring (Sentry, EU). All optional; unset DSN = off. docs/operations.md.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TUNNEL_DSNS: ${SENTRY_TUNNEL_DSNS:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      GIT_SHA: ${GIT_SHA:-}
     volumes:
       - keyboard-sensei-tts-cache:/app/apps/api/data/tts-cache
       - keyboard-sensei-midi-library:/app/apps/api/data/midi-library
@@ -61,6 +67,11 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         # The Google OAuth *Web* client ID; empty = no "Sign in with Google" button.
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        # Error monitoring (Sentry). All optional; builds are unaffected when unset.
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        GIT_SHA: ${GIT_SHA:-}
+        SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT:-}
     depends_on:
       - api
     restart: unless-stopped

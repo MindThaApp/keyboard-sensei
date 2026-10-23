@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         <p>
           Keyboard Sensei is a piano-learning app. This page explains, in plain English, what we store about you, why,
           who else sees any of it, and how to delete it. We don't sell your data, show ads, or use analytics or
-          tracking tools.
+          tracking tools. The only diagnostic tool is the anonymous crash reporting described below, which you can turn off.
         </p>
 
         <h2>What we store</h2>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
           <li>Instrument sounds you upload.</li>
           <li>
             Feedback you send: the message, the page you were on, your browser's user-agent string (browser and device
-            type), and a screenshot if you attach one.
+            type), and a screenshot if you attach one. A copy also goes to Sentry (see Crash reports).
           </li>
         </ul>
         <p>
@@ -70,6 +70,23 @@ export default function PrivacyPage() {
           logs (time, page requested, browser type) for troubleshooting.
         </p>
 
+        <h3>Crash reports</h3>
+        <p>
+          When the app or our server hits an unexpected error, a technical report can be sent to our error monitor,
+          Sentry. A report contains the error message and where in the code it happened, the app version, your browser
+          or device type and operating system, the page you were on and the steps leading up to the error. It
+          can also carry your internal account number (not your email address or name), so we can tell whether one
+          person or many are affected. It never includes your IP address, email address, name, password, sign-in token,
+          the notes you play or any recordings: we strip those out before anything is sent, and reports travel through
+          our own server, so Sentry doesn't see your address either. If you send feedback, we also pass that feedback
+          (and the screenshot, if you attach one) to Sentry so it can be matched to the error.
+        </p>
+        <p>
+          On the website, crash reports are on by default and you can turn them off in Settings → Account → Crash
+          reports. The Android app asks you once, the first time you open it, and you can change your answer in the same
+          place. The choice is stored on your device only. Reports are stored in the EU (Frankfurt) and kept for 90 days.
+        </p>
+
         <h2>Why we use it</h2>
         <ul>
           <li>To run your account and sign you in.</li>
@@ -77,6 +94,7 @@ export default function PrivacyPage() {
           <li>To send emails you ask for: password resets and email confirmation. We don't send marketing email.</li>
           <li>To read and act on feedback you send.</li>
           <li>To keep the service secure and prevent abuse.</li>
+          <li>To find and fix crashes and bugs.</li>
         </ul>
 
         <h2>Who else is involved</h2>
@@ -97,6 +115,14 @@ export default function PrivacyPage() {
               privacy policy
             </a>{" "}
             covers what happens on their side.
+          </li>
+          <li>
+            <strong>Sentry</strong> (Functional Software, Inc.), hosted in its EU region, receives the crash reports
+            described above and the feedback you send. It acts on our behalf and stores them for 90 days. Sentry's own{" "}
+            <a href="https://sentry.io/privacy/" target="_blank" rel="noreferrer">
+              privacy policy
+            </a>{" "}
+            covers its side.
           </li>
           <li>
             <strong>Our email provider</strong> delivers password-reset and confirmation emails, so it handles your email
