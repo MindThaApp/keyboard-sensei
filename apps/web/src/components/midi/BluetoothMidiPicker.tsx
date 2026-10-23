@@ -44,10 +44,10 @@ export default function BluetoothMidiPicker() {
         disabled={state.status === "scanning" || state.status === "connecting"}
         className="secondary-button px-3 py-1 text-xs"
       >
-        {state.status === "scanning" ? "Searching for Bluetooth keyboards…" : "Find a Bluetooth MIDI keyboard"}
+        {state.status === "scanning" ? "Searching for Bluetooth keyboards…" : "Find a Bluetooth keyboard"}
       </button>
       {state.status === "results" && state.devices.length === 0 && (
-        <span>None found. Turn the keyboard's Bluetooth MIDI on and search again.</span>
+        <span>None found. Turn the keyboard's Bluetooth on and search again.</span>
       )}
       {state.status === "results" &&
         state.devices.map((device) => (

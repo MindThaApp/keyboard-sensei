@@ -42,6 +42,31 @@ function ScoreBadge({ score, passThreshold = 70 }: { score: number; passThreshol
   );
 }
 
+/** Wait-for-me runs are saved unscored (practice time only): a pill instead of a 0. */
+function WaitBadge() {
+  return (
+    <span
+      className="rounded-pill bg-fill px-2.5 py-0.5 text-footnote font-semibold text-label-2"
+      aria-label="Wait for me, practice time, not scored"
+    >
+      Wait for me
+    </span>
+  );
+}
+
+/**
+ * Headline numbers for the Play-along tab. Wait-for-me runs are unscored, so they
+ * count as runs but never feed the best score or the accuracy average.
+ */
+export function playAlongStats(recent: readonly Pick<PlayAlongAttemptSummary, "score" | "accuracy" | "wait_mode">[]) {
+  const scored = recent.filter((run) => !run.wait_mode);
+  return {
+    runs: recent.length,
+    best: scored.length > 0 ? Math.round(scored.reduce((max, run) => Math.max(max, run.score), 0)) : null,
+    averageAccuracy: scored.length > 0 ? Math.round(scored.reduce((sum, run) => sum + run.accuracy, 0) / scored.length) : null,
+  };
+}
+
 function HistorySkeleton({ label }: { label: string }) {
   return (
     <div className="space-y-3" role="status" aria-label={label}>
@@ -153,16 +178,14 @@ function PlayAlongHistory() {
     );
   }
 
-  const total = recent.length;
-  const best = Math.round(recent.reduce((max, a) => Math.max(max, a.score), 0));
-  const averageAccuracy = Math.round(recent.reduce((sum, a) => sum + a.accuracy, 0) / total);
+  const stats = playAlongStats(recent);
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Runs" value={String(total)} />
-        <StatTile label="Best" value={String(best)} />
-        <StatTile label="Accuracy" value={`${averageAccuracy}%`} />
+        <StatTile label="Runs" value={String(stats.runs)} />
+        <StatTile label="Best" value={stats.best === null ? "–" : String(stats.best)} />
+        <StatTile label="Notes hit" value={stats.averageAccuracy === null ? "–" : `${stats.averageAccuracy}%`} />
       </div>
       <ListGroup aria-label="Play-along runs">
         {recent.map((attempt) => (
@@ -171,8 +194,13 @@ function PlayAlongHistory() {
             as={Link}
             to={`/play/${attempt.song_id}`}
             title={attempt.title}
-            subtitle={`${attempt.artist} · ${attempt.tempo_bpm ? `${Math.round(attempt.tempo_bpm)} BPM` : `${Math.round(attempt.tempo_pct)}% tempo`} · accuracy ${Math.round(attempt.accuracy)}% · ${new Date(attempt.created_at).toLocaleString()}`}
-            accessory={<ScoreBadge score={Math.round(attempt.score)} />}
+            subtitle={[
+              attempt.artist,
+              attempt.tempo_bpm ? `Speed ${Math.round(attempt.tempo_bpm)}` : `${Math.round(attempt.tempo_pct)}% tempo`,
+              attempt.wait_mode ? null : `${Math.round(attempt.accuracy)}% of notes hit`,
+              new Date(attempt.created_at).toLocaleString(),
+            ].filter(Boolean).join(" · ")}
+            accessory={attempt.wait_mode ? <WaitBadge /> : <ScoreBadge score={Math.round(attempt.score)} />}
           />
         ))}
       </ListGroup>

@@ -729,10 +729,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     it("finishing a lesson opens the next lesson AND any path that branches from it", async () => {
       const user = await createUser();
-      const course = m.content.lessons.map((lesson) => lesson.id);
       // Lessons 1–10 already done (written directly; their unlock writes are not under test here).
+      const firstTen = Array.from({ length: 10 }, (_, index) => `lesson-${String(index + 1).padStart(2, "0")}`);
       await m.prisma.userProgress.createMany({
-        data: course.slice(0, 10).map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
+        data: firstTen.map((lessonId) => ({ user_id: user.id, lesson_id: lessonId, status: "completed" as const, best_score: 90 })),
       });
       expect(await statusOf(user.token, "lesson-11")).toBe("unlocked");
       expect(await statusOf(user.token, "lesson-reading-c-position")).toBe("locked");
@@ -751,9 +751,10 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       // Completing lesson 12 behind the API's back (as if the Modern Chords path had been
       // added after the learner finished it) writes no unlock row, yet its first lesson
       // opens at read time.
-      await m.prisma.userProgress.update({
+      await m.prisma.userProgress.upsert({
         where: { user_id_lesson_id: { user_id: user.id, lesson_id: "lesson-12" } },
-        data: { status: "completed", best_score: 90 },
+        create: { user_id: user.id, lesson_id: "lesson-12", status: "completed", best_score: 90 },
+        update: { status: "completed", best_score: 90 },
       });
       expect(await statusOf(user.token, "lesson-chords-major-symbols")).toBe("unlocked");
       const detail = await api("GET", "/lessons/lesson-chords-major-symbols", { token: user.token });
@@ -1007,6 +1008,72 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       await m.prisma.userProgress.deleteMany({ where: { lesson_id: "lesson-dummy-retire" } });
       await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
       expect(await m.prisma.lesson.count({ where: { id: "lesson-dummy-retire" } })).toBe(0);
+    });
+
+    it("stores tier and skills on the lesson row and returns them from GET /lessons", async () => {
+      const user = await createUser();
+      await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
+      const res = await api("GET", "/lessons", { token: user.token });
+      expect(res.status).toBe(200);
+      const perTier = new Map<number, number>();
+      for (const item of res.body as Array<{ id: string; tier: number; skills: string[] }>) {
+        const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
+        expect(item.tier, item.id).toBe(expected.tier);
+        expect(item.skills, item.id).toEqual(expected.skills);
+        perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
+      }
+      expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
+      const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
+      expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
+    });
+
+    it("keeps every lesson a learner earned under the old chain and stores newly earned ones", async () => {
+      const { backfillUnlocks } = await import("./progress.js");
+      const { LEGACY_PREREQUISITES } = await import("./content/legacy-prerequisites.js");
+      await m.seedContent(m.prisma, m.content.lessons, m.content.exercises, { warn: () => undefined });
+      const statuses = async (token: string) => {
+        const res = await api("GET", "/lessons", { token });
+        const items = res.body as Array<{ id: string; progress: { status: string } }>;
+        return new Map(items.map((item) => [item.id, item.progress.status]));
+      };
+      const complete = (userId: string, ids: string[]) =>
+        m.prisma.userProgress.createMany({
+          data: ids.map((lesson_id) => ({ user_id: userId, lesson_id, status: "completed" as const, best_score: 90, completed_at: new Date() })),
+        });
+
+      // Finished lessons 01-16 under the old order, with no stored row for lesson-17 (its
+      // old prerequisite was lesson-16; now it waits for lesson-32).
+      const veteran = await createUser();
+      const oldChain = Array.from({ length: 16 }, (_, index) => `lesson-${String(index + 1).padStart(2, "0")}`);
+      await complete(veteran.id, oldChain);
+      // Finished lessons 01-06 only: lesson-08 now follows lesson-06 directly.
+      const beginner = await createUser();
+      await complete(beginner.id, oldChain.slice(0, 6));
+
+      const before = await statuses(veteran.token);
+      expect(before.get("lesson-17")).toBe("locked");
+      expect((await statuses(beginner.token)).get("lesson-08")).toBe("unlocked"); // read time
+
+      const report = await backfillUnlocks(m.prisma, m.content.lessons, LEGACY_PREREQUISITES);
+      expect(report.unlocked).toBeGreaterThan(0);
+
+      const after = await statuses(veteran.token);
+      expect(after.get("lesson-17")).toBe("unlocked");
+      for (const id of oldChain) expect(after.get(id), id).toBe("completed");
+      // Nothing that was open before the backfill is closed after it.
+      for (const [id, status] of before) if (status !== "locked") expect(after.get(id), id).not.toBe("locked");
+      const stored = await m.prisma.userProgress.findUnique({
+        where: { user_id_lesson_id: { user_id: beginner.id, lesson_id: "lesson-08" } },
+      });
+      expect(stored?.status).toBe("unlocked");
+      // lesson-07 was open under the old chain (after lesson-06), so it stays open; a lesson
+      // the beginner has not earned under either chain stays locked.
+      const beginnerAfter = await statuses(beginner.token);
+      expect(beginnerAfter.get("lesson-07")).toBe("unlocked");
+      expect(beginnerAfter.get("lesson-11")).toBe("locked");
+
+      // Idempotent: a second run changes nothing.
+      expect(await backfillUnlocks(m.prisma, m.content.lessons, LEGACY_PREREQUISITES)).toEqual({ users: 0, unlocked: 0 });
     });
   });
 
@@ -1385,7 +1452,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(rows.get(libraryFurElise)).toMatchObject({ source_kind: "adl", file_licence: "unknown", public_eligible: false, quality_tier: "low" });
       expect(rows.get(bethena)).toMatchObject({ source_kind: "adl", work_id: null, source_ref: "scott-joplin-bethena", public_eligible: false });
       expect(rows.get(upload)).toMatchObject({ source_kind: "upload", work_id: null, public_eligible: false });
-      expect(await m.prisma.tag.findMany({ where: { works: { some: { work_id: "fur-elise" } } } })).toEqual([expect.objectContaining({ id: "essentials" })]);
+      expect(await m.prisma.tag.findMany({ where: { works: { some: { work_id: "fur-elise" } } }, orderBy: { id: "asc" } })).toEqual([expect.objectContaining({ id: "essentials" })]);
+      // Shelf curation: mood tags, a featured rank, and an approximate grade band for curated versions only.
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "silent-night" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["christmas", "relaxing"]);
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "hot-cross-buns" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["beginner-pack", "kids"]);
+      expect(furElise.featured_rank).toBe(9);
+      expect(rows.get("essentials-fur-elise-full")?.grade_band).toBe("≈ Grades 2–3");
+      expect(rows.get(hotCrossBuns)?.grade_band).toBe("≈ Grades 2–3");
+      expect(rows.get(bethena)?.grade_band).toBeNull();
+      expect(rows.get(upload)?.grade_band).toBeNull();
 
       // Search goes through ks_unaccent and the indexed expressions (unaccent + pg_trgm installed).
       const search = (q: string) =>
@@ -1405,6 +1480,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(isNoOp(second)).toBe(true);
       expect(await m.prisma.song.findMany({ where: { id: { in: ids } }, select: { id: true, quality_checked_at: true }, orderBy: { id: "asc" } })).toEqual(updatedAt);
       expect(await protectedState()).toEqual(before);
+
+      // Editors' choices are kept: their rank, grade band and mood tags are not refilled over.
+      await m.prisma.work.update({ where: { id: "fur-elise" }, data: { featured_rank: 3 } });
+      await m.prisma.song.update({ where: { id: "essentials-fur-elise-full" }, data: { grade_band: "Grade 5" } });
+      await m.prisma.workTag.deleteMany({ where: { work_id: "silent-night", tag_id: "christmas" } });
+      await backfillCatalogue(m.prisma, { year: 2026 });
+      expect((await m.prisma.work.findUniqueOrThrow({ where: { id: "fur-elise" } })).featured_rank).toBe(3);
+      expect((await m.prisma.song.findUniqueOrThrow({ where: { id: "essentials-fur-elise-full" } })).grade_band).toBe("Grade 5");
+      expect((await m.prisma.workTag.findMany({ where: { work_id: "silent-night" }, orderBy: { tag_id: "asc" } })).map((link) => link.tag_id)).toEqual(["relaxing"]);
 
       // Curated choices made later are kept: a song moved to another Work stays there.
       await m.prisma.song.update({ where: { id: bethena }, data: { work: { connect: { id: "hot-cross-buns" } } } });
@@ -1484,9 +1568,11 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       app.use(express.json());
       app.use(requireAuth);
       app.use(challengeRouter);
-      // Like app.ts: anything else (Zod validation) is a 400 here.
-      app.use((_error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-        res.status(400).json({ error: { code: "validation_error" } });
+      // Like app.ts: a Zod validation failure is a 400, anything else a 500.
+      const { ZodError } = await import("zod");
+      app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+        if (error instanceof ZodError) res.status(400).json({ error: { code: "validation_error" } });
+        else res.status(500).json({ error: { code: "internal", message: String(error).slice(-200) } });
       });
       challengeServer = app.listen(0);
       await new Promise<void>((resolve) => challengeServer.once("listening", () => resolve()));
@@ -1624,8 +1710,9 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       await complete(user.id, STARTER);
       const { date } = (await call("GET", "/challenge/today", user.token)).body;
       const results = await Promise.all(Array.from({ length: 6 }, () => call("POST", "/challenge/attempts", user.token, { date, tier: 1 })));
+      const statuses = results.map((result) => result.status).sort().join(",");
+      expect(statuses).toBe("201,201,201,409,409,409");
       expect(results.filter((result) => result.status === 201).map((result) => result.body.attempt).sort()).toEqual([1, 2, 3]);
-      expect(results.filter((result) => result.status === 409)).toHaveLength(3);
       expect(await m.prisma.challengeAttempt.count({ where: { user_id: user.id } })).toBe(3);
     });
 

@@ -304,3 +304,129 @@ export const CURATED_TIER_OVERRIDES: Record<string, { tier: "verified"; reason: 
       "Essentials version (passed the pack's incipit and level checks). The Full version is the hymn tune alone, one track of 59 notes (24 s) all on the eighth-note grid, so it has no hand split by design.",
   },
 };
+
+/** Mood and occasion tags (library spec 3.1). The shelves on the Songs screen read these. */
+export const MOOD_TAGS = {
+  christmas: { id: "christmas", label: "Christmas", kind: "mood" },
+  relaxing: { id: "relaxing", label: "Relaxing", kind: "mood" },
+  wedding: { id: "wedding", label: "Wedding", kind: "mood" },
+  kids: { id: "kids", label: "Kids", kind: "mood" },
+  easter: { id: "easter", label: "Easter", kind: "mood" },
+} as const;
+
+export type MoodTagId = keyof typeof MOOD_TAGS;
+
+/**
+ * Mood tags per Work id (an Essentials slug, or a beginner-pack slug for tunes
+ * that have a Work of their own). Applied only to a Work that has no mood tag
+ * yet, so an admin who retags a Work is not overruled by the next run.
+ */
+export const WORK_MOOD_TAGS: Record<string, MoodTagId[]> = {
+  // Carols and winter pieces.
+  "silent-night": ["christmas", "relaxing"],
+  "joy-to-the-world": ["christmas"],
+  "hark-the-herald-angels-sing": ["christmas"],
+  "o-come-all-ye-faithful": ["christmas"],
+  "first-noel": ["christmas"],
+  "away-in-a-manger": ["christmas", "kids", "relaxing"],
+  "o-little-town-of-bethlehem": ["christmas", "relaxing"],
+  "o-come-o-come-emmanuel": ["christmas"],
+  "good-king-wenceslas": ["christmas"],
+  "the-holly-and-the-ivy": ["christmas"],
+  "jingle-bells": ["christmas", "kids"],
+  "we-wish-you-a-merry-christmas": ["christmas", "kids"],
+  "deck-the-halls": ["christmas"],
+  "carol-of-the-bells": ["christmas"],
+  "god-rest-ye-merry-gentlemen": ["christmas"],
+  "in-the-bleak-midwinter": ["christmas", "relaxing"],
+  "lo-how-a-rose": ["christmas", "relaxing"],
+  greensleeves: ["christmas", "relaxing"],
+  "sugar-plum-fairy": ["christmas"],
+  "hallelujah-chorus": ["christmas", "easter", "wedding"],
+  "christ-the-lord-is-risen-today": ["easter"],
+  // Slow, quiet pieces.
+  "clair-de-lune": ["relaxing"],
+  "gymnopedie-1": ["relaxing"],
+  "gnossienne-1": ["relaxing"],
+  "brahms-lullaby": ["relaxing", "kids"],
+  traumerei: ["relaxing"],
+  "nocturne-op-9-no-2": ["relaxing"],
+  "moonlight-sonata-1": ["relaxing"],
+  "raindrop-prelude": ["relaxing"],
+  "prelude-in-c": ["relaxing"],
+  "consolation-3": ["relaxing"],
+  "morning-mood": ["relaxing"],
+  "new-world-largo": ["relaxing"],
+  "amazing-grace": ["relaxing"],
+  "danny-boy": ["relaxing"],
+  "abide-with-me": ["relaxing"],
+  // Weddings: the processional and recessional, and the usual ceremony music.
+  "wedding-march": ["wedding"],
+  "bridal-chorus": ["wedding"],
+  "canon-in-d": ["wedding", "relaxing"],
+  "air-on-the-g-string": ["wedding", "relaxing"],
+  "jesu-joy-of-mans-desiring": ["wedding", "relaxing"],
+  "schubert-ave-maria": ["wedding", "relaxing"],
+  "gounod-ave-maria": ["wedding", "relaxing"],
+  "ode-to-joy": ["wedding"],
+  // Children's tunes.
+  "twinkle-twinkle-little-star": ["kids"],
+  "happy-birthday": ["kids"],
+  "mary-had-a-little-lamb": ["kids"],
+  "hot-cross-buns": ["kids"],
+  "row-row-row-your-boat": ["kids"],
+  "frere-jacques": ["kids"],
+  "london-bridge": ["kids"],
+  "lightly-row": ["kids"],
+  "merrily-we-roll-along": ["kids"],
+};
+
+/**
+ * `Work.featured_rank` (1 = first on the Featured and Beginner favourites
+ * shelves): strong, widely known pieces a beginner can play, in the order a
+ * new player should meet them. Filled only where a Work has no rank, so an
+ * editor's ranking is never overwritten (an editor who clears a rank to null
+ * gets it back on the next run unless the entry is removed here).
+ */
+export const FEATURED_RANK: Record<string, number> = {
+  "twinkle-twinkle-little-star": 1,
+  "ode-to-joy": 2,
+  "happy-birthday": 3,
+  "mary-had-a-little-lamb": 4,
+  "row-row-row-your-boat": 5,
+  "jingle-bells": 6,
+  "silent-night": 7,
+  "minuet-in-g": 8,
+  "fur-elise": 9,
+  "canon-in-d": 10,
+  "amazing-grace": 11,
+  greensleeves: 12,
+  "brahms-lullaby": 13,
+  "prelude-in-c": 14,
+  "joy-to-the-world": 15,
+  "when-the-saints-go-marching-in": 16,
+  "auld-lang-syne": 17,
+  "scarborough-fair": 18,
+  "the-entertainer": 19,
+  "gymnopedie-1": 20,
+  "we-wish-you-a-merry-christmas": 21,
+  "moonlight-sonata-1": 22,
+};
+
+/**
+ * Approximate grade band from the 1-5 difficulty level (library spec 3.1):
+ * 1 = Initial-Grade 1, 2 = 2-3, 3 = 4-5, 4 = 6-7, 5 = 8+. The levels come from
+ * the same heuristic as `Song.difficulty`. Only curated (Essentials and
+ * beginner-pack) versions get a band: their level was checked when the pack
+ * was built, while an ADL or uploaded file's heuristic level says little about
+ * how hard it is to read. Marked approximate because these are not exam grades.
+ */
+export const GRADE_BANDS: Record<number, string> = {
+  1: "≈ Initial–Grade 1",
+  2: "≈ Grades 2–3",
+  3: "≈ Grades 4–5",
+  4: "≈ Grades 6–7",
+  5: "≈ Grade 8+",
+};
+
+export const gradeBandFor = (difficulty: number): string | null => GRADE_BANDS[difficulty] ?? null;

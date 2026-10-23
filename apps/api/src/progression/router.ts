@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { CATEGORY_LABEL, achievementStats, achievementViews } from "./achievements.js";
 import { addDays } from "./days.js";
 import { dailySummary } from "./rewards.js";
-import { SKILLS, skillPoints } from "./skills.js";
+import { SKILLS, readingGameSkillPoints, skillPoints } from "./skills.js";
 import { lessonStarsById, loadSnapshot, songStarsById } from "./snapshot.js";
 import { liveExerciseIds, pickContinue, pickReview, pickSong, readyForYou } from "./today.js";
 
@@ -77,7 +77,7 @@ progressionRouter.get("/users/me/progression", async (req, res, next) => {
     const stats = achievementStats(snapshot);
     const lessonStars = lessonStarsById(snapshot);
     const songStars = songStarsById(snapshot.playAlong);
-    const points = skillPoints(snapshot.lessons, lessonStars, [...songStars.values()].map((stars) => stars.best));
+    const points = skillPoints(snapshot.lessons, lessonStars, [...songStars.values()].map((stars) => stars.best), await readingGameSkillPoints(prisma, snapshot.userId, snapshot.timezone));
 
     const firstCalendarDay = addDays(snapshot.today, -(CALENDAR_DAYS - 1));
     const recentXp = await prisma.xpEvent.findMany({

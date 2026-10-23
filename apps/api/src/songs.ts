@@ -114,6 +114,9 @@ const songListItem = (song: {
   arrangement_group: string | null;
   arrangement_level: string | null;
   attribution: string | null;
+  work_id: string | null;
+  quality_tier: string;
+  tier_override: string | null;
 }, userId: string) => ({
   id: song.id,
   title: song.title,
@@ -133,6 +136,10 @@ const songListItem = (song: {
   arrangement_group: song.arrangement_group,
   arrangement_level: song.arrangement_level,
   attribution: song.attribution,
+  // Songs with no Work are not in /library/works; the client lists them separately,
+  // best tier first. An admin's override wins over the measured tier.
+  work_id: song.work_id,
+  quality_tier: song.tier_override ?? song.quality_tier,
 });
 
 /** Song library routes; mounted behind requireAuth. */

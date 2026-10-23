@@ -1,19 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { LessonListItem, LessonStatus } from "@keyboard-sensei/shared-types";
+import { TIER_NAMES, type LessonListItem, type LessonStatus, type TierId } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
-import { LEVEL_LABEL, nextLessonFor } from "../../utils/levels";
-import { pathLabel, pathsInOrder, placeInPath } from "../../utils/paths";
+import { nextLessonFor } from "../../utils/levels";
+import { pathLabel, placeInPath } from "../../utils/paths";
+import { LEARN_FILTERS, SKILL_LABEL, currentTierOf, groupByTier, type LearnFilter, type TierGroup } from "../../utils/tiers";
 import { lessonStars } from "../../utils/stars";
 import { StarRating } from "../progress/ProgressBits";
+import { Chip, ProgressRing, SegmentedControl } from "../ui";
 
 const BRANCH_LABEL: Record<string, string> = {
   technique: "Technique",
   theory: "Theory",
   repertoire: "Repertoire",
 };
-
-const LEVEL_ORDER = ["foundation", "elementary", "intermediate", "late-intermediate", "advanced", "virtuoso"];
 
 function CheckIcon() {
   return (
@@ -76,6 +76,15 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
           {BRANCH_LABEL[lesson.branch]} · {lesson.estimatedMinutes} min
         </p>
+        {lesson.skills.length > 0 && (
+          <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Skills">
+            {lesson.skills.map((skill) => (
+              <li key={skill}>
+                <Chip>{SKILL_LABEL[skill]}</Chip>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="shrink-0 text-right text-xs">
         {completed && (
@@ -96,6 +105,102 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
   return <li>{locked ? inner : <Link to={`/lessons/${lesson.id}`}>{inner}</Link>}</li>;
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
+      <path fillRule="evenodd" d="M7.2 4.8a1 1 0 0 1 1.4 0l4.5 4.5a1 1 0 0 1 0 1.4l-4.5 4.5a1 1 0 0 1-1.4-1.4L11 10 7.2 6.2a1 1 0 0 1 0-1.4Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function TierSection({
+  group,
+  current,
+  open,
+  onToggle,
+  progress,
+  nextLesson,
+}: {
+  group: TierGroup;
+  current: boolean;
+  open: boolean;
+  onToggle: () => void;
+  progress: ReturnType<typeof useProgressStore.getState>["progress"];
+  nextLesson: LessonListItem | null;
+}) {
+  const panelId = `tier-${group.tier}`;
+  const total = group.lessons.length;
+  const fraction = total ? group.completed / total : 0;
+
+  if (group.comingSoon) {
+    return (
+      <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
+        <span className="text-sm font-medium tabular-nums text-slate-500 dark:text-slate-400">Level {group.tier}</span>
+        <h2 className="font-display text-base font-semibold text-slate-900 dark:text-slate-100">{group.name}</h2>
+        <span className="text-xs text-slate-500 dark:text-slate-400">Coming soon</span>
+        <Link to="/library" className="ml-auto inline-flex min-h-[44px] items-center text-sm font-medium text-felt-700 underline-offset-2 hover:underline dark:text-felt-300">
+          Play songs from the library meanwhile
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <section className={`card overflow-hidden ${current ? "ring-1 ring-felt-400/50 dark:ring-felt-600/50" : ""}`} aria-label={`Level ${group.tier}: ${group.name}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex min-h-[44px] w-full items-center gap-3 p-4 text-left"
+      >
+        {current ? (
+          <ProgressRing
+            value={fraction}
+            size={56}
+            stroke={6}
+            label={group.completed}
+            sublabel={`/${total}`}
+            aria-label={`${group.completed} of ${total} lessons complete`}
+          />
+        ) : (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-medium tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {group.tier}
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            {current ? "Your level" : `Level ${group.tier}`}
+          </span>
+          <span className="block font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {current ? `Level ${group.tier} · ${group.name}` : group.name}
+          </span>
+          <span className="block text-xs tabular-nums text-slate-500 dark:text-slate-400">
+            {group.completed}/{total} lessons
+          </span>
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">
+          <Chevron open={open} />
+        </span>
+      </button>
+      {open && (
+        <ol id={panelId} className="space-y-2 border-t border-slate-200/70 p-3 dark:border-slate-800">
+          {group.lessons.map((lesson, index) => (
+            <LessonRow
+              key={lesson.id}
+              lesson={lesson}
+              number={index + 1}
+              status={getLessonStatus(progress, lesson)}
+              bestScore={getLessonBestScore(progress, lesson)}
+              isNext={lesson === nextLesson}
+            />
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export default function LessonListPage() {
   const lessons = useProgressStore((s) => s.lessons);
   const progress = useProgressStore((s) => s.progress);
@@ -105,6 +210,9 @@ export default function LessonListPage() {
   useEffect(() => {
     if (!loaded) void loadAll();
   }, [loaded, loadAll]);
+
+  const [filter, setFilter] = useState<LearnFilter>("all");
+  const [toggled, setToggled] = useState<ReadonlyMap<TierId, boolean>>(new Map());
 
   if (!loaded || !progress) {
     return <p className="text-slate-500 dark:text-slate-300">Loading lessons…</p>;
@@ -116,7 +224,13 @@ export default function LessonListPage() {
   const nextPlace = nextLesson ? placeInPath(lessons, nextLesson.id) : null;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
-  const paths = pathsInOrder(lessons);
+  const groups = groupByTier(lessons, filter);
+  const currentTier = currentTierOf(groups);
+  // The current tier starts open and every other tier starts closed, until the learner toggles one.
+  const openTiers = new Set<TierId>(
+    groups.filter((group) => toggled.get(group.tier) ?? group.tier === currentTier).map((group) => group.tier),
+  );
+  const toggleTier = (tier: TierId) => setToggled((prev) => new Map(prev).set(tier, !openTiers.has(tier)));
 
   return (
     <div className="space-y-8">
@@ -124,13 +238,13 @@ export default function LessonListPage() {
         <section className="card relative overflow-hidden p-5 sm:p-6">
           <div className="felt-strip absolute inset-x-0 top-0" />
           <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-            {nextLesson.progress.bestScore > 0 ? "Continue practicing" : "Up next"}
+            {nextLesson.progress.bestScore > 0 ? "Continue practising" : "Up next"}
           </p>
           <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{nextLesson.title}</h1>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                {pathLabel(nextLesson.path)} · Lesson {nextPlace?.position} of {nextPlace?.total} · {LEVEL_LABEL[nextLesson.level]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
+                {pathLabel(nextLesson.path)} · Lesson {nextPlace?.position} of {nextPlace?.total} · Level {nextLesson.tier} · {TIER_NAMES[nextLesson.tier]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
                 {nextLesson.estimatedMinutes} min
                 {nextLesson.progress.bestScore > 0 && <> · Best {nextLesson.progress.bestScore}</>}
               </p>
@@ -157,54 +271,28 @@ export default function LessonListPage() {
         </section>
       )}
 
-      {paths.map((path) => {
-        const pathLessons = lessons.filter((l) => l.path === path);
-        const pathCompleted = pathLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
-        const pathLocked = pathLessons.every((l) => getLessonStatus(progress, l) === "locked");
-        const levels = LEVEL_ORDER.filter((level) => pathLessons.some((l) => l.level === level));
-        return (
-          <section key={path} className="space-y-5" aria-label={pathLabel(path)}>
-            <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-2 dark:border-slate-700">
-              <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">{pathLabel(path)}</h2>
-              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {pathCompleted}/{pathLessons.length} lessons
-              </span>
-              {pathLocked && (
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Opens after &ldquo;{lessons.find((l) => l.id === pathLessons[0]!.unlockCriteria.requiresLessonIds[0])?.title}&rdquo;
-                </span>
-              )}
-            </div>
-            {levels.map((level) => {
-              const levelLessons = pathLessons.filter((l) => l.level === level);
-              const levelCompleted = levelLessons.filter((l) => getLessonStatus(progress, l) === "completed").length;
-              return (
-                <div key={level}>
-                  <div className="mb-3 flex items-center gap-3">
-                    <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{LEVEL_LABEL[level]}</h3>
-                    <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                      {levelCompleted}/{levelLessons.length}
-                    </span>
-                    <ProgressBar value={levelLessons.length ? levelCompleted / levelLessons.length : 0} className="w-24" />
-                  </div>
-                  <ol className="space-y-2">
-                    {levelLessons.map((lesson) => (
-                      <LessonRow
-                        key={lesson.id}
-                        lesson={lesson}
-                        number={pathLessons.indexOf(lesson) + 1}
-                        status={getLessonStatus(progress, lesson)}
-                        bestScore={getLessonBestScore(progress, lesson)}
-                        isNext={lesson === nextLesson}
-                      />
-                    ))}
-                  </ol>
-                </div>
-              );
-            })}
-          </section>
-        );
-      })}
+      <section className="space-y-4" aria-label="Levels">
+        <SegmentedControl
+          aria-label="Show lessons from"
+          options={LEARN_FILTERS.map(({ value, label }) => ({ value, label }))}
+          value={filter}
+          onChange={setFilter}
+          block
+        />
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <TierSection
+              key={group.tier}
+              group={group}
+              current={group.tier === currentTier}
+              open={openTiers.has(group.tier)}
+              onToggle={() => toggleTier(group.tier)}
+              progress={progress}
+              nextLesson={nextLesson}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

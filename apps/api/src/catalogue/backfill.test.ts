@@ -11,7 +11,19 @@ import {
   type SongRow,
 } from "./backfill.js";
 import { buildSearchText, catalogueTokens } from "./search-text.js";
-import { COMPOSERS, CURATED_TIER_OVERRIDES, ESSENTIALS_WORKS, WORK_GENRES, BEGINNER_WORKS, composerIdFor } from "./works-data.js";
+import {
+  COMPOSERS,
+  CURATED_TIER_OVERRIDES,
+  ESSENTIALS_WORKS,
+  FEATURED_RANK,
+  GRADE_BANDS,
+  MOOD_TAGS,
+  WORK_GENRES,
+  WORK_MOOD_TAGS,
+  BEGINNER_WORKS,
+  composerIdFor,
+  gradeBandFor,
+} from "./works-data.js";
 
 const LIB = "/app/apps/api/data/midi-library";
 const row = (overrides: Partial<SongRow>): SongRow => ({
@@ -128,16 +140,16 @@ describe("workLinkFor", () => {
 describe("emptyWorkFieldsToFill", () => {
   const seed = {
     id: "w", title: "W", composer_id: "wolfgang-amadeus-mozart", catalogue: "K. 545", movement: null, era: "classical-era" as const,
-    genre: "classical", published_year: null, pd_status: "pd-worldwide" as const, recognisability: 29, notes: null,
+    genre: "classical", published_year: null, pd_status: "pd-worldwide" as const, recognisability: 29, featured_rank: 9, notes: null,
   };
 
   it("fills only empty fields and an undecided pd_status", () => {
-    const stored = { composer_id: null, catalogue: "K 545 (edited)", movement: null, era: null, published_year: null, recognisability: 3, notes: null, pd_status: "unknown" };
-    expect(emptyWorkFieldsToFill(stored, seed)).toEqual({ composer_id: "wolfgang-amadeus-mozart", era: "classical-era", pd_status: "pd-worldwide" });
+    const stored = { composer_id: null, catalogue: "K 545 (edited)", movement: null, era: null, published_year: null, recognisability: 3, featured_rank: null, notes: null, pd_status: "unknown" };
+    expect(emptyWorkFieldsToFill(stored, seed)).toEqual({ composer_id: "wolfgang-amadeus-mozart", era: "classical-era", featured_rank: 9, pd_status: "pd-worldwide" });
   });
 
   it("returns nothing when every field is already set", () => {
-    const stored = { composer_id: "x", catalogue: "c", movement: null, era: "baroque", published_year: null, recognisability: 1, notes: null, pd_status: "copyrighted" };
+    const stored = { composer_id: "x", catalogue: "c", movement: null, era: "baroque", published_year: null, recognisability: 1, featured_rank: 2, notes: null, pd_status: "copyrighted" };
     expect(emptyWorkFieldsToFill(stored, seed)).toEqual({});
   });
 });
@@ -175,6 +187,30 @@ describe("curated data", () => {
       const match = /^essentials-(.+)-(beginner|intermediate|full)$/.exec(id);
       expect(match && slugs.has(match[1]!), id).toBe(true);
     }
+  });
+});
+
+describe("curation data", () => {
+  const workIds = new Set([...ESSENTIALS.map((piece) => piece.slug), ...Object.keys(BEGINNER_WORKS)]);
+
+  it("tags and ranks only Works that exist", () => {
+    for (const id of [...Object.keys(WORK_MOOD_TAGS), ...Object.keys(FEATURED_RANK)]) expect(workIds.has(id), id).toBe(true);
+    for (const tags of Object.values(WORK_MOOD_TAGS)) for (const tag of tags) expect(MOOD_TAGS[tag], tag).toBeDefined();
+  });
+
+  it("fills every shelf the Songs screen shows, with a ranked, unique featured list", () => {
+    for (const shelf of ["christmas", "relaxing", "wedding"] as const) {
+      expect(Object.values(WORK_MOOD_TAGS).filter((tags) => tags.includes(shelf)).length, shelf).toBeGreaterThanOrEqual(5);
+    }
+    const ranks = Object.values(FEATURED_RANK);
+    expect(new Set(ranks).size).toBe(ranks.length);
+    expect(ranks.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("maps each difficulty level 1-5 to one approximate band, and nothing else", () => {
+    expect([1, 2, 3, 4, 5].map(gradeBandFor)).toEqual(Object.values(GRADE_BANDS));
+    expect(gradeBandFor(0)).toBeNull();
+    expect(gradeBandFor(6)).toBeNull();
   });
 });
 

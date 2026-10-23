@@ -64,6 +64,22 @@
   --ebony-1: #2b2b2e;
   --ebony-2: #0b0b0c;
   --keybed: #1a1a1c;
+
+  /*
+   * Hand and lit-key colours. These mirror the dark note palette in
+   * components/play/notePalette.ts, which writes the same names onto the Play-Along
+   * stage (so a Light-stage palette recolours falling notes and keys together).
+   * Keep the two in step: one palette drives both.
+   */
+  --note-right: #f2475f;
+  --note-left: #4c7dff;
+  --key-lit-right: #ffd1d8;
+  --key-lit-left: #d3e1ff;
+  /* Right/wrong feedback on a key (not part of the hand palette). */
+  --key-ok: rgb(110 231 183 / 0.9);
+  --key-ok-black: rgb(5 150 105 / 0.85);
+  --key-bad: rgb(253 164 175 / 0.92);
+  --key-bad-black: rgb(225 29 72 / 0.85);
 }
 
 /* ── Colour: dark ──────────────────────────────────────────────────────── */

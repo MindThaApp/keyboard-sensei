@@ -1,4 +1,15 @@
-import type { PlayAlongAttemptSummary, Song, SongGenre } from "../services/api";
+import type {
+  LibraryFacets,
+  PlayAlongAttemptSummary,
+  Song,
+  SongGenre,
+  WorkDuration,
+  WorkHands,
+  WorkSort,
+  WorksQuery,
+  WorkSummary,
+  WorkVersion,
+} from "../services/api";
 
 /** Filtering, sorting, paging and shelves for the song list on /play and in Settings → Library. */
 
@@ -189,4 +200,266 @@ export function buildShelves(
   return shelves
     .map((shelf) => ({ ...shelf, songs: shelf.songs.slice(0, SHELF_LIMIT) }))
     .filter((shelf) => shelf.songs.length > 0);
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Works: the catalogue view of the library (one row per piece, versions inside it).
+ * ---------------------------------------------------------------------------------------- */
+
+export interface WorkFilters {
+  query: string;
+  /** 0 = any level, else 1-5. */
+  level: number;
+  genre: string;
+  era: string;
+  hands: "" | WorkHands;
+  duration: "" | WorkDuration;
+  /** A tag id from the facets, or "". */
+  tag: string;
+  sort: WorkSort;
+  /** Include Unrated works (the API hides them by default). */
+  unrated: boolean;
+}
+
+export const DEFAULT_WORK_FILTERS: WorkFilters = {
+  query: "",
+  level: 0,
+  genre: "",
+  era: "",
+  hands: "",
+  duration: "",
+  tag: "",
+  sort: "recommended",
+  unrated: false,
+};
+
+export const WORK_SORT_OPTIONS: { value: WorkSort; label: string }[] = [
+  { value: "recommended", label: "Recommended" },
+  { value: "easiest", label: "Easiest first" },
+  { value: "title", label: "Title A–Z" },
+  { value: "featured", label: "Featured" },
+];
+
+export const HANDS_OPTIONS: { value: WorkFilters["hands"]; label: string }[] = [
+  { value: "", label: "Any hands" },
+  { value: "both", label: "Both hands" },
+  { value: "right-hand-melody", label: "Right-hand tune" },
+  { value: "single-line", label: "Single line" },
+];
+
+export const DURATION_OPTIONS: { value: WorkFilters["duration"]; label: string }[] = [
+  { value: "", label: "Any length" },
+  { value: "under-1", label: "Under 1 min" },
+  { value: "1-3", label: "1–3 min" },
+  { value: "3-6", label: "3–6 min" },
+  { value: "over-6", label: "Over 6 min" },
+];
+
+/** Plain names for the catalogue's genre and era ids. Unknown ids fall back to a tidied id. */
+const FACET_LABELS: Record<string, string> = {
+  "classical-era": "Classical era",
+  "early-20th-c": "Early 20th century",
+  "hymn-carol": "Hymns and carols",
+  childrens: "Children's",
+};
+
+export const facetLabel = (value: string): string =>
+  FACET_LABELS[value] ?? value.replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+
+/** Approximate grade hints; the API's own `grade_band` wins where a version has one. */
+export const LEVEL_HINTS = [
+  { level: 1, name: "Beginner", hint: "First tunes, simple rhythms" },
+  { level: 2, name: "Easy", hint: "About grade 1" },
+  { level: 3, name: "Intermediate", hint: "About grades 2–3" },
+  { level: 4, name: "Advanced", hint: "About grades 4–5" },
+  { level: 5, name: "Expert", hint: "Grade 6 and up" },
+] as const;
+
+export const levelHint = (level: number) => LEVEL_HINTS[Math.min(5, Math.max(1, level)) - 1]!;
+
+const VERSION_LABELS: Record<string, string> = { beginner: "Beginner", intermediate: "Intermediate", full: "Full" };
+
+export const versionLabel = (version: Pick<WorkVersion, "arrangement_level">): string =>
+  (version.arrangement_level && VERSION_LABELS[version.arrangement_level]) || "Original";
+
+const parseChoice = <T extends string>(value: string | null, options: readonly { value: T }[], fallback: T): T =>
+  options.some((option) => option.value === value) ? (value as T) : fallback;
+
+export function workFiltersFromParams(params: URLSearchParams): WorkFilters {
+  const level = Number(params.get("level"));
+  return {
+    query: params.get("q") ?? "",
+    level: Number.isInteger(level) && level >= 1 && level <= 5 ? level : 0,
+    genre: params.get("genre") ?? "",
+    era: params.get("era") ?? "",
+    hands: parseChoice(params.get("hands"), HANDS_OPTIONS, ""),
+    duration: parseChoice(params.get("length"), DURATION_OPTIONS, ""),
+    tag: params.get("tag") ?? "",
+    sort: parseChoice(params.get("sort"), WORK_SORT_OPTIONS, "recommended"),
+    unrated: params.get("unrated") === "1",
+  };
+}
+
+/** Only non-default values are written, so the bare /practice URL stays clean. */
+export function workFiltersToParams(filters: WorkFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.query) params.set("q", filters.query);
+  if (filters.level) params.set("level", String(filters.level));
+  if (filters.genre) params.set("genre", filters.genre);
+  if (filters.era) params.set("era", filters.era);
+  if (filters.hands) params.set("hands", filters.hands);
+  if (filters.duration) params.set("length", filters.duration);
+  if (filters.tag) params.set("tag", filters.tag);
+  if (filters.sort !== DEFAULT_WORK_FILTERS.sort) params.set("sort", filters.sort);
+  if (filters.unrated) params.set("unrated", "1");
+  return params;
+}
+
+/** Filters that narrow the list (the sort and the unrated switch only reorder or widen it). */
+export const activeWorkFilterCount = (filters: WorkFilters): number =>
+  [filters.level, filters.genre, filters.era, filters.hands, filters.duration, filters.tag].filter(Boolean).length;
+
+/** Shelves are for browsing; they step aside as soon as the player searches or filters. */
+export const isBrowsing = (filters: WorkFilters): boolean =>
+  filters.query.trim() === "" && activeWorkFilterCount(filters) === 0;
+
+export function workFiltersToQuery(filters: WorkFilters): WorksQuery {
+  return {
+    q: filters.query,
+    level: filters.level ? [filters.level] : undefined,
+    genre: filters.genre ? [filters.genre] : undefined,
+    era: filters.era ? [filters.era] : undefined,
+    tags: filters.tag ? [filters.tag] : undefined,
+    hands: filters.hands || undefined,
+    duration: filters.duration || undefined,
+    unrated: filters.unrated,
+    sort: filters.sort === "recommended" ? undefined : filters.sort,
+  };
+}
+
+/** The version a tap on the row opens: the easiest one in the work's best tier (the API's first). */
+export const defaultVersion = (work: WorkSummary): WorkVersion | undefined => work.versions[0];
+
+/** Best star count across a work's versions. */
+export const workStars = (work: WorkSummary, stars: Record<string, { best: number }>): number =>
+  work.versions.reduce((best, version) => Math.max(best, stars[version.id]?.best ?? 0), 0);
+
+export const workBestScore = (work: WorkSummary, bests: Record<string, { score: number }>): number | undefined => {
+  const scores = work.versions.map((version) => bests[version.id]?.score).filter((score): score is number => score !== undefined);
+  return scores.length ? Math.max(...scores) : undefined;
+};
+
+export const levelLabel = (work: Pick<WorkSummary, "level_min" | "level_max">): string =>
+  work.level_min === work.level_max ? `Level ${work.level_min}` : `Levels ${work.level_min}–${work.level_max}`;
+
+/**
+ * "Level 2 · Easy", or the version's own grade band when the catalogue has one. A piece that
+ * spans several levels shows only the range: one version's band would misstate the others.
+ */
+export function levelChipText(work: WorkSummary): string {
+  if (work.level_min !== work.level_max) return levelLabel(work);
+  const grade = work.versions.find((version) => version.grade_band)?.grade_band;
+  return `${levelLabel(work)} · ${grade ?? levelHint(work.level_min).name}`;
+}
+
+/** "Beethoven": the surname part of the sort name, which is what fits a phone row. */
+export const composerShort = (composer: WorkSummary["composer"]): string =>
+  composer ? (composer.sort_name.split(",")[0] ?? composer.name).trim() : "";
+
+/** "Mozart · K. 545", for the second line of a row or card. */
+export function workSubtitle(work: Pick<WorkSummary, "composer" | "catalogue" | "movement">): string {
+  return [composerShort(work.composer), work.catalogue, work.movement].filter(Boolean).join(" · ");
+}
+
+/** Index of the first Unrated work in a list that mixes tiers, or -1. Used for the "Unrated" divider. */
+export function firstUnratedIndex(works: Pick<WorkSummary, "best_tier">[]): number {
+  const index = works.findIndex((work) => work.best_tier === "unrated");
+  return index > 0 ? index : -1;
+}
+
+/** 15 November to 6 January. */
+export function isChristmasSeason(date: Date): boolean {
+  const month = date.getMonth();
+  const day = date.getDate();
+  return (month === 10 && day >= 15) || month === 11 || (month === 0 && day <= 6);
+}
+
+export interface WorkShelfDef {
+  id: string;
+  title: string;
+  query: WorksQuery;
+  /** Keep only works the catalogue has marked featured (otherwise the shelf would be arbitrary). */
+  featuredOnly?: boolean;
+  /** Christmas: shown in season, or under the Seasonal chip. */
+  seasonal?: boolean;
+  /** Whether the catalogue has anything for this shelf. */
+  available: (facets: LibraryFacets) => boolean;
+}
+
+const hasTag = (id: string) => (facets: LibraryFacets) => facets.tags.some((tag) => tag.id === id);
+const hasGenre = (value: string) => (facets: LibraryFacets) => facets.genres.some((genre) => genre.value === value);
+const SHELF_SIZE = 12;
+
+/** Catalogue shelves in display order. A shelf with no works is dropped. */
+export const WORK_SHELVES: WorkShelfDef[] = [
+  {
+    id: "beginner-favourites",
+    title: "Beginner favourites",
+    query: { sort: "featured", tier: "verified", level: [1, 2], limit: SHELF_SIZE },
+    available: () => true,
+  },
+  {
+    id: "featured",
+    title: "Featured",
+    query: { sort: "featured", limit: SHELF_SIZE },
+    featuredOnly: true,
+    available: () => true,
+  },
+  {
+    id: "christmas",
+    title: "Christmas",
+    query: { tags: ["christmas"], sort: "featured", limit: SHELF_SIZE },
+    seasonal: true,
+    available: hasTag("christmas"),
+  },
+  { id: "relaxing", title: "Relaxing", query: { tags: ["relaxing"], sort: "featured", limit: SHELF_SIZE }, available: hasTag("relaxing") },
+  { id: "wedding", title: "Wedding", query: { tags: ["wedding"], sort: "featured", limit: SHELF_SIZE }, available: hasTag("wedding") },
+  { id: "ragtime", title: "Ragtime", query: { genre: ["ragtime"], sort: "featured", limit: SHELF_SIZE }, available: hasGenre("ragtime") },
+  { id: "folk", title: "Folk of the world", query: { genre: ["folk"], sort: "featured", limit: SHELF_SIZE }, available: hasGenre("folk") },
+];
+
+/** Shelves to request now: Christmas only in season or when the Seasonal chip is on. */
+export function shelvesToLoad(facets: LibraryFacets, now: Date, seasonalOn: boolean): WorkShelfDef[] {
+  return WORK_SHELVES.filter((shelf) => shelf.available(facets) && (!shelf.seasonal || seasonalOn || isChristmasSeason(now)));
+}
+
+/** True when the Seasonal chip has something to switch on out of season. */
+export const hasSeasonalShelf = (facets: LibraryFacets, now: Date): boolean =>
+  !isChristmasSeason(now) && WORK_SHELVES.some((shelf) => shelf.seasonal && shelf.available(facets));
+
+const TIER_ORDER: Record<string, number> = { verified: 0, good: 1, unrated: 2, low: 3 };
+const foldText = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Songs that belong to no catalogue Work (the ADL library, archive imports, uploads), for the
+ * "More songs" section under All songs: Good first, then Unrated, then Low. Low is for admins
+ * only, as in the catalogue. Songs from a server that doesn't report tiers count as Unrated.
+ * `query` matches title or artist, ignoring case and accents.
+ */
+export function moreSongs(songs: Song[], options: { isAdmin: boolean; query?: string }): Song[] {
+  const query = foldText((options.query ?? "").trim());
+  const tierOf = (song: Song) => song.quality_tier ?? "unrated";
+  return songs
+    .filter((song) => !song.work_id && (options.isAdmin || tierOf(song) !== "low"))
+    .filter((song) => !query || foldText(song.title).includes(query) || foldText(song.artist).includes(query))
+    .sort((a, b) => (TIER_ORDER[tierOf(a)] ?? 2) - (TIER_ORDER[tierOf(b)] ?? 2) || byTitle(a, b));
+}
+
+/** Songs the player added themselves (uploads, recordings, imports): "Your uploads". */
+export const uploadedSongs = (songs: Song[]): Song[] => songs.filter((song) => song.mine).sort(byTitle);
+
+/** Songs by id, in the order given, skipping ids that are not in the list. */
+export function songsById(songs: Song[], ids: readonly string[]): Song[] {
+  const byId = new Map(songs.map((song) => [song.id, song]));
+  return ids.map((id) => byId.get(id)).filter((song): song is Song => song !== undefined);
 }

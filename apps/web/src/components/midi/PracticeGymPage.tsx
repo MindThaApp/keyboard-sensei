@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import MidiStatusBar from "./MidiStatusBar";
 import MidiExercise from "./MidiExercise";
 import SongExcerptPicker from "./SongExcerptPicker";
@@ -93,6 +93,12 @@ export default function PracticeGymPage() {
       <div hidden={focused}>
         <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Practice Gym</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">Freeform drills and song excerpts — pick one and play. Not tied to lesson progress.</p>
+      </div>
+
+      <div hidden={focused}>
+        <Link to="/practice/notes" className="inline-flex min-h-[44px] items-center text-sm font-semibold text-felt-700 underline dark:text-felt-300">
+          Note reading game
+        </Link>
       </div>
 
       <div hidden={focused}>

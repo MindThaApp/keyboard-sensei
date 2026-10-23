@@ -4,11 +4,12 @@ import { useFocusMode } from "../../hooks/useFocusMode";
 import { dismissRewards, usePendingRewards } from "../../state/rewards";
 import type { Rewards } from "../../services/api";
 import { StarRating } from "../progress/ProgressBits";
+import { LEVEL_LABELS } from "../play/practiceSession";
+import { levelTitle } from "../ui/glossary";
 import { useToast } from "../ui/Toast";
 import "./shell.css";
 
 const MAX_ACHIEVEMENTS_SHOWN = 3;
-const LEVEL_NAME: Record<string, string> = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" };
 
 /** Whether a reward has anything worth interrupting the learner for. */
 const worthShowing = (rewards: Rewards): boolean =>
@@ -19,7 +20,7 @@ const worthShowing = (rewards: Rewards): boolean =>
 
 function rewardTitle(rewards: Rewards): string {
   if (rewards.xpGained > 0) {
-    return rewards.leveledUp ? `+${rewards.xpGained} XP, level up!` : `+${rewards.xpGained} XP`;
+    return rewards.leveledUp ? `+${rewards.xpGained} points, level up!` : `+${rewards.xpGained} points`;
   }
   if (rewards.newAchievements.length > 0) return "Achievement unlocked";
   if (rewards.unlockedSongs.length > 0) return "New song unlocked";
@@ -29,7 +30,7 @@ function rewardTitle(rewards: Rewards): string {
 function RewardBody({ rewards }: { rewards: Rewards }) {
   return (
     <span className="ks-reward-lines" data-testid="reward-toast">
-      {rewards.leveledUp && <span>You are now {rewards.level.title}</span>}
+      {rewards.leveledUp && <span>You are now {levelTitle(rewards.level.level, rewards.level.tier)}</span>}
       {rewards.dailyGoal.justMet && (
         <span>
           Daily goal met: {rewards.dailyGoal.goalMinutes} minutes today. Streak: {rewards.streak.current} days
@@ -38,7 +39,7 @@ function RewardBody({ rewards }: { rewards: Rewards }) {
       {rewards.newStars.map((star) => (
         <span key={`${star.kind}-${star.id}-${star.level ?? ""}`}>
           <StarRating stars={star.stars} /> {star.title}
-          {star.kind === "song" && star.level && star.level !== "full" ? ` (${LEVEL_NAME[star.level]})` : ""}
+          {star.kind === "song" && star.level && star.level !== "full" ? ` (${LEVEL_LABELS[star.level]})` : ""}
         </span>
       ))}
       {rewards.newAchievements.slice(0, MAX_ACHIEVEMENTS_SHOWN).map((achievement) => (

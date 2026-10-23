@@ -10,6 +10,8 @@ import type {
   Lesson,
   MidiExercise,
   PerformedNote,
+  SkillChip,
+  TierId,
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
@@ -33,6 +35,7 @@ import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { creditsRouter } from "./catalogue/credits.js";
 import { catalogueRouter } from "./catalogue/routes.js";
+import { gamesRouter } from "./games/router.js";
 import { progressionRouter } from "./progression/router.js";
 import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
 import { exerciseSeconds } from "./progression/practice-time.js";
@@ -146,6 +149,13 @@ const sanitizeLesson = (lesson: Lesson): Lesson => ({
   }),
 });
 
+/** The tier and skills columns are authoritative; stored lesson JSON from before they existed lacks them. */
+const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[] }): Lesson => ({
+  ...lesson,
+  tier: row.tier as TierId,
+  skills: row.skills as SkillChip[],
+});
+
 /** Read the `title` out of a stored lesson JSON without requiring a full schema parse. */
 const lessonTitleFromJson = (lessonJson: Prisma.JsonValue): string => {
   if (typeof lessonJson === "object" && lessonJson !== null && !Array.isArray(lessonJson)) {
@@ -225,6 +235,7 @@ app.use(instrumentsRouter);
 app.use(archiveRouter);
 app.use(catalogueRouter());
 app.use(progressionRouter);
+app.use(gamesRouter);
 
 app.get("/users/me", async (req, res, next) => {
   try {
@@ -306,7 +317,7 @@ app.get("/lessons", async (req, res, next) => {
     res.json(
       rows.map((row) => {
         const progress = row.progress[0];
-        const lesson = validateLesson(row.lesson_json);
+        const lesson = withTierColumns(validateLesson(row.lesson_json), row);
         return {
           ...sanitizeLesson(lesson),
           order: row.order,
@@ -338,7 +349,7 @@ app.get("/lessons/:id", async (req, res, next) => {
       res.status(404).json({ error: { code: "not_found", message: "Lesson not found" } });
       return;
     }
-    const lesson = validateLesson(row.lesson_json);
+    const lesson = withTierColumns(validateLesson(row.lesson_json), row);
     const [admin, completedIds, exerciseBests] = await Promise.all([
       isAdmin(uid),
       completedLessonIdsFor(uid),
