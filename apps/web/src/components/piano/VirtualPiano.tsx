@@ -5,6 +5,9 @@ import { isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
 import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
+import { useExperienceMode } from "../ui/useExperienceMode";
+import { useMediaQuery } from "../../utils/motion";
+import "./keybed.css";
 
 const MIDDLE_C = 60;
 /** Classic "typing keyboard as piano" layout, one row of white/black keys starting at C4. */
@@ -54,7 +57,74 @@ export interface VirtualPianoProps {
   showControls?: boolean;
   /** False hides the "use your computer keyboard" hint line. */
   showHint?: boolean;
+  /** `keybed` (default): the dark case, felt line and pressable keys. `flat`: a
+   *  depth-free keyboard for thumbnails; hides the range handles, controls and hint
+   *  unless asked for. */
+  variant?: "keybed" | "flat";
+  /** Which hand a lit key is tinted for (right when absent). */
+  handByNote?: Record<number, "left" | "right">;
 }
+
+/** A key is wide enough for a label on every white key (Simple mode). */
+const ALL_LABELS_MIN_KEY_PX = 28;
+/** Below this a label would not fit on the key at all. */
+const LABEL_MIN_KEY_PX = 20;
+
+type KeyTint = "right" | "left" | "ok" | "bad" | "none";
+
+interface KeyProps {
+  note: number;
+  black: boolean;
+  x: number;
+  width: number;
+  height: number;
+  down: boolean;
+  tint: KeyTint;
+  expected: boolean;
+  label: string | null;
+  middleC: boolean;
+  glyph: string | null;
+  onDown: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
+  onEnter: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
+  onLeave: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
+}
+
+/** One key. Memoised on primitives so a press re-renders only the keys that changed. */
+const PianoKey = memo(function PianoKey({
+  note, black, x, width, height, down, tint, expected, label, middleC, glyph, onDown, onEnter, onLeave,
+}: KeyProps) {
+  const name = midiNoteToName(note);
+  return (
+    <button
+      type="button"
+      aria-label={name}
+      aria-pressed={down}
+      data-down={down}
+      data-tint={tint}
+      className={`ks-key absolute top-0 ${black ? "ks-key-black z-10" : "ks-key-white"}`}
+      style={{ width, height, left: x }}
+      onPointerDown={(e) => onDown(note, e)}
+      onPointerEnter={(e) => onEnter(note, e)}
+      onPointerLeave={(e) => onLeave(note, e)}
+    >
+      {expected && <span aria-hidden="true" className="ks-key-dot" />}
+      {middleC && !expected && (
+        <span aria-hidden="true" className="absolute bottom-7 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-400/70" />
+      )}
+      {glyph && (
+        <span aria-hidden="true" className="absolute left-1/2 top-1.5 -translate-x-1/2 text-xs font-bold text-slate-900">
+          {glyph}
+        </span>
+      )}
+      {/* White keys are white in every theme, so the label can't use the themed muted grey. */}
+      {label && (
+        <span className="absolute bottom-1.5 left-0 right-0 z-[1] text-center text-xs leading-none text-slate-600">
+          {label}
+        </span>
+      )}
+    </button>
+  );
+});
 
 const DEFAULT_MAX_WHITE_KEY_HEIGHT_PX = 180;
 
@@ -114,9 +184,14 @@ function VirtualPiano({
   scrollable = true,
   sizing: sizingProp,
   maxWhiteKeyHeightPx = DEFAULT_MAX_WHITE_KEY_HEIGHT_PX,
-  showControls = true,
-  showHint = true,
+  showControls,
+  showHint,
+  variant = "keybed",
+  handByNote,
 }: VirtualPianoProps) {
+  const flat = variant === "flat";
+  const experience = useExperienceMode();
+  const finePointer = useMediaQuery("(pointer: fine)");
   const { mockAdapter, subscribe, devices, deviceRange, setDeviceRange, currentDeviceKey } = useMidiContext();
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(new Set());
 
@@ -167,6 +242,7 @@ function VirtualPiano({
     persistenceKey: sizingProp ? null : deviceName,
     onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
     keepTightRangeVisible: true,
+    simpleFit: experience === "simple" && !sizingProp && !flat,
   });
   const sizing = sizingProp ?? ownSizing;
   const { geometry } = sizing;
@@ -313,21 +389,55 @@ function VirtualPiano({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled, geometry.lowestNote, geometry.highestNote]);
 
-  function keyColorClasses(note: number, isBlack: boolean): string {
+  function tintFor(note: number): KeyTint {
     const feedback = feedbackByNote[note];
-    const isPressed = pressedNotes.has(note) || soundingSet.has(note);
-    const isExpected = expectedSet.has(note);
+    if (feedback === "correct") return "ok";
+    if (feedback === "incorrect") return "bad";
+    if (pressedNotes.has(note) || soundingSet.has(note)) return handByNote?.[note] ?? "right";
+    return "none";
+  }
 
-    if (feedback === "correct") return isBlack ? "bg-emerald-600" : "bg-emerald-200";
-    if (feedback === "incorrect") return isBlack ? "bg-rose-600" : "bg-rose-200";
-    if (isPressed) return isBlack ? "bg-slate-500" : "bg-slate-300";
-    if (isExpected) return isBlack ? "bg-sky-700" : "bg-sky-100";
-    return isBlack ? "bg-slate-900" : "bg-white";
+  const whiteWidth = geometry.whiteKeyWidthPx;
+  function labelFor(note: number): string | null {
+    if (!showLabels || whiteWidth < LABEL_MIN_KEY_PX) return null;
+    const isC = note % 12 === 0;
+    if (isC || (experience === "simple" && whiteWidth >= ALL_LABELS_MIN_KEY_PX)) return midiNoteToName(note);
+    return null;
+  }
+
+  function renderKey(note: number, black: boolean) {
+    const rect = geometry.xFor(note);
+    if (!rect) return null;
+    const feedback = feedbackByNote[note];
+    return (
+      <PianoKey
+        key={note}
+        note={note}
+        black={black}
+        x={rect.x}
+        width={rect.width}
+        height={black ? blackKeyHeightPx : whiteKeyHeightPx}
+        down={pressedNotes.has(note) || soundingSet.has(note)}
+        tint={tintFor(note)}
+        expected={expectedSet.has(note)}
+        label={black ? null : labelFor(note)}
+        middleC={note === MIDDLE_C}
+        glyph={feedback === "correct" ? "✓" : feedback === "incorrect" ? "✕" : null}
+        onDown={handlePointerDown}
+        onEnter={handlePointerEnter}
+        onLeave={handlePointerLeave}
+      />
+    );
   }
 
   return (
     <div ref={containerRef} className="w-full">
-      <div ref={scrollerRef} className={scrollable ? "w-full overflow-x-auto pb-1" : "w-full"}>
+      <div
+        ref={scrollerRef}
+        className={`${scrollable ? "w-full overflow-x-auto pb-1" : "w-full"} ${flat ? "ks-flat" : "ks-case"} ks-keybed ${
+          disabled ? "opacity-50" : ""
+        }`}
+      >
         <div
           className="relative mx-auto select-none"
           style={{ width: geometry.widthPx, minWidth: geometry.widthPx, height: whiteKeyHeightPx }}
@@ -336,56 +446,11 @@ function VirtualPiano({
         >
 
           <div className="flex" style={{ height: whiteKeyHeightPx }}>
-            {whiteNotes.map((note) => {
-              const rect = geometry.xFor(note);
-              if (!rect) return null;
-              return (
-                <button
-                  key={note}
-                  type="button"
-                  aria-label={midiNoteToName(note)}
-                  aria-pressed={pressedNotes.has(note) || soundingSet.has(note)}
-                  className={`relative flex items-end justify-center pb-2 rounded-b-md border border-slate-300 transition-colors touch-none ${keyColorClasses(
-                    note,
-                    false,
-                  )} ${disabled ? "opacity-50" : "cursor-pointer active:brightness-95"}`}
-                  style={{ width: rect.width, height: whiteKeyHeightPx }}
-                  onPointerDown={(e) => handlePointerDown(note, e)}
-                  onPointerEnter={(e) => handlePointerEnter(note, e)}
-                  onPointerLeave={(e) => handlePointerLeave(note, e)}
-                >
-                  {note === MIDDLE_C && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute bottom-7 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-400/70"
-                    />
-                  )}
-                  {/* White keys are white in every theme, so this can't use the themed muted grey. */}
-                  {showLabels && <span className="text-[10px] text-slate-600">{midiNoteToName(note)}</span>}
-                </button>
-              );
-            })}
+            {whiteNotes.map((note) => renderKey(note, false))}
           </div>
-          {blackNotes.map((note) => {
-            const rect = geometry.xFor(note);
-            if (!rect) return null;
-            return (
-              <button
-                key={note}
-                type="button"
-                aria-label={midiNoteToName(note)}
-                aria-pressed={pressedNotes.has(note) || soundingSet.has(note)}
-                className={`absolute top-0 rounded-b-md border border-slate-900 z-10 transition-colors touch-none ${keyColorClasses(
-                  note,
-                  true,
-                )} ${disabled ? "opacity-50" : "cursor-pointer active:brightness-95"}`}
-                style={{ width: rect.width, height: blackKeyHeightPx, left: rect.x }}
-                onPointerDown={(e) => handlePointerDown(note, e)}
-                onPointerEnter={(e) => handlePointerEnter(note, e)}
-                onPointerLeave={(e) => handlePointerLeave(note, e)}
-              />
-            );
-          })}
+          {blackNotes.map((note) => renderKey(note, true))}
+          {!flat && <div aria-hidden="true" className="ks-case-felt" />}
+          {!flat && (
           <div
             role="slider"
             aria-label="Lower end of keyboard range"
@@ -399,6 +464,8 @@ function VirtualPiano({
             onPointerUp={sizing.dragHandlers.onPointerUp}
             onPointerCancel={sizing.dragHandlers.onPointerCancel}
           />
+          )}
+          {!flat && (
           <div
             role="slider"
             aria-label="Upper end of keyboard range"
@@ -412,14 +479,15 @@ function VirtualPiano({
             onPointerUp={sizing.dragHandlers.onPointerUp}
             onPointerCancel={sizing.dragHandlers.onPointerCancel}
           />
+          )}
         </div>
       </div>
-      {showControls && (
+      {(showControls ?? !flat) && (
         <div className="mt-1">
           <KeyboardSizingControls sizing={sizing} />
         </div>
       )}
-      {showHint && !disabled && (
+      {(showHint ?? (!flat && finePointer)) && !disabled && (
         <p className="mt-2 text-center text-xs text-slate-500">
           No MIDI keyboard? Use your computer keyboard: A S D F G H J K (white keys), W E T Y U (black keys).
         </p>
