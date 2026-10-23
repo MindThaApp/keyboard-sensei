@@ -31,6 +31,7 @@ import { adminUsersRouter } from "./admin-users.js";
 import { songsRouter } from "./songs.js";
 import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
+import { creditsRouter } from "./catalogue/credits.js";
 import { progressionRouter } from "./progression/router.js";
 import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
 import { exerciseSeconds } from "./progression/practice-time.js";
@@ -186,6 +187,7 @@ app.get("/config", (_req, res) =>
 );
 
 app.use(authRouter);
+app.use(creditsRouter);
 
 app.get("/tts/audio/:id", async (req, res, next) => {
   try {
