@@ -27,7 +27,7 @@ import { InvalidMidiError, extractSongMetadata } from "../../midi-metadata.js";
 import { classifyMidiQuality, type QualityResult } from "../../midi-quality.js";
 import { isPublicEligible, licenceFamily, pdStatus, storedSignals, stableJson } from "../backfill.js";
 import { buildSearchText } from "../search-text.js";
-import { COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, composerIdFor, gradeBandFor, type MoodTagId } from "../works-data.js";
+import { ANONYMOUS, COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, TRADITIONAL, composerIdFor, gradeBandFor, type ComposerSeed, type MoodTagId } from "../works-data.js";
 import { INCIPIT_REJECT_BELOW, compareIncipits, skylineIncipit } from "./incipit.js";
 import {
   attributionFor,
@@ -194,12 +194,16 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
     curated: true,
     incipitCheck: incipit.result,
     fileLicence: licenceFamily(fileLicence),
-    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(pdStatus({ traditional: false, died: composer.died, publishedYear: null }, year)),
+    workPublicDomain: ["pd-worldwide", "pd-us-eu"].includes(workPdStatus(composer, year)),
     metadata: "complete",
     reviewerApproved: false,
   });
   return { bytes, copyrightYear, incipit, quality, meta };
 }
+
+/** A Work's public-domain status: unattributed and traditional pieces are old enough by nature. */
+const workPdStatus = (composer: ComposerSeed, year: number) =>
+  pdStatus({ traditional: composer.id === TRADITIONAL || composer.id === ANONYMOUS, died: composer.died, publishedYear: null }, year);
 
 /**
  * Equality for stored columns. A double read back from Postgres keeps 15
@@ -252,7 +256,7 @@ async function writeSong(prisma: PrismaClient, pack: Pack, piece: PackPiece, che
   const signals = quality.signals
     ? { ...storedSignals(quality.signals), incipitCheck: checked.incipit.result, incipitSource: checked.incipit.note }
     : null;
-  const pd = pdStatus({ traditional: false, died: composer.died, publishedYear: null }, options.year);
+  const pd = workPdStatus(composer, options.year);
   const pinned = {
     difficulty: checked.meta.difficulty,
     duration_sec: checked.meta.durationSec,

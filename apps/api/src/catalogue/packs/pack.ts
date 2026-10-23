@@ -128,9 +128,16 @@ export const sourceRefOf = (piece: PackPiece): string => (isPianoMidiDe(piece.pr
 /** Song.source_url: the page the piece's credit points at. */
 export const sourceUrlOf = (piece: PackPiece): string => (isPianoMidiDe(piece.primary) ? PIANO_MIDI_DE_HOME : piece.primary.infoUrl);
 
-/** Song id: stable and derived from the source, so a re-run finds the same row. */
-export const songIdOf = (piece: PackPiece): string =>
-  isPianoMidiDe(piece.primary) ? `pmd-${piece.primary.file.replace(/\.mid$/i, "")}` : `mutopia-${piece.primary.mutopiaId}`;
+/**
+ * Song id: stable and derived from the source, so a re-run finds the same row.
+ * A Mutopia piece that is several files in one zip (one per movement) adds the
+ * member's name, or its files would share an id.
+ */
+export function songIdOf(piece: PackPiece): string {
+  const { primary } = piece;
+  if (isPianoMidiDe(primary)) return `pmd-${primary.file.replace(/\.mid$/i, "")}`;
+  return primary.member ? `mutopia-${primary.mutopiaId}-${primary.member.replace(/\.mid$/i, "")}` : `mutopia-${primary.mutopiaId}`;
+}
 
 /**
  * The credit line the licence requires. For piano-midi.de: the author, the
