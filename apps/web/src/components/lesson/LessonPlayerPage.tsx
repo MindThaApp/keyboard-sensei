@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
 import TheoryCardSectionView from "./TheoryCardSectionView";
 import LiveNotationSection from "../notation/LiveNotationSection";
@@ -7,6 +7,8 @@ import QuizSectionView from "../quiz/QuizSectionView";
 import ExerciseSet from "./ExerciseSet";
 import { groupExerciseRuns } from "./exerciseRuns";
 import MidiStatusBar from "../midi/MidiStatusBar";
+import { useFocusMode } from "../../hooks/useFocusMode";
+import { Button, GlassSurface, Sheet } from "../ui";
 import { useProgressStore } from "../../state/progressStore";
 import type { LessonDetail } from "@keyboard-sensei/shared-types";
 import { getLesson, getMySongStars, type ReadySong } from "../../services/api";
@@ -24,6 +26,9 @@ export default function LessonPlayerPage() {
   const loadAll = useProgressStore((s) => s.loadAll);
   const [detail, setDetail] = useState<LessonDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const focus = useFocusMode();
+  const navigate = useNavigate();
   // ?exercise=<id> (from Today's Continue and Review) opens that exercise.
   const [params] = useSearchParams();
   const focusExerciseId = params.get("exercise");
@@ -83,29 +88,42 @@ export default function LessonPlayerPage() {
   const nextLesson = place.next;
   const nextUnlocked = nextLesson !== null && nextLesson.progress.status !== "locked";
 
+  const hasExercises = lesson.sections.some((section) => section.type === "midi-exercise");
+  const objectives = (
+    <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+      {lesson.objectives.map((objective, i) => (
+        <li key={i}>{objective}</li>
+      ))}
+    </ul>
+  );
+
   return (
     <div className="space-y-6">
-      <div>
-        <nav className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Link to="/learn" className="hover:text-slate-800 dark:hover:text-slate-200">Lessons</Link>
-          <span aria-hidden>/</span>
-          <span>{pathLabel(lesson.path)}</span>
-          <span aria-hidden>/</span>
-          <span className="tabular-nums">
-            {place.position} of {place.total}
-          </span>
-        </nav>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{lesson.title}</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-          {levelLabel(lesson.level)} · {lesson.estimatedMinutes} min
-          {lesson.progress.bestScore > 0 && <> · Best {lesson.progress.bestScore}</>}
+      <GlassSurface className="sticky top-3 z-30 flex items-center gap-1 rounded-full p-1.5">
+        <Button variant="plain" aria-label="Back to lessons" onClick={() => navigate("/learn")}>
+          <span aria-hidden>‹</span>
+        </Button>
+        <h1 className="glass-text min-w-0 flex-1 truncate px-1 text-center text-base font-semibold">{lesson.title}</h1>
+        <Button variant="plain" aria-label="About this lesson" aria-haspopup="dialog" onClick={() => setDetailsOpen(true)}>
+          <span aria-hidden>⋯</span>
+        </Button>
+      </GlassSurface>
+      <div className="-mt-3">
+        <p className="text-sm text-slate-500 dark:text-slate-300">
+          {levelLabel(lesson.level)} · {lesson.estimatedMinutes} min · {place.position} of {place.total} in {pathLabel(lesson.path)}
         </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
-          {lesson.objectives.map((objective, i) => (
-            <li key={i}>{objective}</li>
-          ))}
-        </ul>
+        {!hasExercises && <div className="mt-3">{objectives}</div>}
       </div>
+
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="About this lesson">
+        <div className="space-y-4 px-1 pb-2">
+          {objectives}
+          {hasExercises && <MidiStatusBar />}
+          <Link to="/learn" className="inline-block text-sm text-felt-700 underline dark:text-felt-300">
+            All lessons
+          </Link>
+        </div>
+      </Sheet>
 
       {completed && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brass-400/60 bg-brass-100/60 px-4 py-3 dark:border-brass-600/50 dark:bg-brass-700/10">
@@ -132,7 +150,11 @@ export default function LessonPlayerPage() {
         </p>
       )}
 
-      {lesson.sections.some((section) => section.type === "midi-exercise") && <MidiStatusBar />}
+      {hasExercises && (
+        <div >
+          <MidiStatusBar variant="chip" />
+        </div>
+      )}
 
       <div className="space-y-6">
         {groupExerciseRuns(lesson.sections).map((block) => {
@@ -152,6 +174,8 @@ export default function LessonPlayerPage() {
                 exercises={detail.exercises}
                 initialBests={detail.exerciseBests ?? {}}
                 focusExerciseId={focusExerciseId}
+                afterLast={nextLesson && nextUnlocked ? { label: `Next lesson: ${nextLesson.title}`, to: `/lessons/${nextLesson.id}` } : null}
+                focus={focus}
               />
             );
           }
