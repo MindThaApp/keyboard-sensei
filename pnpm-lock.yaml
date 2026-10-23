@@ -46,6 +46,9 @@ importers:
       '@tonejs/midi':
         specifier: ^2.0.28
         version: 2.0.28
+      '@xmldom/xmldom':
+        specifier: 0.9.12
+        version: 0.9.12
       bcryptjs:
         specifier: ^3.0.2
         version: 3.0.3
@@ -61,6 +64,9 @@ importers:
       express-rate-limit:
         specifier: ^8.7.0
         version: 8.7.0(express@5.2.1)
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       google-auth-library:
         specifier: ^11.3.1
         version: 11.3.1
@@ -73,6 +79,9 @@ importers:
       undici:
         specifier: ^8.7.0
         version: 8.7.0
+      verovio:
+        specifier: 6.3.0
+        version: 6.3.0
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -183,6 +192,9 @@ importers:
       three:
         specifier: ^0.186.1
         version: 0.186.1
+      verovio:
+        specifier: 6.3.0
+        version: 6.3.0
       vexflow:
         specifier: ^4.2.5
         version: 4.2.5
@@ -3056,6 +3068,10 @@ packages:
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
+
+  verovio@6.3.0:
+    resolution: {integrity: sha512-1p6WhP/w3WrAhPVDTNUDH9UVPAZOnHnZVTWxclE8haHccVI/q8c+99vLH6rRgL9MuYaFR9HF4UJD6MyW2CfMwg==}
+    engines: {node: '>= 14.18.0'}
 
   vexflow@1.2.93:
     resolution: {integrity: sha512-LwHQDCc257Lwju35BhyZuPYcVWu0hIUqEdM7j9+B+bq91bSelssnAG5JR8odTUtgGuwwvGwLhXw37wtmHNCS6Q==}
@@ -6011,6 +6027,8 @@ snapshots:
   uuid@7.0.3: {}
 
   vary@1.1.2: {}
+
+  verovio@6.3.0: {}
 
   vexflow@1.2.93: {}
 

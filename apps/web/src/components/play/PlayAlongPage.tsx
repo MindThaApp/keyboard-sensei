@@ -20,7 +20,7 @@ import SongStars from "../progress/SongStars";
 import { Button, ErrorState, GlassSurface, SegmentedControl, Toast, Toggle } from "../ui";
 import { useExperienceMode } from "../ui/useExperienceMode";
 import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
-import { LiveOsmdNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
+import { LiveOsmdNotation, LiveVerovioNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
 import PracticeResultSheet, { type FinishedRun } from "./PracticeResultSheet";
 import PracticeSettingsSheet from "./PracticeSettingsSheet";
 import { loadRenderer, NOTES_STYLE_FALLBACK_EVENT, styleFallbackToast, type NotesStyleFallback, type WaterfallRenderer } from "./renderers";
@@ -210,8 +210,8 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     saveSongChoices(sources.baseId, { ...loadSongChoices(sources.baseId), waitMode: on });
   };
 
-  // Fetch real MusicXML/.mxl notation for archive-imported songs when there is some
-  // (notation_path is a presence flag). Everything else uses ScrollingScore below.
+  // Fetch real notation when the song has some (notation_path is a presence flag): MusicXML
+  // for archive imports, MEI for score imports. Everything else uses ScrollingScore below.
   useEffect(() => {
     setNotationBytes(null);
     if (!song?.notation_path) return;
@@ -225,6 +225,11 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       cancelled = true;
     };
   }, [song?.id, song?.notation_path]);
+
+  const meiNotation = useMemo(
+    () => (notationBytes && song?.notation_format === "mei" ? new TextDecoder().decode(notationBytes) : null),
+    [notationBytes, song?.notation_format],
+  );
 
   // Track the stage size so the keyboard and waterfall fill the space the page has.
   // Observe the OUTER element, never one whose size is set from the observation (a
@@ -570,7 +575,12 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
 
       {showNotation && (
         <div className="ks-practice__notation">
-          {notationBytes && level === "full" ? (
+          {meiNotation && level === "full" ? (
+            // Score imports: the uploaded score itself, engraved, as long as the full piece is played.
+            <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`}>
+              <LiveVerovioNotation mei={meiNotation} />
+            </div>
+          ) : notationBytes && level === "full" ? (
             // Archive-imported songs ship real MusicXML: render that rather than a
             // reconstruction from the MIDI, as long as the full piece is being played.
             <div role="img" aria-label={`Sheet music: ${song?.title ?? "this song"}`} className="ks-practice__osmd">

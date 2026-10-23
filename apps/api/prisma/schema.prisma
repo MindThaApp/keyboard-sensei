@@ -169,6 +169,9 @@ model Song {
   content_rights       String
   source_url           String?
   notation_path        String?
+  // Score imports: the uploaded MusicXML / MXL / MEI as sent. `notation_path` is then
+  // Verovio's MEI of it and `file_path` the MIDI derived from it.
+  score_path           String?
   file_path            String
   uploader_id          String?
   created_at           DateTime           @default(now())

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ESSENTIALS } from "../../api/src/essentials/manifest.ts";
-import { collectMusicLicenses, collectPackageLicenses, hasKnownLicense, type PackageLicense } from "./third-party-licenses.ts";
+import { collectLgplNotices, collectMusicLicenses, collectPackageLicenses, hasKnownLicense, isLgpl, type PackageLicense } from "./third-party-licenses.ts";
 import { THIRD_PARTY_ASSETS } from "./third-party-assets.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -66,6 +66,17 @@ describe("third-party licences", () => {
       expect(hasKnownLicense(asset.license), asset.name).toBe(true);
       expect(asset.attribution.length, asset.name).toBeGreaterThan(20);
     }
+  });
+
+  it("gives every LGPL package (Verovio) its notice, with the source of the shipped version", () => {
+    const notices = collectLgplNotices(packages);
+    expect(notices.map((notice) => notice.name)).toEqual(packages.filter((pkg) => isLgpl(pkg.license)).map((pkg) => pkg.name));
+    const verovio = notices.find((notice) => notice.name === "verovio");
+    expect(verovio?.license).toMatch(/^LGPL-3\.0/);
+    expect(verovio?.sourceUrl).toBe(`https://github.com/rism-digital/verovio/releases/tag/version-${verovio?.version}`);
+    expect(verovio?.licenseUrls).toEqual(["https://www.gnu.org/licenses/lgpl-3.0.html", "https://www.gnu.org/licenses/gpl-3.0.html"]);
+    // A new LGPL dependency without a notice fails the build instead of shipping silently.
+    expect(() => collectLgplNotices([{ name: "some-lgpl-lib", version: "1.0.0", license: "LGPL-2.1", author: null, homepage: null, licenseText: null }])).toThrow(/LGPL_PACKAGES/);
   });
 
   it("treats a missing licence field as unknown", () => {
