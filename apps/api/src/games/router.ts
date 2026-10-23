@@ -8,6 +8,7 @@ import {
   READING_GAME_DAILY_POINT_CAP,
   readingGameDayPoints,
   readingGamePoints,
+  readingGameRounds,
 } from "../progression/skills.js";
 import type { XpItem } from "../progression/xp.js";
 
@@ -54,13 +55,7 @@ async function userClock(userId: string, now: Date) {
   return { goalMinutes: user.daily_goal_minutes, timezone: user.timezone, day: dayKey(now, user.timezone) };
 }
 
-async function correctByDay(userId: string, timezone: string | null) {
-  const rounds = await prisma.gameRound.findMany({
-    where: { user_id: userId, game: NOTE_READING },
-    select: { correct: true, created_at: true },
-  });
-  return rounds.map((round) => ({ correct: round.correct, day: dayKey(round.created_at, timezone) }));
-}
+const correctByDay = (userId: string, timezone: string | null) => readingGameRounds(prisma, userId, timezone);
 
 const sumFor = (rows: { correct: number; day: string }[], day: string): number =>
   rows.filter((row) => row.day === day).reduce((sum, row) => sum + row.correct, 0);
