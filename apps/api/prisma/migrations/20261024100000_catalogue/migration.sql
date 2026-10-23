@@ -7,9 +7,10 @@
 -- bests, stars, XP -- are untouched. src/catalogue/backfill.ts fills the new
 -- columns afterwards, from prisma/seed.ts.
 --
--- `prisma migrate diff` also proposes dropping ArchiveEntry.search_vector and its
--- index. Those are raw SQL from 20260712010643_add_archive_entry and must stay;
--- the same applies to the search function and indexes at the end of this file.
+-- Generated with `prisma migrate diff`, minus the drop of ArchiveEntry.search_vector
+-- and its index it always proposes: those are raw SQL from
+-- 20260712010643_add_archive_entry and must stay. The search function and the
+-- expression indexes at the end are raw SQL too (Prisma ignores them).
 
 -- Search support. Both ship in Postgres contrib (included in the official postgres
 -- images, -alpine too) and have been "trusted" extensions since Postgres 13, so the

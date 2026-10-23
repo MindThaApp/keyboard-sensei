@@ -1339,7 +1339,8 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
       const first = await backfillCatalogue(m.prisma, { year: 2026 });
       expect(first.worksCreated).toBeGreaterThanOrEqual(3);
-      expect(first.unreadable).toEqual([missing]);
+      // Other suites leave rows with made-up paths behind, so only check ours.
+      expect(first.unreadable).toContain(missing);
 
       expect(await protectedState()).toEqual(before);
       expect((await api("GET", "/songs/attempts/me", { token: user.token })).body.bests).toEqual(bestsBefore);
