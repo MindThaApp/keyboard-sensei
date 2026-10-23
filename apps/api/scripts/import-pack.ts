@@ -6,8 +6,10 @@
  * Fetches each piece's pinned file (sha256-checked, cached under
  * data/midi-library/packs/<pack>/), checks its opening notes against the
  * second source, classifies it and creates a draft Work and Song with the
- * credit its licence requires. Nothing is published and nothing becomes
- * public-eligible; a reviewer publishes. Re-running changes nothing.
+ * credit its licence requires. Nothing is published; a reviewer publishes. The
+ * footer reports how many of the pack's songs are public-eligible (a stored
+ * flag derived from source, licence and the work's status). Re-running changes
+ * nothing.
  * --dry-run fetches and checks but writes nothing to the database.
  */
 import "dotenv/config";
@@ -44,8 +46,10 @@ async function main(): Promise<void> {
     else console.log(`          ${describeIncipit(piece)}`);
   }
   const { counts } = report;
+  const imported = report.pieces.filter((piece) => piece.status !== "rejected").map((piece) => piece.songId);
+  const eligible = await prisma.song.count({ where: { id: { in: imported }, public_eligible: true } });
   console.log(
-    `\n${pack.id}: ${counts.created} created, ${counts.updated} updated, ${counts.unchanged} unchanged, ${counts.checked} checked, ${counts.rejected} rejected (all drafts, none public-eligible)`,
+    `\n${pack.id}: ${counts.created} created, ${counts.updated} updated, ${counts.unchanged} unchanged, ${counts.checked} checked, ${counts.rejected} rejected (all drafts; ${eligible} of ${imported.length} public-eligible)`,
   );
   if (counts.rejected > 0) process.exitCode = 1;
 }
