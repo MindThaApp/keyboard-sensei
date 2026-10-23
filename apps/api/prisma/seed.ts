@@ -23,6 +23,8 @@ const SEED_DIR=path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST_PATH=path.resolve(SEED_DIR,"../scripts/midi-manifest.json");
 const LIBRARY_DIR=path.resolve(SEED_DIR,"../data/midi-library");
 const INSTRUMENT_MANIFEST_PATH=path.resolve(SEED_DIR,"../scripts/instrument-manifest.json");
+// Written by scripts/fetch-vcsl-piano.ts; optional, same shape as the manifest above.
+const VCSL_MANIFEST_PATH=path.resolve(SEED_DIR,"../scripts/vcsl-piano-manifest.json");
 const INSTRUMENT_LIBRARY_DIR=path.resolve(SEED_DIR,"../data/instruments");
 
 interface LibraryManifestEntry{id:string;title:string;artist:string;genre:string;rights:string;source:string;file:string;durationSec:number;noteCount:number;difficulty:number}
@@ -120,10 +122,16 @@ async function remeasurePublicSongs():Promise<void>{
   if(updated>0)console.log(`Re-measured ${updated} other public songs`);
 }
 
+async function readInstrumentManifest(manifestPath:string):Promise<InstrumentManifestEntry[]|null>{
+  try{return JSON.parse(await readFile(manifestPath,"utf8")) as InstrumentManifestEntry[]}catch{return null}
+}
+
 async function seedInstruments():Promise<void>{
-  let raw:string;
-  try{raw=await readFile(INSTRUMENT_MANIFEST_PATH,"utf8")}catch{console.warn("No instrument-manifest.json — skipping instrument library seed (run scripts/fetch-instrument-library.ts)");return}
-  const entries=JSON.parse(raw) as InstrumentManifestEntry[];
+  const general=await readInstrumentManifest(INSTRUMENT_MANIFEST_PATH);
+  if(!general)console.warn("No instrument-manifest.json — skipping the General MIDI instrument seed (run scripts/fetch-instrument-library.ts)");
+  const vcsl=await readInstrumentManifest(VCSL_MANIFEST_PATH);
+  const entries=[...(general??[]),...(vcsl??[])];
+  if(entries.length===0)return;
   let seeded=0,missing=0;
   for(const entry of entries){
     const pack_path=path.join(INSTRUMENT_LIBRARY_DIR,entry.packDir);
@@ -132,7 +140,7 @@ async function seedInstruments():Promise<void>{
     await prisma.instrument.upsert({where:{id:`seed-${entry.id}`},create:{id:`seed-${entry.id}`,...data},update:data});
     seeded+=1;
   }
-  if(missing>0)console.warn(`Instrument library: ${missing} manifest entries missing on disk (run scripts/fetch-instrument-library.ts to fetch)`);
+  if(missing>0)console.warn(`Instrument library: ${missing} manifest entries missing on disk (run scripts/fetch-instrument-library.ts, or scripts/fetch-vcsl-piano.ts for the Studio Grand)`);
   console.log(`Seeded ${seeded} library instruments`);
 }
 

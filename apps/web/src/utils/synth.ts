@@ -1,6 +1,7 @@
 import { getAudioContext, getMasterBus } from "../audio/audioEngine";
 import { isNativeApp } from "../native/platform";
-import { previewChord, SampledInstrument } from "./sampler";
+import { createSampleVoiceBank, previewInstrumentChord } from "./instrumentBank";
+import type { SampleVoiceBank } from "./sampler";
 import { SustainPedalState } from "./sustainPedal";
 
 const A4_MIDI_NOTE = 69;
@@ -95,8 +96,8 @@ export class PianoSynth {
   /** Loaded instruments, least recently selected first. Switching back to one of
    *  these is instant; older ones are evicted (see maxCachedInstruments), since
    *  a decoded instrument is tens of megabytes. */
-  private samplerCache = new Map<string, SampledInstrument>();
-  private activeSampler: SampledInstrument | null = null;
+  private samplerCache = new Map<string, SampleVoiceBank>();
+  private activeSampler: SampleVoiceBank | null = null;
   private activeInstrumentId: string | null = null;
   private readonly sustain = new SustainPedalState();
   /** The Android app always counts as low-memory: its WebView is killed (not just
@@ -105,7 +106,7 @@ export class PianoSynth {
   /** Which engine actually produced the currently-sounding voice for a note, so
    *  stopNote() releases the right one even if the selected instrument changed
    *  between the note-on and note-off (e.g. the user switched voices mid-note). */
-  private noteEngine = new Map<number, "synth" | SampledInstrument>();
+  private noteEngine = new Map<number, "synth" | SampleVoiceBank>();
 
   constructor() {
     const storedId = loadStoredInstrumentId();
@@ -149,7 +150,20 @@ export class PianoSynth {
       // Most recently used goes to the end.
       this.samplerCache.delete(instrumentId);
     } else {
-      sampler = new SampledInstrument(instrumentId, getAudioContext(), getMasterBus());
+      // Until the voice exists the built-in synth covers playback, as it does while samples load.
+      this.activeSampler = null;
+      sampler = await createSampleVoiceBank(instrumentId, getAudioContext(), getMasterBus());
+      // Another voice was chosen while this one was being set up (or it was created twice).
+      if (this.activeInstrumentId !== instrumentId) {
+        sampler.dispose();
+        return;
+      }
+      const raced = this.samplerCache.get(instrumentId);
+      if (raced) {
+        sampler.dispose();
+        sampler = raced;
+        this.samplerCache.delete(instrumentId);
+      }
     }
     this.samplerCache.set(instrumentId, sampler);
     this.activeSampler = sampler;
@@ -159,7 +173,7 @@ export class PianoSynth {
 
   private evictOldInstruments(): void {
     while (this.samplerCache.size > this.cacheLimit) {
-      const [oldestId, oldest] = this.samplerCache.entries().next().value as [string, SampledInstrument];
+      const [oldestId, oldest] = this.samplerCache.entries().next().value as [string, SampleVoiceBank];
       if (oldest === this.activeSampler) break;
       this.samplerCache.delete(oldestId);
       oldest.dispose();
@@ -187,10 +201,10 @@ export class PianoSynth {
    *  three notes, not the full 88-sample pack), so a picker can preview a
    *  voice before committing to a full download. */
   async previewInstrument(instrumentId: string, midiNotes: number[] = [60, 64, 67]): Promise<void> {
-    await previewChord(instrumentId, midiNotes, getAudioContext(), getMasterBus());
+    await previewInstrumentChord(instrumentId, midiNotes, getAudioContext(), getMasterBus());
   }
 
-  private samplerFor(note: number): SampledInstrument | null {
+  private samplerFor(note: number): SampleVoiceBank | null {
     const sampler = this.activeSampler;
     return sampler && sampler.isLoaded && sampler.hasSample(note) ? sampler : null;
   }
@@ -262,7 +276,7 @@ export class PianoSynth {
   private stopNoteNow(note: number, immediate = false): void {
     const engine = this.noteEngine.get(note);
     this.noteEngine.delete(note);
-    if (engine instanceof SampledInstrument) {
+    if (engine && engine !== "synth") {
       engine.stopNote(note, immediate);
       return;
     }
