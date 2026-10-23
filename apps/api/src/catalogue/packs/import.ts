@@ -22,7 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import ToneMidi from "@tonejs/midi";
-import { buildAuthoredMidi } from "../../essentials/authored/notation.js";
+import { AUTHORED_TRACK, buildAuthoredMidi } from "../../essentials/authored/notation.js";
 import { unzipMember } from "../../essentials/build.js";
 import { InvalidMidiError, extractSongMetadata } from "../../midi-metadata.js";
 import { classifyMidiQuality, type QualityResult } from "../../midi-quality.js";
@@ -30,7 +30,7 @@ import { isPublicEligible, licenceFamily, pdStatus, storedSignals, stableJson } 
 import { buildSearchText } from "../search-text.js";
 import { ANONYMOUS, COLLECTION_TAGS, COMPOSERS, MOOD_TAGS, TRADITIONAL, composerIdFor, gradeBandFor, type ComposerSeed, type MoodTagId } from "../works-data.js";
 import { abcMelody, splitAbcTunes } from "./abc.js";
-import { INCIPIT_REJECT_BELOW, compareIncipits, skylineIncipit } from "./incipit.js";
+import { INCIPIT_LENGTH, INCIPIT_REJECT_BELOW, compareIncipits, skylineIncipit } from "./incipit.js";
 import {
   attributionFor,
   fileLicenceOf,
@@ -114,6 +114,8 @@ export interface PieceReport {
   tier?: string;
   tierReasons?: string[];
   incipit?: IncipitOutcome;
+  /** Whether the song may reach a public build once it is published (library spec 4.2). */
+  publicEligible?: boolean;
   /** Why the piece was not imported. */
   reason?: string;
 }
@@ -122,6 +124,8 @@ export interface PackReport {
   pack: string;
   pieces: PieceReport[];
   counts: Record<PieceReport["status"], number>;
+  /** Pieces whose song is public-eligible (never published by the import itself). */
+  publicEligible: number;
 }
 
 export interface ImportOptions {
@@ -140,6 +144,7 @@ interface CheckedPiece {
   incipit: IncipitOutcome;
   quality: QualityResult;
   meta: ReturnType<typeof extractSongMetadata>;
+  publicEligible: boolean;
 }
 
 class Rejected extends Error {}
@@ -150,8 +155,8 @@ function copyrightTexts(bytes: Uint8Array): string[] {
   return [midi.header.name, ...midi.header.meta.map((event) => event.text), ...midi.tracks.map((track) => track.name)];
 }
 
-function compareWithSecond(primary: Uint8Array, second: Uint8Array, source: MutopiaSource): IncipitOutcome {
-  const comparison = compareIncipits(skylineIncipit(primary), skylineIncipit(second));
+function compareWithSecond(primary: Uint8Array, second: Uint8Array, source: MutopiaSource, primaryTracks?: readonly string[]): IncipitOutcome {
+  const comparison = compareIncipits(skylineIncipit(primary, INCIPIT_LENGTH, primaryTracks), skylineIncipit(second));
   return {
     result: comparison.result,
     matched: comparison.matched,
@@ -163,12 +168,12 @@ function compareWithSecond(primary: Uint8Array, second: Uint8Array, source: Muto
 }
 
 /** The opening of an ABC transcription, shifted into the score's key, as the second source of an authored piece. */
-function compareWithAbc(primary: Uint8Array, source: AbcSecondSource): IncipitOutcome {
+function compareWithAbc(primary: Uint8Array, source: AbcSecondSource, primaryTracks?: readonly string[]): IncipitOutcome {
   const tune = splitAbcTunes(source.abc)[0];
   if (!tune) throw new Rejected(`${source.reference}: the ABC excerpt has no X: line`);
   const notes = abcMelody(tune).map((pitch) => pitch + (source.transpose ?? 0));
   if (notes.length < 8) throw new Rejected(`${source.reference}: the ABC excerpt holds only ${notes.length} notes`);
-  const comparison = compareIncipits(skylineIncipit(primary), notes.slice(0, 16));
+  const comparison = compareIncipits(skylineIncipit(primary, INCIPIT_LENGTH, primaryTracks), notes.slice(0, INCIPIT_LENGTH));
   return {
     result: comparison.result,
     matched: comparison.matched,
@@ -212,13 +217,14 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
   if (piece.second.kind === "scan") {
     incipit = { result: "none", note: `${piece.second.reference}: ${piece.second.reason}` };
   } else if (piece.second.kind === "abc") {
-    incipit = compareWithAbc(bytes, piece.second);
+    // The transcription is the tune alone, so an authored score is compared by its melody track.
+    incipit = compareWithAbc(bytes, piece.second, isAuthoredPrimary(piece.primary) ? [AUTHORED_TRACK.melody] : undefined);
     if (incipit.result === "fail" && (incipit.lcs ?? 0) < INCIPIT_REJECT_BELOW) {
       throw new Rejected(`opening does not match ${incipit.note} (${incipit.matched} leading and ${incipit.lcs} shared notes of 16): not the same tune`);
     }
   } else {
     const secondBytes = await pinnedBytes(piece.second, cacheDir, fetcher);
-    incipit = compareWithSecond(bytes, secondBytes, piece.second);
+    incipit = compareWithSecond(bytes, secondBytes, piece.second, isAuthoredPrimary(piece.primary) ? [AUTHORED_TRACK.melody] : undefined);
     if (incipit.result === "fail" && (incipit.lcs ?? 0) < INCIPIT_REJECT_BELOW) {
       throw new Rejected(`opening does not match ${incipit.note} (${incipit.matched} leading and ${incipit.lcs} shared notes of 16): not the same piece`);
     }
@@ -234,7 +240,12 @@ async function checkPiece(piece: PackPiece, cacheDir: string, fetcher: Fetcher, 
     metadata: "complete",
     reviewerApproved: false,
   });
-  return { bytes, copyrightYear, incipit, quality, meta };
+  const publicEligible = isPublicEligible({
+    sourceKind: sourceKindOf(piece),
+    fileLicence,
+    workPdStatus: workPdStatus(composer, year, piece.publishedYear),
+  });
+  return { bytes, copyrightYear, incipit, quality, meta, publicEligible };
 }
 
 /** A Work's public-domain status: unattributed and traditional pieces are old enough by nature. */
@@ -426,11 +437,19 @@ export async function importPack(prisma: PrismaClient, pack: Pack, options: Impo
       continue;
     }
     if (options.dryRun) {
-      reports.push({ slug: piece.slug, songId, status: "checked", tier: checked.quality.tier, tierReasons: checked.quality.reasons, incipit: checked.incipit });
+      reports.push({
+        slug: piece.slug,
+        songId,
+        status: "checked",
+        tier: checked.quality.tier,
+        tierReasons: checked.quality.reasons,
+        incipit: checked.incipit,
+        publicEligible: checked.publicEligible,
+      });
       continue;
     }
     try {
-      reports.push(await writeSong(prisma, pack, piece, checked, { year, dir }));
+      reports.push({ ...(await writeSong(prisma, pack, piece, checked, { year, dir })), publicEligible: checked.publicEligible });
     } catch (error) {
       if (!(error instanceof Rejected)) throw error; // a database failure is not a verdict on the piece
       reports.push({ slug: piece.slug, songId, status: "rejected", reason: error.message });
@@ -439,5 +458,5 @@ export async function importPack(prisma: PrismaClient, pack: Pack, options: Impo
 
   const counts = { created: 0, updated: 0, unchanged: 0, rejected: 0, checked: 0 };
   for (const report of reports) counts[report.status] += 1;
-  return { pack: pack.id, pieces: reports, counts };
+  return { pack: pack.id, pieces: reports, counts, publicEligible: reports.filter((report) => report.publicEligible).length };
 }

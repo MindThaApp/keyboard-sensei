@@ -74,13 +74,16 @@ describe("Batch C pins", () => {
   });
 
   it("pins every file by exact URL and sha256, once", () => {
+    const hashes = new Set<string>();
     for (const piece of pieces) {
+      if (piece.primary.kind !== "mutopia") throw new Error(`${piece.slug} is not a Mutopia piece`);
       expect(piece.primary.url, piece.slug).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.mid$/);
       expect(piece.primary.sha256, piece.slug).toMatch(/^[0-9a-f]{64}$/);
+      hashes.add(piece.primary.sha256);
     }
     expect(new Set(pieces.map((piece) => songIdOf(piece))).size).toBe(pieces.length);
     expect(new Set(pieces.map((piece) => piece.slug)).size).toBe(pieces.length);
-    expect(new Set(pieces.map((piece) => piece.primary.sha256)).size).toBe(pieces.length);
+    expect(hashes.size).toBe(pieces.length);
   });
 
   it("uses only known composers, genres and mood tags, and no Work id of Essentials or Batch A", () => {
