@@ -9,7 +9,9 @@ const typeStep = (name, fontWeight) => [`var(--fs-${name})`, { lineHeight: `var(
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // The Neon 3D renderer is WebGL and shader source with no class names; scanning it
+  // turned GLSL tokens such as `!input` into ~1 KB of unused utilities.
+  content: ["./index.html", "./src/**/*.{ts,tsx}", "!./src/components/play/renderers/neon3d/**"],
   theme: {
     extend: {
       screens: {
