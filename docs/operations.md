@@ -41,7 +41,7 @@ Prisma migrations apply automatically on container start.
 ### Prebuilt images (alternative)
 
 CI (`.github/workflows/ci.yml`) builds and pushes
-`ghcr.io/ramin-azizi/keyboard-sensei-{web,api}` on every push to `master`. To
+`ghcr.io/mindthaapp/keyboard-sensei-{web,api}` on every push to `master`. To
 deploy those instead of building on the server, use `docker-compose.ghcr.yml`.
 The server first needs a one-time `docker login ghcr.io` with a personal access
 token that has `read:packages` (the repo and images are private). That login is

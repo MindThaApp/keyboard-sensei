@@ -84,8 +84,8 @@ const publicUser = (user: Pick<User, "id" | "email" | "display_name" | "narratio
   role: user.role,
 });
 
-const session = (user: Parameters<typeof publicUser>[0]) => ({
-  accessToken: createAccessToken({ sub: user.id, email: user.email }),
+const session = (user: Parameters<typeof publicUser>[0] & Pick<User, "token_version">) => ({
+  accessToken: createAccessToken({ sub: user.id, email: user.email, tv: user.token_version }),
   user: publicUser(user),
 });
 
@@ -199,7 +199,8 @@ authRouter.post("/auth/reset-password", tokenRedeemRateLimit, async (req, res, n
       return;
     }
     const password_hash = await bcrypt.hash(input.password, 12);
-    const user = await prisma.user.update({ where: { id: userId }, data: { password_hash } });
+    // Bumping token_version signs out every existing session.
+    const user = await prisma.user.update({ where: { id: userId }, data: { password_hash, token_version: { increment: 1 } } });
     // Receiving the email proves the address.
     if (!user.email_verified_at) await prisma.user.update({ where: { id: userId }, data: { email_verified_at: new Date() } });
     // Any other outstanding reset links for this account are now void.
@@ -347,6 +348,19 @@ const signedInUserId = (req: Request): string => {
   if (!req.userId) throw new Error("Authenticated user missing");
   return req.userId;
 };
+
+/** "Sign out everywhere": voids every access token, then hands this device a fresh one. */
+authRouter.post("/auth/sign-out-all", requireAuth, async (req, res, next) => {
+  try {
+    const user = await prisma.user.update({
+      where: { id: signedInUserId(req) },
+      data: { token_version: { increment: 1 } },
+    });
+    res.json(session(user));
+  } catch (e) {
+    next(e);
+  }
+});
 
 /** In-app deletion (Settings → Account), re-confirmed with the password or with Google. */
 authRouter.delete("/users/me", requireAuth, accountDeletionRateLimit, async (req, res, next) => {
