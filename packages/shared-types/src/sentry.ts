@@ -23,9 +23,12 @@ const SENSITIVE_KEY =
 const SENSITIVE_PARAM =
   /^(token|access_token|refresh_token|id_token|auth|authorization|key|api_key|apikey|secret|password|code|credential|sig|signature|session|sid|email|state)$/i;
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+// The domain must end in letters, so a release name like keyboard-sensei@0.1.0 is not an address.
+const EMAIL = /[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g;
 const JWT = /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g;
 const AUTH_SCHEME = /\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
+/** The same secrets written outside a URL: "token=abc", "password: hunter2" in free text. */
+const LOOSE_SECRET = /\b(token|access_token|refresh_token|id_token|password|passwd|secret|api_key|apikey)(=|:\s*)(?!\[)[^\s&"'<>;,]+/gi;
 const QUERY_PARAM = /([?&;])([^=&#\s"'<>;]+)=([^&#\s"'<>;]*)/g;
 /** Home directories carry the account name: /Users/ada, /home/ada, C:\Users\ada. */
 const HOME_UNIX = /\/(?:Users|home)\/[^/\s"'<>:]+/g;
@@ -49,6 +52,7 @@ export function scrubString(value: string): string {
     .replace(QUERY_PARAM, (match, sep: string, name: string) =>
       SENSITIVE_PARAM.test(safeDecode(name)) ? `${sep}${name}=${REDACTED}` : match,
     )
+    .replace(LOOSE_SECRET, (_match, name: string, sep: string) => `${name}${sep}${REDACTED}`)
     .replace(EMAIL, "[email]")
     .replace(HOME_UNIX, "/~")
     .replace(HOME_WIN, "~")
@@ -140,12 +144,8 @@ export interface ParsedDsn {
 
 /** Parse `https://<key>@<host>/<project id>`; null when it is not one. */
 export function parseSentryDsn(dsn: string): ParsedDsn | null {
-  try {
-    const url = new URL(dsn.trim());
-    const projectId = url.pathname.replace(/^\/+|\/+$/g, "");
-    if (!/^https?:$/.test(url.protocol) || !url.username || !/^\d+$/.test(projectId)) return null;
-    return { protocol: url.protocol.slice(0, -1), publicKey: url.username, host: url.host, projectId };
-  } catch {
-    return null;
-  }
+  // Not `new URL`: this package is compiled without DOM or Node typings.
+  const match = /^(https?):\/\/([^:@/\s]+)(?::[^@/\s]*)?@([^/?#\s]+)\/(\d+)\/?$/.exec(dsn.trim());
+  if (!match) return null;
+  return { protocol: match[1]!, publicKey: match[2]!, host: match[3]!, projectId: match[4]! };
 }
