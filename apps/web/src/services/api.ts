@@ -235,6 +235,117 @@ export interface PlayAlongAttemptPayload {
   is_loop: boolean;
 }
 export const getSongs = () => request<{ songs: Song[] }>("/songs");
+
+/** Catalogue quality tier of a song file. "low" is only ever returned to admins. */
+export type CatalogueTier = "verified" | "good" | "unrated" | "low";
+export type WorkHands = "both" | "right-hand-melody" | "single-line";
+export type WorkDuration = "under-1" | "1-3" | "3-6" | "over-6";
+export type WorkSort = "recommended" | "easiest" | "title" | "featured";
+
+/** One playable version of a Work. `id` is a song id, so it plays at /play/:id. */
+export interface WorkVersion {
+  id: string;
+  title: string;
+  arrangement_level: string | null;
+  difficulty: number;
+  grade_band: string | null;
+  hands: WorkHands | string;
+  duration_sec: number;
+  note_count: number;
+  quality_tier: CatalogueTier;
+  quality_score: number | null;
+  attribution: string | null;
+  content_rights: string;
+}
+
+export interface WorkTag {
+  id: string;
+  label: string;
+  kind: string;
+}
+
+export interface WorkSummary {
+  id: string;
+  title: string;
+  composer: { id: string; name: string; sort_name: string } | null;
+  catalogue: string | null;
+  movement: string | null;
+  era: string | null;
+  genre: string | null;
+  recognisability: number | null;
+  featured_rank: number | null;
+  curation_status: string;
+  tags: WorkTag[];
+  best_tier: CatalogueTier;
+  level_min: number;
+  level_max: number;
+  matched_alias: string | null;
+  /** Ordered by tier, then difficulty. */
+  versions: WorkVersion[];
+}
+
+export interface WorksQuery {
+  q?: string;
+  level?: number[];
+  genre?: string[];
+  era?: string[];
+  tags?: string[];
+  hands?: string;
+  duration?: string;
+  tier?: CatalogueTier;
+  unrated?: boolean;
+  sort?: WorkSort;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface WorksResponse {
+  works: WorkSummary[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface LibrarySuggestion {
+  kind: "work" | "alias" | "composer";
+  text: string;
+  id: string;
+  detail: string | null;
+}
+
+export interface LibraryFacets {
+  eras: { value: string; count: number }[];
+  genres: { value: string; count: number }[];
+  tags: { id: string; label: string; kind: string; count: number }[];
+  levels: { value: number; count: number }[];
+  unrated_extra: number;
+}
+
+export function worksQueryString(query: WorksQuery): string {
+  const params = new URLSearchParams();
+  const set = (key: string, value: string | undefined) => {
+    if (value) params.set(key, value);
+  };
+  set("q", query.q?.trim());
+  set("level", query.level?.join(","));
+  set("genre", query.genre?.join(","));
+  set("era", query.era?.join(","));
+  set("tags", query.tags?.join(","));
+  set("hands", query.hands);
+  set("duration", query.duration);
+  set("tier", query.tier);
+  if (query.unrated) params.set("unrated", "1");
+  set("sort", query.sort);
+  if (query.limit) params.set("limit", String(query.limit));
+  set("cursor", query.cursor);
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+export const getWorks = (query: WorksQuery = {}, signal?: AbortSignal) =>
+  request<WorksResponse>(`/library/works${worksQueryString(query)}`, { signal });
+export const suggestWorks = (q: string, limit = 6, signal?: AbortSignal) =>
+  request<{ suggestions: LibrarySuggestion[] }>(`/library/suggest?q=${encodeURIComponent(q)}&limit=${limit}`, { signal });
+export const getLibraryFacets = () => request<LibraryFacets>("/library/facets");
 export const searchArchive = (q: string, offset = 0, limit = 30) =>
   request<{ results: ArchiveEntryResult[] }>(`/archive/search?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`);
 
