@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ESSENTIALS } from "../../essentials/manifest.js";
 import { isPublicEligible, licenceFamily } from "../backfill.js";
 import { isCreditedLicence, licenceUrl } from "../eligibility.js";
-import { MOOD_TAGS, WORK_GENRES, composerIdFor } from "../works-data.js";
+import { MOOD_TAGS, WORK_GENRES, composerIdFor, COMPOSERS } from "../works-data.js";
 import { BATCH_A } from "./batch-a.js";
+import { BATCH_C } from "./batch-c.js";
 import { INCIPIT_REJECT_BELOW, commonPrefix, compareIncipits, lcsLength, pitchName } from "./incipit.js";
 import { attributionFor, fileLicenceOf, isPianoMidiDe, mutopiaLicenceTag, pianoMidiDeCopyrightYear, songIdOf } from "./pack.js";
 
@@ -56,6 +57,55 @@ describe("Batch A pins", () => {
       expect(credit).toContain("https://creativecommons.org/licenses/by-sa/3.0/de/");
       expect(isPianoMidiDe(piece.primary)).toBe(true);
       expect(fileLicenceOf(piece)).toBe("cc-by-sa-3.0-de");
+    }
+  });
+});
+
+describe("Batch C pins", () => {
+  const pieces = BATCH_C.pieces;
+
+  it("lists the 30 Mutopia pieces of the 49 in the proposal, in Mutopia files with a scan as second source", () => {
+    expect(pieces).toHaveLength(30);
+    for (const piece of pieces) {
+      expect(piece.primary.kind, piece.slug).toBe("mutopia");
+      expect(piece.second.kind, piece.slug).toBe("scan");
+      expect(piece.second.kind === "scan" && piece.second.reason, piece.slug).toBeTruthy();
+    }
+  });
+
+  it("pins every file by exact URL and sha256, once", () => {
+    for (const piece of pieces) {
+      expect(piece.primary.url, piece.slug).toMatch(/^https:\/\/www\.mutopiaproject\.org\/ftp\/.+\.mid$/);
+      expect(piece.primary.sha256, piece.slug).toMatch(/^[0-9a-f]{64}$/);
+    }
+    expect(new Set(pieces.map((piece) => songIdOf(piece))).size).toBe(pieces.length);
+    expect(new Set(pieces.map((piece) => piece.slug)).size).toBe(pieces.length);
+    expect(new Set(pieces.map((piece) => piece.primary.sha256)).size).toBe(pieces.length);
+  });
+
+  it("uses only known composers, genres and mood tags, and no Work id of Essentials or Batch A", () => {
+    const taken = new Set([...ESSENTIALS.map((piece) => piece.slug), ...BATCH_A.pieces.map((piece) => piece.slug)]);
+    for (const piece of pieces) {
+      expect(composerIdFor(piece.composer), piece.composer).not.toBeNull();
+      expect(WORK_GENRES).toContain(piece.genre);
+      for (const tag of piece.tags ?? []) expect(Object.keys(MOOD_TAGS)).toContain(tag);
+      expect(taken.has(piece.slug), piece.slug).toBe(false);
+    }
+  });
+
+  it("is not tagged as Midiano's, and gives Sousa the publication year his public-domain status needs", () => {
+    expect(BATCH_C.collection).toBeNull();
+    for (const piece of pieces.filter((candidate) => candidate.composer === "John Philip Sousa")) expect(piece.publishedYear, piece.slug).toBeLessThan(1931);
+    const composersDiedLate = pieces.filter((piece) => (COMPOSERS.find((composer) => composer.name === piece.composer)?.died ?? 0) > 1925);
+    expect(composersDiedLate.every((piece) => piece.publishedYear !== undefined)).toBe(true);
+  });
+
+  it("credits the typesetter and the licence with a link on every piece", () => {
+    for (const piece of pieces) {
+      const credit = attributionFor(piece, null);
+      expect(credit, piece.slug).toContain("for the Mutopia Project");
+      expect(credit).toContain(piece.primary.kind === "mutopia" ? piece.primary.licence : "");
+      expect(credit).toMatch(/piece-info\.cgi\?id=\d+$/);
     }
   });
 });

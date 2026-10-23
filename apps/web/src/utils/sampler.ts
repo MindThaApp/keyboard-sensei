@@ -33,9 +33,9 @@ interface ActiveVoice {
   gain: GainNode;
 }
 
-type FetchResult = { buffer: AudioBuffer } | { error: string };
+export type FetchResult = { buffer: AudioBuffer } | { error: string };
 
-async function fetchSample(instrumentId: string, note: string, ctx: BaseAudioContext): Promise<FetchResult> {
+export async function fetchSample(instrumentId: string, note: string, ctx: BaseAudioContext): Promise<FetchResult> {
   const token = getToken();
   try {
     const response = await fetch(
@@ -50,6 +50,25 @@ async function fetchSample(instrumentId: string, note: string, ctx: BaseAudioCon
   }
 }
 
+/** What the synth facade needs from any sampled voice: one-sample-per-key packs and the layered piano both provide it. */
+export interface SampleVoiceBank {
+  readonly instrumentId: string;
+  /** 0..1 progress of the stage that makes the voice playable. */
+  readonly loadProgress: number;
+  /** True once the voice can be played (it may still be fetching refinements). */
+  readonly isLoaded: boolean;
+  /** Bytes of decoded audio held in memory. */
+  readonly decodedBytes: number;
+  hasSample(midi: number): boolean;
+  load(): Promise<void>;
+  playNote(midi: number, velocity?: number): void;
+  scheduleNote(midi: number, velocity: number, startTime: number, endTime: number): (() => void) | null;
+  stopNote(midi: number, immediate?: boolean): void;
+  setSustainPedal(down: boolean): void;
+  stopAll(): void;
+  dispose(): void;
+}
+
 /**
  * One General MIDI instrument's 88 per-note samples, lazily fetched from the
  * authed `/instruments/:id/samples/:note` API and decoded into AudioBuffers.
@@ -61,9 +80,9 @@ async function fetchSample(instrumentId: string, note: string, ctx: BaseAudioCon
  * oscillator synth instead of playing silence. Notes that FAIL to load are
  * reported to the user (see reportAudioProblem), not silently substituted.
  */
-export class SampledInstrument {
+export class SampledInstrument implements SampleVoiceBank {
   readonly instrumentId: string;
-  private readonly ctx: AudioContext;
+  private readonly ctx: BaseAudioContext;
   private readonly output: GainNode;
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly voices = new Map<number, ActiveVoice>();
@@ -74,7 +93,7 @@ export class SampledInstrument {
   private disposed = false;
   private readonly totalCount = MAX_MIDI_NOTE - MIN_MIDI_NOTE + 1;
 
-  constructor(instrumentId: string, ctx: AudioContext, destination: AudioNode) {
+  constructor(instrumentId: string, ctx: BaseAudioContext, destination: AudioNode) {
     this.instrumentId = instrumentId;
     this.ctx = ctx;
     this.output = ctx.createGain();

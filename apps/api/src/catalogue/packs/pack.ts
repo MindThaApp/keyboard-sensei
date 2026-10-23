@@ -105,10 +105,14 @@ export interface PackPiece {
   era: Era;
   /** Editorial difficulty 1-5; sets the approximate grade band. */
   level: 1 | 2 | 3 | 4 | 5;
+  /**
+   * First publication, where public-domain status depends on it (a composer
+   * who died 1926-1955 is public domain in the US and EU only if the piece
+   * came out before 1931).
+   */
+  publishedYear?: number;
   tags?: MoodTagId[];
   aliases?: AliasSeed[];
-  /** Year of first publication, where the public-domain status of a composed piece depends on it. */
-  publishedYear?: number;
   primary: PianoMidiDeSource | MutopiaPrimarySource | AuthoredPrimarySource;
   second: MutopiaSource | ScanSecondSource | AbcSecondSource;
 }
@@ -116,6 +120,8 @@ export interface PackPiece {
 export interface Pack {
   id: string;
   name: string;
+  /** Collection tag every piece carries. Default: Midiano classics (batch A's); null for none. */
+  collection?: "midiano" | null;
   pieces: PackPiece[];
 }
 
@@ -172,11 +178,16 @@ export function sourceUrlOf(piece: PackPiece): string {
   return isAuthoredPrimary(primary) ? primary.sourceUrl : primary.infoUrl;
 }
 
-/** Song id: stable and derived from the source, so a re-run finds the same row. */
+/**
+ * Song id: stable and derived from the source, so a re-run finds the same row.
+ * A Mutopia piece that is several files in one zip (one per movement) adds the
+ * member's name, or its files would share an id.
+ */
 export function songIdOf(piece: PackPiece): string {
   const { primary } = piece;
   if (isPianoMidiDe(primary)) return `pmd-${primary.file.replace(/\.mid$/i, "")}`;
-  return isAuthoredPrimary(primary) ? `authored-${piece.slug}` : `mutopia-${primary.mutopiaId}`;
+  if (isAuthoredPrimary(primary)) return `authored-${piece.slug}`;
+  return primary.member ? `mutopia-${primary.mutopiaId}-${primary.member.replace(/\.mid$/i, "")}` : `mutopia-${primary.mutopiaId}`;
 }
 
 /**

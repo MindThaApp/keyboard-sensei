@@ -59,6 +59,9 @@ describe("third-party licences", () => {
   it("credits the media sets, starting with the FluidR3 instruments", () => {
     const fluid = THIRD_PARTY_ASSETS.find((asset) => asset.name.includes("FluidR3"));
     expect(fluid?.license).toBe("CC-BY-3.0");
+    const vcsl = THIRD_PARTY_ASSETS.find((asset) => asset.name.includes("VCSL"));
+    expect(vcsl?.license).toBe("CC0-1.0");
+    expect(vcsl?.attribution).toContain("Versilian");
     for (const asset of THIRD_PARTY_ASSETS) {
       expect(hasKnownLicense(asset.license), asset.name).toBe(true);
       expect(asset.attribution.length, asset.name).toBeGreaterThan(20);
