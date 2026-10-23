@@ -331,6 +331,26 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("experience mode (Simple / Advanced)", () => {
+    it("is stored on the account, read back on a later sign-in, and validated", async () => {
+      const user = await createUserWithPassword();
+      const mode = async (token: string) => (await api("GET", "/users/me", { token })).body.experience_mode;
+      expect(await mode(user.token)).toBeNull();
+
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "advanced" } });
+      expect(set.status).toBe(200);
+      expect(set.body.experience_mode).toBe("advanced");
+
+      // A new device: a fresh sign-in sees what was chosen elsewhere.
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      expect(await mode(login.body.accessToken)).toBe("advanced");
+
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "simple" } })).body.experience_mode).toBe("simple");
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { experience_mode: "expert" } })).status).toBe(400);
+      expect(await mode(user.token)).toBe("simple");
+    });
+  });
+
   describe("account deletion", () => {
     /** A user with something in every per-user table, and a file in every data folder. */
     async function userWithEverything() {
