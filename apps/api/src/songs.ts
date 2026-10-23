@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express, { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
+import { env } from "./config.js";
 import { requireAdmin } from "./auth.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
@@ -84,6 +85,30 @@ export const songCollection = (song: { file_path: string; uploader_id: string | 
   return null;
 };
 
+/**
+ * May this song be shown to everyone on this deployment? With PUBLIC_CATALOGUE on, only
+ * the curated packs whose rights are cleared for publication: Essentials (public domain
+ * or CC, credited via `attribution`) and the authored beginner pack. The ADL-sourced
+ * library has no licence covering redistribution (see docs/operations.md), so it is
+ * hidden. Uploads are never public; see songVisibleTo.
+ */
+export const isPubliclyServable = (song: { file_path: string; uploader_id: string | null }): boolean =>
+  !song.uploader_id && (!env.PUBLIC_CATALOGUE || songCollection(song) !== null);
+
+/**
+ * Who sees a song: the uploader and admins see uploads and archive imports (private to
+ * the user who added them); everyone sees the shared catalogue; admins see everything.
+ * A song you can't see is indistinguishable from a missing one (404), so ids can't be probed.
+ */
+export const canSeeSong = (
+  song: { file_path: string; uploader_id: string | null },
+  userId: string,
+  admin: boolean,
+): boolean => admin || song.uploader_id === userId || isPubliclyServable(song);
+
+const songVisibleTo = async (song: { file_path: string; uploader_id: string | null }, userId: string): Promise<boolean> =>
+  canSeeSong(song, userId, false) || (await isAdminUser(userId));
+
 const songListItem = (song: {
   id: string;
   title: string;
@@ -140,7 +165,10 @@ songsRouter.get("/songs", async (req, res, next) => {
       where: admin ? { retired_at: null } : { retired_at: null, OR: [{ uploader_id: null }, { uploader_id: userId }] },
       orderBy: [{ artist: "asc" }, { title: "asc" }],
     });
-    res.json({ songs: rows.map((row) => songListItem(row, userId)) });
+    // The public-catalogue rule lives in one predicate (canSeeSong), shared with the
+    // file, notation and attempt routes, rather than being re-expressed as a query.
+    const visible = rows.filter((row) => canSeeSong(row, userId, admin));
+    res.json({ songs: visible.map((row) => songListItem(row, userId)) });
   } catch (e) {
     next(e);
   }
@@ -203,7 +231,7 @@ songsRouter.get("/songs/:id/file", async (req, res, next) => {
   try {
     const userId = uid(req);
     const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
-    if (!song || (song.uploader_id && song.uploader_id !== userId && !(await isAdminUser(userId)))) {
+    if (!song || !(await songVisibleTo(song, userId))) {
       res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
       return;
     }
@@ -226,7 +254,7 @@ songsRouter.get("/songs/:id/notation", async (req, res, next) => {
   try {
     const userId = uid(req);
     const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) } });
-    if (!song || (song.uploader_id && song.uploader_id !== userId && !(await isAdminUser(userId)))) {
+    if (!song || !(await songVisibleTo(song, userId))) {
       res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
       return;
     }
@@ -254,10 +282,10 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
     const userId = uid(req);
     const songId = z.string().parse(req.params.id);
     const input = attemptSchema.parse(req.body);
-    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true, uploader_id: true } });
+    const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true, uploader_id: true, file_path: true } });
     // Same visibility rule as GET /songs/:id/file: another user's private upload is
     // indistinguishable from a missing song, so its id can't be probed or polluted.
-    if (!song || (song.uploader_id && song.uploader_id !== userId && !(await isAdminUser(userId)))) {
+    if (!song || !(await songVisibleTo(song, userId))) {
       res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
       return;
     }

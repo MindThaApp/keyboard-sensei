@@ -24,6 +24,26 @@ import { applyAssessmentPlacement, updateTimezone } from "./services/api";
 import { useProgressStore } from "./state/progressStore";
 import AudioNoticeToasts from "./components/shell/AudioNoticeToasts";
 import { useNativeKeepAwake } from "./native/nativeShell";
+import PrivacyPage from "./components/legal/PrivacyPage";
+import TermsPage from "./components/legal/TermsPage";
+import DeleteAccountPage from "./components/legal/DeleteAccountPage";
+import ThirdPartyLicensesPage from "./components/legal/ThirdPartyLicensesPage";
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./components/auth/AccountRecoveryPages";
+
+/**
+ * Pages that work signed in or out, outside the app shell: the policies and account
+ * deletion (Google Play links to /privacy and /delete-account), and the pages emailed
+ * links land on.
+ */
+const PUBLIC_PAGES: Record<string, () => JSX.Element> = {
+  "/privacy": PrivacyPage,
+  "/terms": TermsPage,
+  "/third-party-licenses": ThirdPartyLicensesPage,
+  "/delete-account": DeleteAccountPage,
+  "/forgot-password": ForgotPasswordPage,
+  "/reset-password": ResetPasswordPage,
+  "/verify-email": VerifyEmailPage,
+};
 
 /**
  * Page width system. Every page shares one centred column (max-w-6xl, 1152px); the
@@ -91,6 +111,7 @@ function useReportTimezone(user: { timezone?: string | null } | null) {
 export default function App() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   useNativeKeepAwake();
   // The Play-Along stage fills the viewport; everything else is a normal scrolling page.
@@ -100,6 +121,9 @@ export default function App() {
   // Route guard: the API already 403s non-admins; this just keeps them off the pages.
   const RequireAdmin = ({ children }: { children: ReactNode }) =>
     auth.user === null ? null : auth.user.role === "admin" ? <>{children}</> : <Navigate to="/" replace />;
+
+  const PublicPage = PUBLIC_PAGES[location.pathname.replace(/\/+$/, "") || "/"];
+  if (PublicPage) return <PublicPage />;
 
   if (!auth.authenticated) {
     return (

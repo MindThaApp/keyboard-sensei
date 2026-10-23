@@ -20,7 +20,8 @@ import {
   validateLesson,
   validateMidiExercise,
 } from "@keyboard-sensei/lesson-engine";
-import { createAccessToken, isAdmin, requireAuth } from "./auth.js";
+import { isAdmin, requireAuth } from "./auth.js";
+import { authRouter } from "./auth-routes.js";
 import { prisma } from "./db.js";
 import { env } from "./config.js";
 import { lessons } from "./content.js";
@@ -36,16 +37,7 @@ import { exerciseSeconds } from "./progression/practice-time.js";
 import { dayKey, isValidTimeZone } from "./progression/days.js";
 import { exerciseBestsFor, recordLessonOutcome, scoreFromResult, unlockLesson } from "./progress.js";
 import { narrationVoiceIdSchema } from "./narration-voices.js";
-import { instrumentUploadRateLimit, loginRateLimit, registerRateLimit, songUploadRateLimit } from "./rate-limits.js";
-
-const credentials = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
-
-const registerSchema = credentials.extend({
-  display_name: z.string().min(1).max(80),
-});
+import { instrumentUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
 
 const updateProfileSchema = z
   .object({
@@ -64,7 +56,14 @@ const PROFILE_SELECT = {
   role: true,
   daily_goal_minutes: true,
   timezone: true,
+  google_sub: true,
 } as const;
+
+/** The profile as clients see it: whether Google is linked, never the Google id itself. */
+const profileOf = ({ google_sub, ...user }: Prisma.UserGetPayload<{ select: typeof PROFILE_SELECT }>) => ({
+  ...user,
+  google_linked: google_sub !== null,
+});
 
 /**
  * Progress rewards for an attempt that is already saved. A failure here is logged and
@@ -173,60 +172,16 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
-app.post("/auth/register", registerRateLimit, async (req, res, next) => {
-  try {
-    if (!env.REGISTRATION_OPEN) {
-      res.status(403).json({
-        error: { code: "registration_closed", message: "Sign-up is closed. Ask an administrator for an account." },
-      });
-      return;
-    }
-    const input = registerSchema.parse(req.body);
-    const password_hash = await bcrypt.hash(input.password, 12);
-    const user = await prisma.user.create({
-      data: {
-        email: input.email.toLowerCase(),
-        display_name: input.display_name,
-        password_hash,
-      },
-    });
-    res.status(201).json({
-      accessToken: createAccessToken({ sub: user.id, email: user.email }),
-      user: {
-        id: user.id,
-        email: user.email,
-        display_name: user.display_name,
-        narration_voice_id: user.narration_voice_id,
-        role: user.role,
-      },
-    });
-  } catch (e) {
-    next(e);
-  }
-});
+/** Deployment features the web app adapts to (e.g. no archive search on a public catalogue). */
+app.get("/config", (_req, res) =>
+  res.json({
+    publicCatalogue: env.PUBLIC_CATALOGUE,
+    googleSignIn: env.GOOGLE_CLIENT_IDS.length > 0,
+    registrationOpen: env.REGISTRATION_OPEN,
+  }),
+);
 
-app.post("/auth/login", loginRateLimit, async (req, res, next) => {
-  try {
-    const input = credentials.parse(req.body);
-    const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
-    if (!user || !(await bcrypt.compare(input.password, user.password_hash))) {
-      res.status(401).json({ error: { code: "invalid_credentials", message: "Email or password is incorrect" } });
-      return;
-    }
-    res.json({
-      accessToken: createAccessToken({ sub: user.id, email: user.email }),
-      user: {
-        id: user.id,
-        email: user.email,
-        display_name: user.display_name,
-        narration_voice_id: user.narration_voice_id,
-        role: user.role,
-      },
-    });
-  } catch (e) {
-    next(e);
-  }
-});
+app.use(authRouter);
 
 app.get("/tts/audio/:id", async (req, res, next) => {
   try {
@@ -270,7 +225,7 @@ app.get("/users/me", async (req, res, next) => {
       res.status(404).json({ error: { code: "not_found", message: "User not found" } });
       return;
     }
-    res.json(user);
+    res.json(profileOf(user));
   } catch (e) {
     next(e);
   }
@@ -288,7 +243,7 @@ app.patch("/users/me", async (req, res, next) => {
         data: { goal_minutes: input.daily_goal_minutes },
       });
     }
-    res.json(user);
+    res.json(profileOf(user));
   } catch (e) {
     next(e);
   }

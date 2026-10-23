@@ -4,6 +4,7 @@ import { Prisma, ProgressStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireAdmin } from "./auth.js";
+import { AccountDeletionRefused, deleteUserAccount } from "./account.js";
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -121,9 +122,14 @@ adminUsersRouter.delete("/admin/users/:id", async (req, res, next) => {
       res.status(400).json({ error: { code: "cannot_delete_self", message: "You cannot delete your own account" } });
       return;
     }
-    await prisma.user.delete({ where: { id: targetId } });
+    // Same cascade as self-service deletion, so the user's files go too.
+    await deleteUserAccount(targetId, { allowDemo: true });
     res.json({ ok: true });
   } catch (e) {
+    if (e instanceof AccountDeletionRefused) {
+      res.status(403).json({ error: { code: e.code, message: e.message } });
+      return;
+    }
     next(e);
   }
 });

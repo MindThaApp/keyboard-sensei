@@ -89,6 +89,69 @@ Restore steps (database dump and each volume, including the Caddy data volume
 that holds the LAN CA root) are in
 [scripts/restore-keyboard-sensei.md](../scripts/restore-keyboard-sensei.md).
 
+### Off-box copies with rclone
+
+A backup on the same disk as the data doesn't survive the disk, a fire or a
+theft. When `RCLONE_REMOTE` is set, the script uploads the set it just made with
+[rclone](https://rclone.org) and deletes remote `ks-*` files older than
+`RCLONE_KEEP_DAYS` days (default 14, the same as the local rotation of 14 sets).
+That keeps the privacy policy's promise that a deleted account leaves the
+backups within 14 days. The local backup always completes first; an upload
+failure only makes the script exit non-zero, so it shows in the cron log.
+
+One-time setup on the server (as `ramin`, so cron uses the same config):
+
+1. `sudo apt install rclone`
+2. `rclone config` and create a remote. Either:
+   - **Backblaze B2** (cheap, simple): type `b2`, with an application key limited
+     to one private bucket (e.g. `ks-backups`). The destination is then
+     `ks-b2:ks-backups/keyboard-sensei`.
+   - **Google Drive**: type `drive`, scope `drive.file`. On a headless server use
+     the "remote config" flow (`rclone authorize "drive"` on a machine with a
+     browser). Destination: `ks-drive:keyboard-sensei-backups`.
+3. Recommended: wrap it in an encrypting `crypt` remote (type `crypt`, remote
+   `ks-b2:ks-backups/keyboard-sensei`, generate a password and a salt), so the
+   provider only ever holds ciphertext. **Store both passwords somewhere other
+   than the server** (a password manager): without them the copies are useless.
+   Destination: `ks-crypt:`.
+4. Check it: `rclone lsd ks-crypt:` (or your remote) answers without error.
+5. Add the variable to the crontab line:
+
+```cron
+30 3 * * * RCLONE_REMOTE=ks-crypt: /home/ramin/apps/keyboard-sensei/scripts/backup-keyboard-sensei.sh >> /home/ramin/backups/keyboard-sensei/backup.log 2>&1
+```
+
+rclone reads `~/.config/rclone/rclone.conf`; set `RCLONE_CONFIG` to use another
+file. The upload and pruning were tested against a real rclone with a local
+folder as the remote (stubbed `docker`); they have not been run against any
+cloud provider.
+
+### Restore drill (do it once, then every few months)
+
+A backup that has never been restored is a hope, not a backup. On a machine
+other than the server (a laptop with Docker is enough):
+
+1. List what's there: `rclone ls ks-crypt: | sort -k2 | tail`. Pick the newest
+   date stamp, e.g. `2026-11-02_0330`.
+2. Download that set: `rclone copy ks-crypt: ./restore --include '*2026-11-02_0330*'`.
+3. Start a throwaway Postgres and restore the dump into it:
+
+   ```sh
+   docker run -d --name ks-restore -e POSTGRES_PASSWORD=x -e POSTGRES_USER=keyboard_sensei -e POSTGRES_DB=keyboard_sensei -p 55432:5432 postgres:17-alpine
+   sleep 5
+   docker exec -i ks-restore pg_restore -U keyboard_sensei -d keyboard_sensei --no-owner < restore/ks-db-2026-11-02_0330.dump
+   ```
+
+4. Check it's real data, not just a schema:
+   `docker exec ks-restore psql -U keyboard_sensei -c 'select count(*) from "User"' -c 'select max(created_at) from "ExerciseAttempt"'`.
+   The newest attempt should be from the day before the backup.
+5. Check the archives open: `tar -tzf restore/ks-midi-library-2026-11-02_0330.tar.gz | head`.
+6. Clean up: `docker rm -f ks-restore && rm -rf restore`.
+
+A real restore onto the server follows
+[scripts/restore-keyboard-sensei.md](../scripts/restore-keyboard-sensei.md),
+using the files from step 2.
+
 ## LAN HTTPS and CA trust
 
 The server is HTTPS only, using Caddy's internal CA. This is required: browsers
@@ -125,9 +188,180 @@ The server's secrets live in `~/apps/keyboard-sensei/.env.deploy`, read by
 | `REGISTRATION_OPEN` | optional | `false` closes self-service sign-up |
 | `TRUST_PROXY` | optional | Reverse-proxy hops; the deploy sets `2` (Caddy, nginx, api) |
 | `TTS_USER_DAILY_LIMIT` | optional | Per-user daily narration characters (default `2500`) |
+| `PUBLIC_CATALOGUE` | optional | `true` serves only the Essentials and beginner packs plus each user's own songs, and switches the piano archive off. Default `false`. See "Public release" |
+| `REQUIRE_EMAIL_VERIFICATION` | optional | `true` blocks sign-in until a new account confirms its email. Default `false` |
+| `APP_URL` | optional | Public web origin for links in emails. Default: the first `CORS_ORIGIN` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | optional | Outgoing email. Without `SMTP_HOST`, emails go to the API log |
+| `GOOGLE_CLIENT_IDS` | optional | Comma-separated Google OAuth client IDs (Web, Android) accepted by `POST /auth/google`. Unset = Google sign-in off |
+| `VITE_GOOGLE_CLIENT_ID` | `.env.deploy` (build arg), `apps/web/.env` | The Web client ID, baked into the web build. Unset = no Google button |
+| `CLOUDFLARE_TUNNEL_TOKEN` | `.env.deploy` | Only for the `public` compose profile (Cloudflare Tunnel) |
+| `RCLONE_REMOTE`, `RCLONE_KEEP_DAYS` | crontab | Off-box backup destination and its retention (default 14 days) |
 
 Local development uses `apps/api/.env` and `apps/web/.env`, copied from their
 `.env.example` files.
+
+## Public release
+
+Everything below is off by default, so the LAN deployment behaves exactly as
+before until each setting is switched on.
+
+### Song catalogue licensing (`PUBLIC_CATALOGUE`)
+
+| Source | Licence finding | With `PUBLIC_CATALOGUE=true` |
+|---|---|---|
+| Essentials pack (`src/essentials/manifest.ts`) | Public-domain compositions; Mutopia editions are Public Domain, CC BY or CC BY-SA, each with its typesetter recorded | Public, with the `attribution` line shown on the song page and on `/third-party-licenses` |
+| Beginner pack (`scripts/generate-beginner-pack.ts`) | Public-domain tunes, arranged here | Public |
+| ADL library (`scripts/fetch-midi-library.ts`, 263 of the 305 still live after Essentials replacements) | **No licence.** The [ADL Piano MIDI](https://github.com/lucasnfe/adl-piano-midi) repository has no LICENSE file (GitHub reports none). It is derived from the Lakh MIDI Dataset, which is CC BY 4.0 as a *compilation*, but its MIDI files were scraped from the web with no per-file author or licence, and about 2,065 more files were "scraped from publicly-available sources". The `public-domain` label in `fetch-midi-library.ts` describes the *composition*, not the MIDI sequence, which can carry its own copyright. So no file, even of a Bach piece, has a licence we can rely on | **All hidden** from the song list and from the file, notation and attempt routes (a 404, like a missing song). Admins still see everything |
+| PianoCoRe archive (`src/archive.ts`) | CC BY-NC-SA 4.0: non-commercial only. Our server fetches and serves the files, so we are the distributor | `/archive/*` answers 404 for everyone and the web app hides "Browse Archive". Songs users imported earlier stay private to them |
+| Users' uploads and recordings | The user's responsibility (see the terms) | Private to the uploader, as always |
+
+The rule lives in one predicate, `isPubliclyServable` / `canSeeSong` in
+`apps/api/src/songs.ts`. The Today screen, the "Ready for you" shelf and the
+achievements already read only Essentials songs, so they work unchanged.
+
+When piano-midi.de files (CC BY-SA 3.0 DE) are added, give each song its
+`attribution` line; the song page shows any song's attribution, and their source
+should be added to `apps/web/scripts/third-party-licenses.ts` alongside Essentials.
+
+### Email (password reset and verification)
+
+Without `SMTP_HOST` the API writes each email to its log ("console transport"),
+which is fine on the LAN and useless in public: the API logs a warning at start
+when `NODE_ENV=production` and no SMTP is set. Any SMTP service works (a
+transactional provider such as Postmark, Amazon SES, Brevo or Mailgun, or a
+mailbox's SMTP). Set in `.env.deploy`: `SMTP_HOST`, `SMTP_PORT` (587 for STARTTLS,
+465 with `SMTP_SECURE=true`), `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`
+(e.g. `Keyboard Sensei <no-reply@yourdomain>`) and `APP_URL` (the public web
+origin, used for the links). Add SPF and DKIM records for the sending domain as
+the provider instructs, or the emails land in spam.
+
+- Forgot password always answers `202` whether or not the address exists, and
+  the lookup happens after the response, so timing doesn't tell either. Limits:
+  5 requests per IP per 15 minutes, and at most 3 emails per address per hour.
+- The token is 32 random bytes, single-use, valid for 30 minutes; only its
+  SHA-256 is stored (`AuthToken`). A new request voids older links.
+- `REQUIRE_EMAIL_VERIFICATION=true`: new sign-ups get a confirmation link (48
+  hours) and can't sign in until they use it. Older accounts have no
+  verification date, so turning this on locks them out until they confirm with
+  "Send the link again" on the sign-in page (or reset their password, which also
+  confirms the address). The seeded demo and admin accounts are marked verified.
+
+### Account deletion
+
+Settings → Account → Delete account (password, or Google for Google-linked
+accounts), and the signed-out page `/delete-account` (email + password) both call
+`deleteUserAccount` in `apps/api/src/account.ts`, as does admin user deletion.
+It removes every row that references the user (all per-user tables cascade;
+feedback is deleted explicitly because its foreign key only detaches) and their
+files: uploads, recordings, archive imports (MIDI and MusicXML), instrument
+packs and feedback screenshots. The shared demo account and the last admin can't
+be deleted. Give Google Play `https://<your domain>/delete-account` as the
+account-deletion URL.
+
+### Google sign-in
+
+`POST /auth/google` takes a Google ID token, verifies it with google-auth-library
+against `GOOGLE_CLIENT_IDS`, and returns the app's normal session. It links by
+`google_sub`, then by an existing account with the same address if Google says
+the address is verified, else creates an account (only while
+`REGISTRATION_OPEN` is true). It is token-based on purpose: the Android app will
+need a native sign-in flow (Credential Manager) inside Capacitor, because Google
+blocks its web sign-in inside WebViews, and that flow sends the same ID token to
+the same route.
+
+What to create in [Google Cloud Console](https://console.cloud.google.com/):
+
+1. **Project**: create one, e.g. "Keyboard Sensei".
+2. **OAuth consent screen** (Google Auth Platform → Branding / Audience / Data access):
+   - App name: Keyboard Sensei. User support email: your address. App logo: optional
+     (a logo triggers brand verification).
+   - App domain: home page `https://<your domain>/`, privacy policy
+     `https://<your domain>/privacy`, terms `https://<your domain>/terms`.
+   - Authorised domains: `<your domain>` (the registrable domain).
+   - Developer contact email: your address.
+   - Audience: **External**. Publish the app ("In production"); while it is in
+     "Testing" only listed test users can sign in.
+   - Scopes: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
+     only. These are non-sensitive, so no Google verification review is needed.
+3. **Web client** (Clients → Create client → Web application), e.g. "Keyboard Sensei web":
+   - Authorised JavaScript origins: `https://<your domain>`, plus
+     `http://localhost:5173` for development. (Google sign-in won't work on the
+     LAN address `https://192.168.4.4:8181`: Google doesn't accept IP addresses
+     as origins.)
+   - No redirect URIs are needed (the button uses the popup flow).
+4. **Android client** (Create client → Android):
+   - Package name: `com.keyboardsensei.app`.
+   - SHA-1 certificate fingerprint: of the key that signs the app *as installed*.
+     With Play App Signing, copy the "App signing key certificate" SHA-1 from Play
+     Console → Test and release → App integrity. Create a second Android client
+     with your upload/debug key's SHA-1 (`keytool -list -v -keystore <keystore>`)
+     for builds you install yourself.
+   - The Android app requests its ID token with the **Web** client ID as the
+     server client ID; the Android client entry is what authorises the package
+     and signature. Both IDs go in `GOOGLE_CLIENT_IDS`.
+5. **Where the IDs go**:
+   - `.env.deploy`: `GOOGLE_CLIENT_IDS=<web client id>,<android client id>` (API)
+     and `VITE_GOOGLE_CLIENT_ID=<web client id>` (baked into the web build; then
+     rebuild the web image).
+   - No client secret is needed anywhere: ID-token verification uses Google's
+     public keys.
+   - Leaving either unset keeps the feature off: the API answers 503 and the web
+     app shows no Google button.
+
+### Public exposure with Cloudflare Tunnel
+
+A tunnel serves the app at a public domain with a real certificate without
+opening any port on the router. The `cloudflared` service in
+`docker-compose.deploy.yml` sits behind the `public` profile, so it doesn't start
+unless asked. Caddy and the LAN route on `https://192.168.4.4:8181` keep working
+alongside it.
+
+1. Put the domain on Cloudflare (free plan is fine).
+2. Zero Trust → Networks → Tunnels → Create a tunnel (type Cloudflared), named
+   e.g. `keyboard-sensei`. Copy the token into `.env.deploy` as
+   `CLOUDFLARE_TUNNEL_TOKEN`.
+3. In the tunnel, add a public hostname: `<your domain>` (or `app.<your domain>`),
+   service type HTTP, URL `web:80`. The tunnel reaches the web container over the
+   compose network, and nginx forwards `/api/` to the API exactly as for the LAN.
+4. Set the variables below, then:
+   `docker compose --env-file .env.deploy -f docker-compose.deploy.yml --profile public up -d --build`.
+5. Check: `https://<your domain>/privacy` loads with a valid certificate, and
+   `https://<your domain>/api/health` answers `{"status":"ok"}`.
+
+What changes in `.env.deploy` when the app goes public:
+
+| Setting | Value | Why |
+|---|---|---|
+| `CORS_ORIGIN` | `https://<your domain>,https://192.168.4.4:8181,https://localhost` | Every origin a browser calls the API from: the public site, the LAN site, and the Android app (Capacitor serves the app from `https://localhost`). Same-origin `/api` calls don't need CORS, but the Android app's do |
+| `VITE_API_URL` | `/api` (unchanged) | Relative, so the same build works on the public domain and the LAN address |
+| `APP_URL` | `https://<your domain>` | Links in emails must use the public origin, not the LAN one |
+| `TRUST_PROXY` | stays `2` | Through the tunnel the chain is Cloudflare → cloudflared → nginx → API. Cloudflare puts the client address in `X-Forwarded-For`, nginx appends cloudflared's, so the client is 2 hops back, as on the LAN (Caddy → nginx → API). **Verify after going live**: from a phone on mobile data, fail the login 11 times (the 11th gets "Too many failed sign-in attempts"), then confirm a laptop on another network can still sign in. If the laptop is blocked too, every visitor is sharing one rate-limit bucket: set nginx to pass `CF-Connecting-IP` as the client address for requests from cloudflared |
+| `REGISTRATION_OPEN` | `true` | Public sign-up. Abuse limits: 10 new accounts per IP per hour |
+| `PUBLIC_CATALOGUE` | `true` | See "Song catalogue licensing". Required before the public can sign up |
+| `REQUIRE_EMAIL_VERIFICATION` | `true` once SMTP works | Stops sign-ups with other people's addresses |
+| `SMTP_*`, `MAIL_FROM` | your provider | Password reset must actually reach people |
+| `ADMIN_PASSWORD` | a long random password | The seeded admin (`admin@keyboardsensei.local`) is reachable from the internet once public. The seed resets it to this value on every run |
+| `GOOGLE_CLIENT_IDS`, `VITE_GOOGLE_CLIENT_ID` | from Google Cloud Console | Optional |
+
+Rate limits that matter in public (all in-memory, per API process; a restart
+resets them): failed logins 10 per IP per 15 minutes; sign-ups 10 per IP per
+hour; forgot password and resend verification 5 per IP per 15 minutes (plus 3
+emails per address per hour); token redemptions 20 per IP per 15 minutes;
+Google sign-in 30 per IP per 15 minutes; failed account deletions 10 per 15
+minutes; uploads 60 per user per hour; URL imports 10 per user per hour; new
+narration 2,500 characters per user per day.
+
+Also consider before launch:
+
+- **The shared demo account.** "Start Demo" signs everyone into the same account
+  (`demo@keyboardsensei.local` / `demo-password`, both public in the web bundle).
+  Deletion is refused for it, but anyone can change its password (breaking the
+  demo until the next reseed) or read what others did in it. Either hide "Start
+  Demo" on the public site or make demo sessions per-visitor.
+- **Narration costs.** Every new account gets 2,500 narration characters a day
+  from the shared ElevenLabs quota; the monthly pool caps the total spend.
+- Cloudflare in front means Cloudflare sees visitors' IP addresses; the privacy
+  policy says so.
 
 ## Gotchas and lessons learned
 
@@ -156,3 +390,4 @@ Local development uses `apps/api/.env` and `apps/web/.env`, copied from their
 | `apps/web/vite.config.js` was a stale compiled artifact | Committed in the initial commit. Vite resolves `.js` before `.ts`, so every build silently used the transpiled file | Deleted. If you add a Vite plugin, edit `vite.config.ts` and confirm no `.js` twin exists |
 | Docker build broke after adding a `pnpm patch` | Both Dockerfiles ran `pnpm install` without `COPY patches/` first | The Dockerfiles copy `patches/` before installing. Do a fresh Docker build after any dependency change |
 | A test can pass for the wrong reason | A rubato test used a Coldplay excerpt whose tempo happened to be locally constant, so naive and correct methods agreed and the test proved nothing | Pick fixtures that actually exercise the behaviour (Clair de Lune for rubato). A green test that proves nothing is worse than no test |
+| `pnpm licenses list --json` paths point nowhere | pnpm 10 reports store paths without their `node_modules/.pnpm` segment, so reading each package's LICENSE file from them silently found nothing (0 of 232 at first) | `apps/web/scripts/third-party-licenses.ts` tries the real `node_modules/.pnpm/...` location first. Check the generated JSON's counts, not just that the script ran |

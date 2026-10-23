@@ -55,3 +55,57 @@ export const instrumentUploadRateLimit = rateLimit({
   legacyHeaders: false,
   message: rateLimitedBody("Too many instrument uploads — try again later"),
 });
+
+/** Forgot-password and resend-verification requests per client IP (each may send an email). */
+export const emailRequestRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("Too many requests — try again in a few minutes"),
+});
+
+/** Token redemptions (reset password, verify email) per client IP. */
+export const tokenRedeemRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("Too many attempts — try again in a few minutes"),
+});
+
+/** Google sign-ins per client IP. */
+export const googleSignInRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("Too many sign-in attempts — try again in a few minutes"),
+});
+
+/** Account deletions confirmed with a password (signed-out page and in-app). Failed attempts only. */
+export const accountDeletionRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: rateLimitedBody("Too many failed attempts — try again in a few minutes"),
+});
+
+/**
+ * Emails sent per address per hour, on top of the per-IP limit, so one address can't be
+ * flooded from many networks. Over the limit the request still answers normally (the
+ * response must not reveal whether the address exists); the email is just not sent.
+ */
+const EMAILS_PER_ADDRESS_PER_HOUR = 3;
+const recentEmailsByAddress = new Map<string, number[]>();
+
+export function allowEmailTo(address: string, now = Date.now()): boolean {
+  const key = address.toLowerCase();
+  const recent = (recentEmailsByAddress.get(key) ?? []).filter((at) => now - at < 60 * 60 * 1000);
+  const allowed = recent.length < EMAILS_PER_ADDRESS_PER_HOUR;
+  if (allowed) recent.push(now);
+  recentEmailsByAddress.set(key, recent);
+  return allowed;
+}
