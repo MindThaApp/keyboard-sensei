@@ -550,6 +550,60 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("session revocation (token_version)", () => {
+    const probe = (token: string) => api("GET", "/lessons", { token });
+
+    it("sign out everywhere voids old tokens and returns a working fresh one", async () => {
+      const user = await createUserWithPassword();
+      expect((await probe(user.token)).status).toBe(200);
+      const res = await api("POST", "/auth/sign-out-all", { token: user.token });
+      expect(res.status).toBe(200);
+      expect((await probe(user.token)).status).toBe(401);
+      expect((await probe(res.body.accessToken)).status).toBe(200);
+      expect((await api("POST", "/auth/sign-out-all", { token: user.token })).status).toBe(401);
+    });
+
+    it("a password change voids old tokens and returns a fresh one", async () => {
+      const user = await createUserWithPassword();
+      const res = await api("POST", "/users/me/password", {
+        token: user.token,
+        body: { currentPassword: PASSWORD, newPassword: "a-brand-new-password" },
+      });
+      expect(res.status).toBe(200);
+      expect((await probe(user.token)).status).toBe(401);
+      expect((await probe(res.body.accessToken)).status).toBe(200);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: "a-brand-new-password" } });
+      expect((await probe(login.body.accessToken)).status).toBe(200);
+    });
+
+    it("a password reset voids old tokens", async () => {
+      m.mailer.setMailTransport(captureTransport);
+      const user = await createUserWithPassword();
+      await api("POST", "/auth/forgot-password", { body: { email: user.email } });
+      const token = tokenFrom((await waitForMail(user.email, /reset/i)).text);
+      expect((await api("POST", "/auth/reset-password", { body: { token, password: "a-brand-new-password" } })).status).toBe(200);
+      expect((await probe(user.token)).status).toBe(401);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: "a-brand-new-password" } });
+      expect((await probe(login.body.accessToken)).status).toBe(200);
+    });
+
+    it("account deletion voids the token", async () => {
+      const user = await createUserWithPassword();
+      expect((await probe(user.token)).status).toBe(200);
+      expect((await api("DELETE", "/users/me", { token: user.token, body: { password: PASSWORD } })).status).toBe(200);
+      expect((await probe(user.token)).status).toBe(401);
+    });
+
+    it("tokens from before the claim existed still work until the version is bumped", async () => {
+      const user = await createUserWithPassword();
+      const jwt = (await import("jsonwebtoken")).default;
+      const legacy = jwt.sign({ sub: user.id, email: user.email }, m.env.JWT_SECRET, { expiresIn: "1h" });
+      expect((await probe(legacy)).status).toBe(200);
+      await api("POST", "/auth/sign-out-all", { token: user.token });
+      expect((await probe(legacy)).status).toBe(401);
+    });
+  });
+
   describe("auth", () => {
     it("registers, logs in, and rejects a wrong password", async () => {
       const user = await registerUser();
