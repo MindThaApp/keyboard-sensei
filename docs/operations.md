@@ -277,8 +277,8 @@ accounts), and the signed-out page `/delete-account` (email + password) both cal
 `deleteUserAccount` in `apps/api/src/account.ts`, as does admin user deletion.
 It removes every row that references the user (all per-user tables cascade;
 feedback is deleted explicitly because its foreign key only detaches) and their
-files: uploads, recordings, archive imports (MIDI and MusicXML), instrument
-packs and feedback screenshots. The shared demo account and the last admin can't
+files: uploads, recordings, score imports (the original score, its MEI and MIDI),
+archive imports (MIDI and MusicXML), instrument packs and feedback screenshots. The shared demo account and the last admin can't
 be deleted. Give Google Play `https://<your domain>/delete-account` as the
 account-deletion URL.
 
