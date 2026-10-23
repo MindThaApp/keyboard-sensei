@@ -100,6 +100,7 @@ export const COMPOSERS: ComposerSeed[] = [
   { id: "domenico-scarlatti", name: "Domenico Scarlatti", sort_name: "Scarlatti, Domenico", born: 1685, died: 1757, aliases: ["Scarlatti"], era: "baroque" },
   { id: "joseph-brackett", name: "Joseph Brackett", sort_name: "Brackett, Joseph", born: 1797, died: 1882, aliases: ["Elder Joseph Brackett", "Joseph Brackett Jr."], era: "romantic" },
   { id: "john-henry-hopkins-jr", name: "John Henry Hopkins Jr.", sort_name: "Hopkins, John Henry, Jr.", born: 1820, died: 1891, aliases: ["J. H. Hopkins", "John H. Hopkins"], era: "romantic" },
+  { id: "teodoro-cottrau", name: "Teodoro Cottrau", sort_name: "Cottrau, Teodoro", born: 1827, died: 1879, aliases: ["Théodore Cottrau", "Cottrau"], era: "romantic" },
   { id: "richard-storrs-willis", name: "Richard Storrs Willis", sort_name: "Willis, Richard Storrs", born: 1819, died: 1900, aliases: ["R. S. Willis"], era: "romantic" },
   { id: "henry-j-gauntlett", name: "Henry J. Gauntlett", sort_name: "Gauntlett, Henry J.", born: 1805, died: 1876, aliases: ["Henry John Gauntlett", "H. J. Gauntlett"], era: "romantic" },
   { id: "adolphe-adam", name: "Adolphe Adam", sort_name: "Adam, Adolphe", born: 1803, died: 1856, aliases: ["Adam", "A. Adam"], era: "romantic" },
