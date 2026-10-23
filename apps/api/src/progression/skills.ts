@@ -41,6 +41,8 @@ export function skillPoints(
   lessons: Pick<Lesson, "id" | "branch" | "skillRewards">[],
   lessonStarsById: ReadonlyMap<string, number>,
   songStars: Iterable<number>,
+  /** Points from outside lessons and songs (the note-reading game), added per skill. */
+  extra: Partial<Record<SkillId, number>> = {},
 ): Record<SkillId, number> {
   const points: Record<SkillId, number> = { reading: 0, rhythm: 0, technique: 0, chords: 0, ear: 0, repertoire: 0 };
   for (const lesson of lessons) {
@@ -53,5 +55,26 @@ export function skillPoints(
     if (lesson.branch === "repertoire") points.repertoire += POINTS_PER_REWARD * stars;
   }
   for (const stars of songStars) points.repertoire += stars * POINTS_PER_SONG_STAR;
+  for (const [skill, bonus] of Object.entries(extra)) points[skill as SkillId] += bonus;
+  return points;
+}
+
+/** Note-reading game: +1 reading point per 10 correct answers in a day, up to 5 points a day. */
+export const READING_GAME_CORRECT_PER_POINT = 10;
+export const READING_GAME_DAILY_POINT_CAP = 5;
+
+/** Points one day's worth of correct answers earns. */
+export const readingGameDayPoints = (correctToday: number): number =>
+  Math.min(READING_GAME_DAILY_POINT_CAP, Math.floor(Math.max(0, correctToday) / READING_GAME_CORRECT_PER_POINT));
+
+/**
+ * Reading points earned by the note-reading game. Correct answers are pooled per calendar day
+ * (the learner's own day) before dividing, so several short rounds still add up to a point.
+ */
+export function readingGamePoints(rounds: { correct: number; day: string }[]): number {
+  const correctByDay = new Map<string, number>();
+  for (const round of rounds) correctByDay.set(round.day, (correctByDay.get(round.day) ?? 0) + round.correct);
+  let points = 0;
+  for (const correct of correctByDay.values()) points += readingGameDayPoints(correct);
   return points;
 }
