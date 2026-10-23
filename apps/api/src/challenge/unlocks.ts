@@ -5,7 +5,8 @@ import { CHALLENGE_TIERS, type ChallengeTier } from "@keyboard-sensei/challenge-
  *
  * A requirement is a list of groups: every group must be met, and a group is met by
  * completing ANY one of its lessons (the course teaches most things twice, once in
- * the classical path and once in the reading or chords path).
+ * the classical path and once in the reading or chords path). Each group lists the
+ * gentlest route first: that is the lesson a locked tier points to.
  *
  * Tiers unlock in order, each needing what its music uses (generator: TIER_SHAPE):
  *   Starter       treble reading in C position; quarters and halves
@@ -65,7 +66,7 @@ export interface LessonRef {
 export interface TierAccess {
   tier: ChallengeTier;
   unlocked: boolean;
-  /** One lesson per unmet requirement of this tier and those below (the earliest in the course), for "Finish … to unlock". */
+  /** One lesson per unmet requirement of this tier and those below, for "Finish … to unlock". */
   needs: LessonRef[];
 }
 
@@ -82,18 +83,18 @@ export const REQUIRED_LESSON_IDS: string[] = [
 
 /**
  * @param completed ids of the learner's completed lessons
- * @param lessons the live lessons in course order (titles for "needs"; retired ones are skipped)
+ * @param lessons the live lessons (titles for "needs"; retired ones are skipped)
  */
 export function challengeAccess(completed: ReadonlySet<string>, lessons: readonly LessonRef[]): ChallengeAccess {
-  const live = new Map(lessons.map((lesson, index) => [lesson.id, { lesson, index }]));
+  const live = new Map(lessons.map((lesson) => [lesson.id, lesson]));
   const unmet = (requirement: Requirement): LessonRef[] =>
     requirement
       .filter((group) => !group.some((id) => completed.has(id)))
       .flatMap((group) => {
-        // Point at the earliest live lesson of the group; a group with none live can't block.
-        const options = group.flatMap((id) => (live.has(id) ? [live.get(id)!] : []));
-        options.sort((a, b) => a.index - b.index);
-        return options.length ? [options[0]!.lesson] : [];
+        // Point at the group's first live lesson (groups list the gentlest route first);
+        // a group with no live lesson can't block.
+        const first = group.find((id) => live.has(id));
+        return first ? [live.get(first)!] : [];
       });
 
   // A tier also needs everything the tiers below it need.
