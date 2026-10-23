@@ -6,6 +6,8 @@ import PublicPageLayout, { Prose } from "./PublicPageLayout";
 interface ThirdPartyLicenses {
   generatedAt: string;
   packages: { name: string; version: string; license: string; author: string | null; homepage: string | null; licenseText: string | null }[];
+  /** LGPL libraries: what they do here, the licence texts and where their source is. Absent from older builds. */
+  lgpl?: { name: string; version: string; license: string; usedFor: string; sourceUrl: string; licenseUrls: string[] }[];
   assets: { name: string; usedFor: string; license: string; attribution: string; url: string; licenseUrl: string }[];
   music: { title: string; composer: string; license: string; attribution: string; attributionRequired: boolean; url: string }[];
 }
@@ -191,6 +193,46 @@ export default function ThirdPartyLicensesPage() {
               ))}
             </ul>
           </section>
+
+          {(data.lgpl ?? []).length > 0 && (
+            <section aria-labelledby="lgpl-heading">
+              <h2 id="lgpl-heading" className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">
+                LGPL libraries
+              </h2>
+              <ul className="mt-4 space-y-4">
+                {data.lgpl!.map((notice) => (
+                  <li key={notice.name} className="card space-y-1 p-4 text-sm text-slate-600 dark:text-slate-300">
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {notice.name} {notice.version} <span className="font-normal text-slate-500">({notice.license})</span>
+                    </p>
+                    <p>{notice.usedFor}</p>
+                    <p>
+                      It is free software: you can redistribute it and modify it under the terms of the GNU Lesser General Public
+                      License as published by the Free Software Foundation, version 3 or later. It is distributed without any
+                      warranty. You may replace it with a modified version: it is a separate file of the app.
+                    </p>
+                    <p>
+                      Source code of this version:{" "}
+                      <a className="break-all text-felt-700 underline dark:text-felt-300" href={notice.sourceUrl} target="_blank" rel="noreferrer">
+                        {notice.sourceUrl}
+                      </a>
+                    </p>
+                    <p>
+                      Licence texts:{" "}
+                      {notice.licenseUrls.map((url, index) => (
+                        <span key={url}>
+                          {index > 0 && ", "}
+                          <a className="text-felt-700 underline dark:text-felt-300" href={url} target="_blank" rel="noreferrer">
+                            {url.includes("lgpl") ? "GNU LGPL v3" : "GNU GPL v3"}
+                          </a>
+                        </span>
+                      ))}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section aria-labelledby="software-heading">
             <h2 id="software-heading" className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">

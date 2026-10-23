@@ -45,9 +45,24 @@ export interface MusicLicense {
   url: string;
 }
 
+/**
+ * A library under the LGPL, which the app ships unmodified as its own separately loaded
+ * file. The LGPL asks for a notice that it is used and under which licence, the licence
+ * texts, and where its source (the exact version) can be had.
+ */
+export interface LgplNotice {
+  name: string;
+  version: string;
+  license: string;
+  usedFor: string;
+  sourceUrl: string;
+  licenseUrls: string[];
+}
+
 export interface ThirdPartyLicenses {
   generatedAt: string;
   packages: PackageLicense[];
+  lgpl: LgplNotice[];
   assets: ThirdPartyAsset[];
   music: MusicLicense[];
 }
@@ -110,6 +125,35 @@ export function collectPackageLicenses(): PackageLicense[] {
   return packages.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
 }
 
+/** What each LGPL package does here and where the source of a given version lives. */
+const LGPL_PACKAGES: Record<string, { usedFor: string; source: (version: string) => string }> = {
+  verovio: {
+    usedFor:
+      "Reads uploaded MusicXML and MEI scores, writes the MIDI that is played, and engraves the sheet music. Used unmodified, as published on npm; the web app loads it as a separate file.",
+    source: (version) => `https://github.com/rism-digital/verovio/releases/tag/version-${version}`,
+  },
+};
+
+export const isLgpl = (license: string): boolean => /\bLGPL\b/i.test(license);
+
+/** A notice for every LGPL package; throws if one has no entry above, so none ships silently. */
+export function collectLgplNotices(packages: PackageLicense[]): LgplNotice[] {
+  return packages
+    .filter((pkg) => isLgpl(pkg.license))
+    .map((pkg) => {
+      const known = LGPL_PACKAGES[pkg.name];
+      if (!known) throw new Error(`${pkg.name} is ${pkg.license}: add it to LGPL_PACKAGES in third-party-licenses.ts`);
+      return {
+        name: pkg.name,
+        version: pkg.version,
+        license: pkg.license,
+        usedFor: known.usedFor,
+        sourceUrl: known.source(pkg.version),
+        licenseUrls: ["https://www.gnu.org/licenses/lgpl-3.0.html", "https://www.gnu.org/licenses/gpl-3.0.html"],
+      };
+    });
+}
+
 export function collectMusicLicenses(): MusicLicense[] {
   return [...ESSENTIALS]
     .sort((a, b) => a.title.localeCompare(b.title))
@@ -128,9 +172,11 @@ export function collectMusicLicenses(): MusicLicense[] {
 }
 
 export function buildThirdPartyLicenses(): ThirdPartyLicenses {
+  const packages = collectPackageLicenses();
   return {
     generatedAt: new Date().toISOString(),
-    packages: collectPackageLicenses(),
+    packages,
+    lgpl: collectLgplNotices(packages),
     assets: THIRD_PARTY_ASSETS,
     music: collectMusicLicenses(),
   };

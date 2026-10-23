@@ -26,10 +26,12 @@ const neverPrecacheExtensions = new Set([
 ]);
 
 /**
- * Chunks only some users ever load (an optional notes style and its `three` dependency,
- * ~550 KB): fetched when chosen, never downloaded up front by the service worker.
+/**
+ * Chunks only some users ever load, fetched when needed and never downloaded up front
+ * by the service worker: an optional notes style and its `three` dependency (~550 KB),
+ * and the Verovio engraver (~7 MB of WASM, only for score-imported songs).
  */
-const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/];
+const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/, /^verovio-[\w-]+\.js$/];
 
 type StaticShellFile = {
   url: string;
@@ -157,7 +159,15 @@ if (uploadSourceMaps && !process.env.SENTRY_PROJECT?.trim()) {
 
 export default defineConfig({
   define: { __APP_RELEASE__: JSON.stringify(release) },
-  build: { sourcemap: uploadSourceMaps ? "hidden" : false },
+  build: {
+    sourcemap: uploadSourceMaps ? "hidden" : false,
+    rollupOptions: {
+      output: {
+        // A stable name for the lazily loaded engraver, so the service worker can skip it.
+        manualChunks: (id) => (id.includes("/node_modules/verovio/") ? "verovio" : undefined),
+      },
+    },
+  },
   plugins: [
     react(),
     pwaServiceWorkerPlugin(),

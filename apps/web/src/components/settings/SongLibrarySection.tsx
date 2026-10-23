@@ -1,16 +1,20 @@
 import { useServerConfig } from "../../services/serverConfig";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   adminDeleteSong,
   adminUpdateSong,
   deleteSong,
   fetchUrlPreview,
   getSongs,
+  isScoreFile,
   importArchiveEntry,
   searchArchive,
   updateSong,
+  uploadScore,
   uploadSong,
   type ArchiveEntryResult,
+  type ScoreImportReport,
   type Song,
   type SongGenre,
   type UrlPreview,
@@ -319,6 +323,39 @@ function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
   );
 }
 
+/** What became of an uploaded score: bars played, and anything the uploader should know. */
+function ScoreImportSummary({ song, report, onDone }: { song: Song; report: ScoreImportReport; onDone: () => void }) {
+  const repeats =
+    report.playedMeasures === report.printedMeasures
+      ? `${report.playedMeasures} bars`
+      : `${report.printedMeasures} bars, ${report.playedMeasures} with the repeats played out`;
+  return (
+    <section aria-label="Score imported" className="card space-y-3 p-4" role="status">
+      <h2 className="text-sm font-semibold">Added “{song.title}”</h2>
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        {repeats} · {song.note_count} notes to play · private to you.
+      </p>
+      {report.warnings.length > 0 && (
+        <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700 dark:text-amber-300">
+          {report.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <Link className="primary-button text-sm" to={`/play/${song.id}`}>
+          Play it now
+        </Link>
+        <button className="secondary-button text-sm" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </section>
+  );
+}
+
+const MIDI_NAME = /\.midi?$/i;
+
 function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -326,40 +363,55 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
   const [genre, setGenre] = useState<SongGenre>("other");
   const [state, setState] = useState<"idle" | "uploading">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [imported, setImported] = useState<{ song: Song; report: ScoreImportReport } | null>(null);
+  const score = file !== null && isScoreFile(file.name);
 
   const pick = (picked: File | null) => {
     setFile(picked);
-    if (picked && !title) setTitle(picked.name.replace(/\.midi?$/i, ""));
+    setError(null);
+    // A score names its own title; a MIDI file's name is the best guess there is.
+    if (picked && !title && !isScoreFile(picked.name)) setTitle(picked.name.replace(MIDI_NAME, ""));
   };
 
   const submit = async () => {
-    if (!file || !title.trim()) return;
+    if (!file || (!score && !title.trim())) return;
     setState("uploading");
     setError(null);
     try {
-      onDone(await uploadSong(file, { title: title.trim(), artist: artist.trim() || "Unknown", genre }));
+      if (score) {
+        const { import_report: report, ...song } = await uploadScore(file, { title: title.trim() || undefined, artist: artist.trim() || undefined, genre });
+        setImported({ song, report });
+      } else {
+        onDone(await uploadSong(file, { title: title.trim(), artist: artist.trim() || "Unknown", genre }));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
       setState("idle");
     }
   };
 
+  if (imported) return <ScoreImportSummary song={imported.song} report={imported.report} onDone={() => onDone(imported.song)} />;
+
   const field = "w-full rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm dark:border-slate-600";
   return (
     <section aria-label="Upload song file" className="card space-y-3 p-4">
       <h2 className="text-sm font-semibold">Upload your own song file</h2>
+      <p className="text-xs text-slate-500">
+        MIDI (.mid), MusicXML (.musicxml, .xml, .mxl) or MEI (.mei). A score is engraved as sheet music and played with its repeats.
+      </p>
       <input
         type="file"
-        accept=".mid,.midi,audio/midi"
+        aria-label="MIDI or score file"
+        accept=".mid,.midi,audio/midi,.musicxml,.xml,.mxl,.mei,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml"
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
         className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-felt-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-felt-700 dark:text-slate-300 dark:file:bg-felt-900/40 dark:file:text-felt-300"
       />
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-xs text-slate-500">Title
-          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={score ? "From the score" : undefined} />
         </label>
         <label className="block text-xs text-slate-500">Artist
-          <input className={field} value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Unknown" />
+          <input className={field} value={artist} onChange={(e) => setArtist(e.target.value)} placeholder={score ? "From the score" : "Unknown"} />
         </label>
       </div>
       <label className="block text-xs text-slate-500">Genre
@@ -371,8 +423,8 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
       </label>
       {error && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
       <div className="flex gap-2">
-        <button className="primary-button text-sm" disabled={!file || !title.trim() || state === "uploading"} onClick={() => void submit()}>
-          {state === "uploading" ? "Uploading…" : "Upload"}
+        <button className="primary-button text-sm" disabled={!file || (!score && !title.trim()) || state === "uploading"} onClick={() => void submit()}>
+          {state === "uploading" ? (score ? "Reading the score…" : "Uploading…") : "Upload"}
         </button>
         <button className="secondary-button text-sm" onClick={onCancel}>Cancel</button>
       </div>

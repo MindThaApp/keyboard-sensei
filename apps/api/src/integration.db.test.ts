@@ -354,7 +354,7 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
   });
 
   describe("score import", () => {
-    const upload = (token: string, bytes: Uint8Array, query = "") =>
+    const upload = (token: string, bytes: Uint8Array<ArrayBuffer>, query = "") =>
       fetch(`${baseUrl}/songs/upload/score${query}`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream" },
