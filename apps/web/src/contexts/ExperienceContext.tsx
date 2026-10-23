@@ -1,13 +1,17 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 /**
  * Simple / Advanced (§2). Simple hides controls behind "More options"; it never
- * removes them. Stored per device for now; syncing it to the account comes later.
+ * removes them. Kept on the device so it works offline, and synced to the account
+ * (see ExperienceSync) so a new device picks it up. A choice made on this device that
+ * hasn't reached the account yet is "pending" and wins over the account's value.
  */
 export type Experience = "simple" | "advanced";
 
 export const EXPERIENCE_STORAGE_KEY = "ks-experience";
 export const DEFAULT_EXPERIENCE: Experience = "simple";
+/** Set while a choice made on this device hasn't been saved to the account. */
+export const EXPERIENCE_PENDING_KEY = "ks-experience-pending";
 
 export function parseExperience(value: string | null): Experience {
   return value === "advanced" || value === "simple" ? value : DEFAULT_EXPERIENCE;
@@ -21,16 +25,58 @@ function loadExperience(): Experience {
   }
 }
 
+function loadPending(): boolean {
+  try {
+    return localStorage.getItem(EXPERIENCE_PENDING_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storePending(pending: boolean): void {
+  try {
+    if (pending) localStorage.setItem(EXPERIENCE_PENDING_KEY, "1");
+    else localStorage.removeItem(EXPERIENCE_PENDING_KEY);
+  } catch {
+    // Storage unavailable: the choice is still saved this session.
+  }
+}
+
 interface ExperienceContextValue {
   experience: Experience;
   isAdvanced: boolean;
+  /** A choice by the user: kept here and queued for the account. */
   setExperience(experience: Experience): void;
+  /** True while the latest choice made on this device hasn't reached the account. */
+  pendingSync: boolean;
+  /** Takes the account's value on this device without queueing anything back. */
+  adoptExperience(experience: Experience): void;
+  /** Queues the current value for the account (a choice that predates syncing). */
+  queueSync(): void;
+  /** The account now holds the current value. */
+  markSynced(): void;
 }
 
 const ExperienceContext = createContext<ExperienceContextValue | null>(null);
 
 export function ExperienceProvider({ children }: { children: ReactNode }) {
-  const [experience, setExperience] = useState<Experience>(loadExperience);
+  const [experience, setExperienceState] = useState<Experience>(loadExperience);
+  const [pendingSync, setPendingSync] = useState(loadPending);
+
+  const setExperience = useCallback((next: Experience) => {
+    setExperienceState(next);
+    storePending(true);
+    setPendingSync(true);
+  }, []);
+  const adoptExperience = useCallback((next: Experience) => setExperienceState(next), []);
+  const queueSync = useCallback(() => {
+    storePending(true);
+    setPendingSync(true);
+  }, []);
+  const markSynced = useCallback(() => {
+    storePending(false);
+    setPendingSync(false);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.experience = experience;
@@ -42,8 +88,16 @@ export function ExperienceProvider({ children }: { children: ReactNode }) {
   }, [experience]);
 
   const value = useMemo(
-    () => ({ experience, isAdvanced: experience === "advanced", setExperience }),
-    [experience],
+    () => ({
+      experience,
+      isAdvanced: experience === "advanced",
+      setExperience,
+      pendingSync,
+      adoptExperience,
+      queueSync,
+      markSynced,
+    }),
+    [experience, pendingSync, setExperience, adoptExperience, queueSync, markSynced],
   );
   return <ExperienceContext.Provider value={value}>{children}</ExperienceContext.Provider>;
 }

@@ -585,3 +585,5 @@ export const uploadInstrument = async (
 };
 export const importInstrumentFromUrl = (fields: { url: string; name: string; description: string; category: InstrumentCategory }) =>
   request<InstrumentInfo>("/instruments/import-url", { method: "POST", body: JSON.stringify(fields) });
+export const updateExperienceMode = (experience_mode: "simple" | "advanced") =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ experience_mode }) });
