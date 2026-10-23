@@ -71,22 +71,22 @@ export function fitWhiteKeyWidth(lowestNote: number, highestNote: number, contai
 // ── Classic notes style (spec §3.11) ──────────────────────────────────────────
 
 /** A judgement animation in flight. */
-interface JudgementEffect {
+export interface JudgementEffect {
   midi: number;
   mark: JudgementMark;
   atMs: number;
 }
 
 /** How long a judgement glyph stays up. The ring grows over `burstMs` (not at all under reduced motion). */
-const GLYPH_MS = 320;
-const MISS_GLYPH_MS = 480;
+export const GLYPH_MS = 320;
+export const MISS_GLYPH_MS = 480;
 /** More glowing notes than this and the rest go without: shadowBlur is the costly part of a frame. */
 const MAX_GLOWING_NOTES = 10;
 const GLOW_BLUR_PX = 18;
 /** In wait mode the song freezes at the note's start; a bar this close to the hit line is the target. */
-const WAITING_WINDOW_S = 0.05;
+export const WAITING_WINDOW_S = 0.05;
 
-const isHit = (judgment: PlayAlongJudgment | undefined): boolean =>
+export const isHit = (judgment: PlayAlongJudgment | undefined): boolean =>
   judgment === "perfect" || judgment === "good" || judgment === "ok";
 
 /** A press judged good or ok is drawn as early or late, by which side of the note's start it landed. */
@@ -96,7 +96,7 @@ export function judgementMark(judgment: PlayAlongJudgment, pressTimeS: number, n
   return pressTimeS < noteStartS ? "early" : "late";
 }
 
-function roundedBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+export function roundedBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   // Fully rounded ends: radius = min(width / 2, 10 px).
   const radius = Math.max(0, Math.min(w / 2, 10, h / 2));
   ctx.beginPath();
@@ -109,7 +109,7 @@ function roundedBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
 }
 
 /** An 8px diagonal hatch for missed bars, built once per palette. */
-function hatchPattern(ctx: CanvasRenderingContext2D, palette: NotePalette): CanvasPattern | null {
+export function hatchPattern(ctx: CanvasRenderingContext2D, palette: NotePalette): CanvasPattern | null {
   if (typeof document === "undefined") return null;
   const tile = document.createElement("canvas");
   tile.width = 8;
@@ -272,7 +272,7 @@ export function drawWaterfall(ctx: CanvasRenderingContext2D, frame: WaterfallFra
   for (const effect of options.effects ?? []) drawJudgement(ctx, effect, frame, nowMs, motion.burstMs);
 }
 
-function drawJudgement(ctx: CanvasRenderingContext2D, effect: JudgementEffect, frame: WaterfallFrame, nowMs: number, burstMs: number): void {
+export function drawJudgement(ctx: CanvasRenderingContext2D, effect: JudgementEffect, frame: WaterfallFrame, nowMs: number, burstMs: number): void {
   const elapsed = nowMs - effect.atMs;
   const lifetime = effect.mark === "miss" ? MISS_GLYPH_MS : Math.max(GLYPH_MS, burstMs);
   if (elapsed < 0 || elapsed > lifetime) return;
