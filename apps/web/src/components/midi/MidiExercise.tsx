@@ -203,6 +203,13 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     return byNote;
   }, [result, notes]);
   const emptyNotes = useMemo<number[]>(() => [], []);
+  // Where a scrolling phone keyboard looks: the note due next (untimed: the next one in
+  // the written order; timed: whichever is sounding on the clock).
+  const nextUntimedNote = exercise?.expected[pressedNotes.length]?.note;
+  const followNotes = useMemo(
+    () => (exercise?.scoring === "untimed" ? (nextUntimedNote === undefined ? emptyNotes : [nextUntimedNote]) : liveDueMidis),
+    [exercise?.scoring, nextUntimedNote, liveDueMidis, emptyNotes],
+  );
   const covered = useMemo(() => coveredNoteIds(exercise?.expected ?? [], pressedNotes), [exercise, pressedNotes]);
 
   if (!exercise) {
@@ -497,6 +504,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           lowestNote={lowestNote}
           highestNote={highestNote}
           recommendedRange={exerciseRange}
+          followNotes={followNotes}
           expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : emptyNotes}
           soundingNotes={listenNotes}
           feedbackByNote={feedback}
