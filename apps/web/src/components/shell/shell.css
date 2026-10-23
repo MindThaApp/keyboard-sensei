@@ -222,17 +222,3 @@ html[data-focus-mode] .ks-shell-main {
   font-weight: 600;
   text-decoration: underline;
 }
-
-/* ------------------------------------------------------------ desktop capsule sizing */
-/* The top capsule hugs its tabs instead of splitting a fixed width between them. */
-.ks-tabbar[data-placement="top"] .ks-tabbar__list {
-  flex: none;
-  grid-auto-columns: max-content;
-}
-.ks-tabbar[data-placement="top"] .ks-tab {
-  flex: none;
-  white-space: nowrap;
-}
-.ks-tabbar[data-placement="top"] .ks-tabbar__bar {
-  max-width: none;
-}
