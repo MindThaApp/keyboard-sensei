@@ -144,7 +144,7 @@ describe("glass readability floor", () => {
 
   it("writes the derived alphas for inputs and panes", () => {
     const resolved = resolveAppearance(settings(), ENV);
-    expect(Number(resolved.vars["--glass-input-a"])).toBeCloseTo(Math.min(resolved.regular.alphaTop + 0.1, 0.97), 3);
+    expect(Number(resolved.vars["--glass-input-a"])).toBeCloseTo(Math.min(resolved.frosted.alphaTop + 0.1, 0.97), 3);
     expect(Number(resolved.vars["--glass-pane-a"])).toBeCloseTo(resolved.regular.alphaTop / 2, 3);
   });
 

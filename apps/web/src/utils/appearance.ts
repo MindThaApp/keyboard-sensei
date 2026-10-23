@@ -402,7 +402,8 @@ export function resolveAppearance(settings: AppearanceSettings, env: AppearanceE
     "--glass-frosted-a": fmt(frosted.alphaTop),
     "--glass-frosted-a2": fmt(frosted.alphaBottom),
     "--glass-scrim-a": fmt(regular.scrim),
-    "--glass-input-a": fmt(Math.min(regular.alphaTop + 0.1, 0.97)),
+    // Inputs hold typed text, so they step up from the Frosted floor even under Clear.
+    "--glass-input-a": fmt(Math.min(frosted.alphaTop + 0.1, 0.97)),
     "--glass-pane-a": fmt(regular.alphaTop / 2),
     "--glass-milk-a": fmt(milkAlpha(settings.blur)),
     "--glass-blur-user": `${fmt(blurPx(settings.blur))}px`,
