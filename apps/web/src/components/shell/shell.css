@@ -10,8 +10,18 @@ html[data-device="desktop"] .ks-shell-main {
   padding-top: 88px;
   padding-bottom: 48px;
 }
-html[data-device="desktop"] {
-  --ui-toast-bottom: 24px;
+
+/*
+ * Toasts sit just below the floating navigation, not above the tab bar: at the bottom
+ * they covered the keybed and the exercise's primary action. They are transient and
+ * dismissible, so briefly covering a page heading costs far less.
+ */
+html .ks-toast-viewport {
+  top: calc(72px + env(safe-area-inset-top));
+  bottom: auto;
+}
+html[data-device="desktop"] .ks-toast-viewport {
+  top: 80px;
 }
 
 /* ------------------------------------------------------------ scroll edges */
