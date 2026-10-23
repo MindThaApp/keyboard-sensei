@@ -1,0 +1,171 @@
+/*
+ * Keybed: static gradients on real DOM keys. A press changes only `transform` and the
+ * tint layer's `background-color`, so there is no layout and no repaint of the gradients.
+ */
+.ks-keybed {
+  --key-lit-right: rgb(255 209 216 / 0.92);
+  --key-lit-left: rgb(211 225 255 / 0.92);
+  --key-lit-right-black: rgb(242 71 95 / 0.8);
+  --key-lit-left-black: rgb(76 125 255 / 0.8);
+  --key-ok: rgb(110 231 183 / 0.9);
+  --key-ok-black: rgb(5 150 105 / 0.85);
+  --key-bad: rgb(253 164 175 / 0.92);
+  --key-bad-black: rgb(225 29 72 / 0.85);
+  --key-dot: #f2475f;
+  position: relative;
+}
+
+/* Dark case behind the keys, with the brand-red felt line across its top edge. */
+.ks-case {
+  background: linear-gradient(180deg, #232326, #1a1a1c);
+  border-radius: 0 0 8px 8px;
+}
+.ks-case-felt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  z-index: 20;
+  pointer-events: none;
+  background: #b4323e;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.35);
+}
+
+.ks-key {
+  position: relative;
+  padding: 0;
+  border: 0;
+  touch-action: none;
+  cursor: pointer;
+  transform: translateY(0);
+  /* Spring back up. */
+  transition:
+    transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 200ms ease-out;
+}
+.ks-key[data-down="true"] {
+  transform: translateY(2px);
+  /* Quick press down. */
+  transition:
+    transform 90ms ease-out,
+    background-color 200ms ease-out;
+}
+
+/* Tint layer: the only thing that recolours on a hit. */
+.ks-key::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: transparent;
+  transition: background-color 200ms ease-out;
+}
+.ks-key[data-tint="right"]::before { background-color: var(--key-lit-right); }
+.ks-key[data-tint="left"]::before { background-color: var(--key-lit-left); }
+.ks-key[data-tint="ok"]::before { background-color: var(--key-ok); }
+.ks-key[data-tint="bad"]::before { background-color: var(--key-bad); }
+.ks-key-black[data-tint="right"]::before { background-color: var(--key-lit-right-black); }
+.ks-key-black[data-tint="left"]::before { background-color: var(--key-lit-left-black); }
+.ks-key-black[data-tint="ok"]::before { background-color: var(--key-ok-black); }
+.ks-key-black[data-tint="bad"]::before { background-color: var(--key-bad-black); }
+
+/* Front lip: shortens when the key is down. */
+.ks-key::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  transform-origin: bottom;
+  transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ks-key[data-down="true"]::after {
+  transform: scaleY(0.6);
+  transition: transform 90ms ease-out;
+}
+
+.ks-key-white {
+  border-radius: 0 0 6px 6px;
+  background-image: linear-gradient(180deg, rgb(0 0 0 / 0.07) 0, rgb(0 0 0 / 0) 22%),
+    linear-gradient(180deg, #f1f0ec 0%, #fff 18%, #fff 86%, #e8e6e0 100%);
+  box-shadow:
+    inset -1px 0 0 rgb(0 0 0 / 0.16),
+    0 2px 2px rgb(0 0 0 / 0.35);
+}
+.ks-key-white::after {
+  height: 5px;
+  border-radius: 0 0 6px 6px;
+  background: #dad8d1;
+}
+.ks-key-white[data-down="true"] {
+  box-shadow:
+    inset -1px 0 0 rgb(0 0 0 / 0.16),
+    inset 0 4px 5px -2px rgb(0 0 0 / 0.28),
+    0 1px 1px rgb(0 0 0 / 0.3);
+}
+
+.ks-key-black {
+  border-radius: 0 0 4px 4px;
+  background-image: linear-gradient(180deg, transparent 0 6%, rgb(255 255 255 / 0.18) 6%, rgb(255 255 255 / 0) 51%),
+    linear-gradient(180deg, #3a3a3d 0%, #2b2b2e 40%, #0b0b0c 90%, #2a2a2d 100%);
+  box-shadow: 0 2px 3px rgb(0 0 0 / 0.5);
+}
+.ks-key-black::after {
+  height: 6px;
+  border-radius: 0 0 4px 4px;
+  background: #1c1c1e;
+}
+.ks-key-black[data-down="true"] {
+  box-shadow:
+    inset 0 4px 5px -2px rgb(0 0 0 / 0.6),
+    0 1px 1px rgb(0 0 0 / 0.5);
+}
+
+/* Next-expected key: a red dot with a 3 px halo. */
+.ks-key-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--key-dot);
+  box-shadow: 0 0 0 3px rgb(242 71 95 / 0.3);
+  pointer-events: none;
+}
+.ks-key-black .ks-key-dot { bottom: 12px; box-shadow: 0 0 0 3px rgb(242 71 95 / 0.4); }
+
+/* Flat variant (thumbnails): no depth, no lips, no case. */
+.ks-flat .ks-key { transform: none; transition: background-color 200ms ease-out; }
+.ks-flat .ks-key::after { display: none; }
+.ks-flat .ks-key-white {
+  background-image: none;
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px #d4d2cb;
+  border-radius: 0 0 3px 3px;
+}
+.ks-flat .ks-key-black {
+  background-image: none;
+  background-color: #1f1f22;
+  box-shadow: none;
+  border-radius: 0 0 2px 2px;
+}
+
+/* Reduced motion: colour changes only. */
+@media (prefers-reduced-motion: reduce) {
+  .ks-key,
+  .ks-key[data-down="true"] {
+    transform: none;
+    transition: background-color 0s;
+  }
+  .ks-key::after,
+  .ks-key[data-down="true"]::after {
+    transform: none;
+    transition: none;
+  }
+  .ks-key::before { transition: none; }
+}
