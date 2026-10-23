@@ -153,6 +153,11 @@ export class PlayAlongEngine {
     this.silenceGuide();
   }
 
+  /** Ends the run now, as if it had reached its end: notes not yet reached count as missed. */
+  endNow(): void {
+    this.finish();
+  }
+
   get isWaiting(): boolean {
     return this.waitingPitches.size > 0;
   }
