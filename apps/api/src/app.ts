@@ -32,6 +32,7 @@ import { songsRouter } from "./songs.js";
 import { instrumentsRouter } from "./instruments.js";
 import { archiveRouter } from "./archive.js";
 import { creditsRouter } from "./catalogue/credits.js";
+import { catalogueRouter } from "./catalogue/routes.js";
 import { progressionRouter } from "./progression/router.js";
 import { rewardExerciseAttempt, rewardQuizAnswer, type Rewards } from "./progression/rewards.js";
 import { exerciseSeconds } from "./progression/practice-time.js";
@@ -222,6 +223,7 @@ app.use(adminUsersRouter);
 app.use(songsRouter);
 app.use(instrumentsRouter);
 app.use(archiveRouter);
+app.use(catalogueRouter());
 app.use(progressionRouter);
 
 app.get("/users/me", async (req, res, next) => {
