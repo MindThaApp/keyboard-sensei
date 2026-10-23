@@ -164,6 +164,31 @@ const HANDS_OPTIONS: { value: PracticeHands; short: string }[] = [
   { value: "left", short: "Left" },
 ];
 
+/**
+ * The credit line a song's edition licence requires (CC BY / CC BY-SA Mutopia editions in
+ * the Essentials pack). A trailing URL becomes a link; easier versions say they are
+ * simplified from that edition, which ShareAlike asks us to make clear.
+ */
+function SongCredit({ attribution, simplified }: { attribution: string; simplified: boolean }) {
+  const match = /^(.*?)\s*(https?:\/\/\S+)$/.exec(attribution);
+  const text = match ? match[1] : attribution;
+  const url = match?.[2];
+  return (
+    <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400" aria-label="Credit">
+      {simplified ? "Simplified from: " : "Edition: "}
+      {text}
+      {url && (
+        <>
+          {" "}
+          <a href={url} target="_blank" rel="noreferrer" className="underline hover:text-slate-700 dark:hover:text-slate-200">
+            Source
+          </a>
+        </>
+      )}
+    </p>
+  );
+}
+
 export default function PlayAlongPage() {
   const { songId } = useParams<{ songId: string }>();
   const { data: practiceSong, error } = usePracticeSong(songId);
@@ -537,6 +562,7 @@ function SongPractice({ songId, practiceSong }: { songId: string; practiceSong: 
           <p className="truncate text-xs font-medium text-brass-700 dark:text-brass-300" aria-label="Practice mode">
             {summary}
           </p>
+          {song?.attribution && <SongCredit attribution={song.attribution} simplified={song.arrangement_level !== "full" || level !== "full"} />}
         </div>
 
         {/* The most-used practice controls, next to Start. */}

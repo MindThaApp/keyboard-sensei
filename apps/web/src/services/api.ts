@@ -11,7 +11,7 @@ export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly code?: string) {
     super(message);
   }
 }
@@ -22,13 +22,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...init.headers },
   });
-  const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  if (!response.ok) throw new ApiError(body?.error?.message ?? `Request failed (${response.status})`, response.status);
+  const body = await response.json().catch(() => null) as { error?: { message?: string; code?: string } } | null;
+  if (!response.ok) throw new ApiError(body?.error?.message ?? `Request failed (${response.status})`, response.status, body?.error?.code);
   return body as T;
 }
 
 export const login = (email: string, password: string) => request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-export const register = (email: string, password: string, display_name: string) => request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name }) });
+/** A session, or (with email verification on) a note that a confirmation link was sent. */
+export type RegisterResponse = AuthResponse | { verificationRequired: true; email: string };
+export const register = (email: string, password: string, display_name: string) => request<RegisterResponse>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name }) });
+export const googleSignIn = (credential: string) => request<AuthResponse & { created: boolean }>("/auth/google", { method: "POST", body: JSON.stringify({ credential }) });
+export const forgotPassword = (email: string) => request<{ ok: true }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+export const resetPassword = (token: string, password: string) => request<{ ok: true }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) });
+export const verifyEmail = (token: string) => request<AuthResponse>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) });
+export const resendVerification = (email: string) => request<{ ok: true }>("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) });
+/** Signed in: confirm with the password, or with Google for an account linked to it. */
+export const deleteMyAccount = (confirm: { password: string } | { google_credential: string }) => request<{ ok: true }>("/users/me", { method: "DELETE", body: JSON.stringify(confirm) });
+/** Signed out (the public /delete-account page). */
+export const deleteAccountWithPassword = (email: string, password: string) => request<{ ok: true }>("/auth/delete-account", { method: "POST", body: JSON.stringify({ email, password }) });
 export const getLessons = () => request<LessonListItem[]>("/lessons");
 export const getLesson = (id: string) => request<LessonDetail>(`/lessons/${encodeURIComponent(id)}`);
 export const getProgress = () => request<UserProgress>("/users/me/progress");
@@ -168,6 +179,8 @@ export interface Song {
   arrangement_group?: string | null;
   /** "beginner" | "intermediate" | "full" for an Essentials version; null otherwise. */
   arrangement_level?: string | null;
+  /** Credit line the source's licence requires (Essentials: Mutopia typesetter + licence + link). */
+  attribution?: string | null;
 }
 export interface ArchiveEntryResult {
   id: string;
