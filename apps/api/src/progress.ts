@@ -1,4 +1,5 @@
-import { ProgressStatus, type Prisma } from "@prisma/client";
+import { ProgressStatus, type Prisma, type PrismaClient } from "@prisma/client";
+import type { Lesson } from "@keyboard-sensei/shared-types";
 import { lessonsUnlockedBy, validateLesson, type LessonCompletion } from "@keyboard-sensei/lesson-engine";
 
 type ProgressClient = Pick<Prisma.TransactionClient, "userProgress">;
@@ -92,4 +93,60 @@ export async function recordLessonOutcome(
   for (const lesson of lessonsUnlockedBy(lessons, lessonId, completedIds)) {
     await unlockLesson(tx, userId, lesson.id);
   }
+}
+
+export interface UnlockBackfillReport {
+  users: number;
+  unlocked: number;
+}
+
+/**
+ * Store an `unlocked` row for every lesson a learner has earned but has no open row for:
+ * all of its current prerequisites are complete, or all of its prerequisites from before a
+ * reorder (`legacyPrerequisites`) are. The seed runs this after writing content.
+ *
+ * - Read-time resolution (resolveLessonStatus) already opens a lesson whose current
+ *   prerequisites are met; storing the row makes that permanent.
+ * - The legacy rule is what keeps a reorder from ever taking a lesson away: a learner who
+ *   could open a lesson under the old chain keeps it.
+ * - Idempotent and only ever promotes: unlockLesson changes nothing but a `locked` row, so
+ *   completed and unlocked rows are never touched.
+ */
+export async function backfillUnlocks(
+  db: PrismaClient,
+  lessons: readonly Pick<Lesson, "id" | "unlockCriteria">[],
+  legacyPrerequisites: Readonly<Record<string, readonly string[]>>,
+): Promise<UnlockBackfillReport> {
+  const rows = await db.userProgress.findMany({
+    where: { status: { in: [ProgressStatus.completed, ProgressStatus.unlocked] } },
+    select: { user_id: true, lesson_id: true, status: true },
+  });
+  const openByUser = new Map<string, Set<string>>();
+  const completedByUser = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!openByUser.has(row.user_id)) {
+      openByUser.set(row.user_id, new Set());
+      completedByUser.set(row.user_id, new Set());
+    }
+    openByUser.get(row.user_id)!.add(row.lesson_id);
+    if (row.status === ProgressStatus.completed) completedByUser.get(row.user_id)!.add(row.lesson_id);
+  }
+
+  const report: UnlockBackfillReport = { users: 0, unlocked: 0 };
+  for (const [userId, completed] of completedByUser) {
+    if (completed.size === 0) continue;
+    const open = openByUser.get(userId)!;
+    const earned = lessons.filter((lesson) => {
+      if (open.has(lesson.id)) return false;
+      const rules = [lesson.unlockCriteria.requiresLessonIds, legacyPrerequisites[lesson.id] ?? []];
+      return rules.some((required) => required.length > 0 && required.every((id) => completed.has(id)));
+    });
+    if (earned.length === 0) continue;
+    await db.$transaction(async (tx) => {
+      for (const lesson of earned) await unlockLesson(tx, userId, lesson.id);
+    });
+    report.users += 1;
+    report.unlocked += earned.length;
+  }
+  return report;
 }
