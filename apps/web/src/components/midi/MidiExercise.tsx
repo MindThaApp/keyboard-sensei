@@ -6,7 +6,7 @@ import VirtualPiano from "../piano/VirtualPiano";
 import { Advanced, Button, Card, Chip, Slider, Toggle, Toolbar } from "../ui";
 import { useExperienceMode } from "../ui/useExperienceMode";
 import { coveredNoteIds, groupByStart } from "./exerciseCoverage";
-import type { FocusMode } from "./useFocusModeShim";
+import type { FocusModeApi } from "../../hooks/useFocusMode";
 import NotationRenderer from "../notation/NotationRenderer";
 import { COUNT_IN_BEATS, useExerciseAttempt, type RecordingClock } from "./useExerciseAttempt";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
@@ -56,7 +56,7 @@ interface Props {
   /** Primary action shown inside the result card once the exercise is passed (e.g. "Next step"). */
   nextAction?: { label: string; onClick: () => void };
   /** When given, the exercise offers focus mode and reduces itself to the essentials while it is active. */
-  focus?: FocusMode;
+  focus?: FocusModeApi;
 }
 
 // Re-exported: the pause-invisible-to-scoring clock is tested from here.
@@ -501,8 +501,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           soundingNotes={listenNotes}
           feedbackByNote={feedback}
           showControls={advanced}
-          showHint={!inFocus}
-          maxWhiteKeyHeightPx={220}
+          showHint={inFocus ? false : undefined}
         />
 
         {/* Speed, metronome and highlighting sit behind a disclosure: they are adjustments,
