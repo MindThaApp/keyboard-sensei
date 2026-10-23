@@ -1,7 +1,8 @@
 import { ClassicRenderer } from "../waterfall";
-import type { NotesStyle, WaterfallRenderer } from "./types";
+import type { NotesStyle, NotesStyleFallback, WaterfallRenderer } from "./types";
 
-export type { JudgementMark, NotesStyle, WaterfallFrame, WaterfallRenderer } from "./types";
+export type { JudgementMark, NotesStyle, NotesStyleFallback, WaterfallFrame, WaterfallRenderer } from "./types";
+export { NOTES_STYLE_FALLBACK_EVENT } from "./types";
 
 export interface NotesStyleOption {
   value: NotesStyle;
@@ -24,6 +25,21 @@ export const NOTES_STYLES: readonly NotesStyleOption[] = [
 
 export function isNotesStyle(value: unknown): value is NotesStyle {
   return NOTES_STYLES.some((option) => option.value === value);
+}
+
+const styleLabel = (style: NotesStyle): string => NOTES_STYLES.find((entry) => entry.value === style)?.label ?? style;
+
+/** What the page says when a style hands over to another one. */
+export function styleFallbackToast({ style, fallback, reason }: NotesStyleFallback): { title: string; body: string } {
+  const from = styleLabel(style);
+  const to = styleLabel(fallback);
+  const why =
+    reason === "unsupported"
+      ? `${from} needs WebGL 2, which isn't available on this device.`
+      : reason === "performance"
+        ? `${from} was too heavy for this device, so the notes stay smooth in ${to}.`
+        : `${from} couldn't be loaded. Check your connection and try again.`;
+  return { title: `Showing ${to} notes`, body: why };
 }
 
 /** The renderer for a style, falling back to Classic for one that is not available. */

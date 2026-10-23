@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import { noteMotion, type NotePalette } from "../../notePalette";
 import { ClassicRenderer, judgementMark, type KeyboardGeometry } from "../../waterfall";
-import type { WaterfallFrame, WaterfallRenderer } from "../types";
+import { NOTES_STYLE_FALLBACK_EVENT, type NotesStyleFallback, type WaterfallFrame, type WaterfallRenderer } from "../types";
 import { Bloom } from "./bloom";
 import {
   clearMarks,
@@ -41,7 +41,9 @@ import { QualityGovernor, TIERS, type QualityTier } from "./qualityGovernor";
  * - Canvas: WebGL draws into a canvas of its own, placed where the host's canvas was
  *   (which is hidden meanwhile and restored on dispose). A canvas can only ever have one
  *   kind of context, and the host's may already be a 2D one from the Classic style.
- * - No WebGL 2: this falls back to Classic on the host canvas, with a notice.
+ * - No WebGL 2: this falls back to Classic on the host canvas. Too slow even at the
+ *   Medium tier: the governor's lowest step hands over to Neon 2D (2D canvas, no
+ *   `three`). Either way the page is told, through NOTES_STYLE_FALLBACK_EVENT.
  */
 
 /** Burst sizes per tier; early/late use half. */
@@ -57,7 +59,6 @@ const REFLECTION_OPACITY = 0.15;
 const FLOOR_PX = 28;
 /** In wait mode the song freezes at the note's start; a bar this close to the hit line is the target. */
 const WAITING_WINDOW_S = 0.05;
-const FALLBACK_EVENT = "ks:notes-style-fallback";
 
 interface PaletteColors {
   miss: Rgb;
@@ -143,30 +144,10 @@ class GpuTimer {
   }
 }
 
-/** A short notice for when Neon 3D cannot run here, plus an event the host may turn into a toast. */
-function announceFallback(reason: string): HTMLElement | null {
-  if (typeof window === "undefined") return null;
-  window.dispatchEvent(new CustomEvent(FALLBACK_EVENT, { detail: { style: "neon3d", fallback: "classic", reason } }));
-  const notice = document.createElement("div");
-  notice.setAttribute("role", "status");
-  notice.textContent = "Neon 3D needs WebGL 2, which isn't available here. Showing Classic notes.";
-  Object.assign(notice.style, {
-    position: "fixed",
-    left: "50%",
-    top: "calc(76px + env(safe-area-inset-top))",
-    transform: "translateX(-50%)",
-    maxWidth: "calc(100% - 32px)",
-    padding: "10px 14px",
-    borderRadius: "14px",
-    background: "rgb(20 21 30 / 0.94)",
-    color: "#fff",
-    font: "500 14px/1.35 system-ui, -apple-system, sans-serif",
-    zIndex: "60",
-    pointerEvents: "none",
-  } satisfies Partial<CSSStyleDeclaration>);
-  document.body.append(notice);
-  window.setTimeout(() => notice.remove(), 6000);
-  return notice;
+/** Tell the page this style handed over to another one, so it can say so in a toast. */
+function announceFallback(detail: NotesStyleFallback): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<NotesStyleFallback>(NOTES_STYLE_FALLBACK_EVENT, { detail }));
 }
 
 let liveRenderers = 0;
@@ -185,8 +166,9 @@ export class Neon3DRenderer implements WaterfallRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private hostWatcher: MutationObserver | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
-  private fallback: ClassicRenderer | null = null;
-  private notice: HTMLElement | null = null;
+  /** Classic (no WebGL 2) or Neon 2D (too slow), drawing on the host canvas instead. */
+  private fallback: WaterfallRenderer | null = null;
+  private handingOff = false;
   private contextLost = false;
   private disposed = false;
 
@@ -253,7 +235,7 @@ export class Neon3DRenderer implements WaterfallRenderer {
       if (!context) throw new Error("WebGL 2 unavailable");
       renderer = new THREE.WebGLRenderer({ canvas, context, alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
     } catch (error) {
-      this.useClassic(hostCanvas, error instanceof Error ? error.message : "WebGL 2 unavailable");
+      this.useClassic(hostCanvas);
       return;
     }
 
@@ -415,8 +397,12 @@ export class Neon3DRenderer implements WaterfallRenderer {
     this.disposed = true;
     this.fallback?.dispose();
     this.fallback = null;
-    this.notice?.remove();
-    this.notice = null;
+    this.releaseWebGL();
+    this.host = null;
+  }
+
+  /** Free every GPU resource and the context, remove our canvas and show the host's again. */
+  private releaseWebGL(): void {
     this.hostWatcher?.disconnect();
     this.hostWatcher = null;
     this.capture = null;
@@ -443,7 +429,6 @@ export class Neon3DRenderer implements WaterfallRenderer {
       this.canvas = null;
     }
     if (this.host) this.host.style.display = this.hostDisplay;
-    this.host = null;
     this.blocks = null;
     this.flats = null;
     this.marks = null;
@@ -489,11 +474,33 @@ export class Neon3DRenderer implements WaterfallRenderer {
 
   // ── Internals ─────────────────────────────────────────────────────────────
 
-  private useClassic(hostCanvas: HTMLCanvasElement, reason: string): void {
+  private useClassic(hostCanvas: HTMLCanvasElement): void {
     const classic = new ClassicRenderer();
     classic.mount(hostCanvas);
     this.fallback = classic;
-    this.notice = announceFallback(reason);
+    announceFallback({ style: "neon3d", fallback: "classic", reason: "unsupported" });
+  }
+
+  /**
+   * The governor's lowest step: still too slow at Medium, so hand over to Neon 2D on the
+   * host canvas. Until its chunk arrives the "minimal" tier keeps drawing; if it cannot be
+   * loaded (offline), minimal simply stays.
+   */
+  private handOffToNeon2D(): void {
+    if (this.handingOff) return;
+    this.handingOff = true;
+    void import("../neon2d/Neon2DRenderer")
+      .then(({ create }) => {
+        const host = this.host;
+        if (this.disposed || !host) return;
+        this.releaseWebGL();
+        const next = create();
+        next.mount(host);
+        if (this.geometry) next.resize(this.geometry, this.cssHeight, this.dpr);
+        this.fallback = next;
+        announceFallback({ style: "neon3d", fallback: "neon2d", reason: "performance" });
+      })
+      .catch(() => undefined);
   }
 
   private readonly onContextLost = (event: Event): void => {
@@ -712,7 +719,9 @@ export class Neon3DRenderer implements WaterfallRenderer {
     }
     const nowMs = performance.now();
     const next = this.governor.sample({ costMs: cost, nowMs, playing, bursting: nowMs - this.lastBurstMs < BURST_PHASE_MS });
-    if (next) this.applyTier(next);
+    if (!next) return;
+    this.applyTier(next);
+    if (next === "minimal") this.handOffToNeon2D();
   }
 
   private readCapture(renderer: THREE.WebGLRenderer): void {
