@@ -4,14 +4,25 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { MidiProvider } from "./components/midi/MidiContext";
 import { AuthProvider } from "./contexts/AuthContext";
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { AppearanceProvider } from "./contexts/AppearanceContext";
+import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ThemeProvider><BrowserRouter><AuthProvider><MidiProvider><App /></MidiProvider></AuthProvider></BrowserRouter></ThemeProvider>
+    <AppearanceProvider>
+      <ExperienceProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <MidiProvider>
+              <App />
+            </MidiProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ExperienceProvider>
+    </AppearanceProvider>
   </React.StrictMode>,
 );
 
