@@ -1,6 +1,7 @@
 import { useServerConfig } from "../../services/serverConfig";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import SongDownloadButtons from "./SongDownloadButtons";
 import {
   adminDeleteSong,
   adminUpdateSong,
@@ -610,6 +611,7 @@ export default function SongLibrarySection() {
                 <p className="truncate text-sm font-medium">{song.title}</p>
                 <p className="truncate text-xs text-slate-500">{song.artist}</p>
               </div>
+              <SongDownloadButtons song={song} />
               {(song.mine || isAdmin) && (
                 <>
                   <button

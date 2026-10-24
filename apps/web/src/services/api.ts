@@ -193,7 +193,10 @@ export interface Song {
   work_id?: string | null;
   /** Effective quality tier (an admin override wins); absent from older servers. */
   quality_tier?: "verified" | "good" | "unrated" | "low";
+  /** What this viewer may download of the song (server-decided; the download route re-checks). Absent from older servers. */
+  downloads?: Record<SongExportFormat, boolean>;
 }
+export type SongExportFormat = "midi" | "musicxml" | "mei";
 export interface ArchiveEntryResult {
   id: string;
   title: string;
@@ -357,6 +360,43 @@ export const searchArchive = (q: string, offset = 0, limit = 30) =>
 
 export const importArchiveEntry = (id: string) =>
   request<{ id: string; title: string; artist: string }>(`/archive/${encodeURIComponent(id)}/import`, { method: "POST" });
+
+const EXPORT_EXTENSION: Record<SongExportFormat, string> = { midi: "mid", musicxml: "mxl", mei: "mei" };
+
+/** The file name from a Content-Disposition header (filename* wins), or null. */
+export function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]!.trim());
+    } catch {
+      /* fall through to the plain parameter */
+    }
+  }
+  return /filename\s*=\s*"([^"]+)"/i.exec(header)?.[1] ?? null;
+}
+
+/** Fetches the file with the sign-in token (a plain link cannot send it) and saves it. */
+export async function downloadSong(song: Pick<Song, "id" | "title">, format: SongExportFormat): Promise<void> {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/songs/${encodeURIComponent(song.id)}/file?download=1&format=${format}`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: { message?: string; code?: string } } | null;
+    throw new ApiError(body?.error?.message ?? `Download failed (${response.status})`, response.status, body?.error?.code);
+  }
+  const name = filenameFromDisposition(response.headers.get("content-disposition")) ?? `${song.title}.${EXPORT_EXTENSION[format]}`;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 export const deleteSong = (id: string) => request<{ ok: true }>(`/songs/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const updateSong = (id: string, fields: Partial<{ title: string; artist: string; genre: SongGenre }>) =>
   request<Song>(`/songs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
