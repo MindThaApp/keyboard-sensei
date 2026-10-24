@@ -288,3 +288,19 @@ describe("GET /instruments/:id/sampler", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("GET /instruments/:id/samples/:note", () => {
+  it("is a 404, not a lookup on Object, for a note named after a built-in property", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ks-pack-"));
+    await writeFile(path.join(dir, "layout.json"), JSON.stringify({ type: "notes", notes: { C4: { file: "C4.mp3", contentType: "audio/mpeg" } } }));
+    await writeFile(path.join(dir, "C4.mp3"), "mp3");
+    mockDb([row({ id: "seed-notes", uploader_id: null, pack_path: dir })]);
+
+    for (const note of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      const response = await callInstrumentsRouter({ method: "GET", url: `/instruments/seed-notes/samples/${note}`, userId: "owner-1" });
+      expect(response.status, note).toBe(404);
+    }
+    const real = await callInstrumentsRouter({ method: "GET", url: "/instruments/seed-notes/samples/C4", userId: "owner-1" });
+    expect(real.status).toBe(200);
+  });
+});
