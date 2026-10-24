@@ -212,7 +212,9 @@ instrumentsRouter.get("/instruments/:id/samples/:note", async (req, res, next) =
       res.status(404).json({ error: { code: "not_found", message: "Instrument pack not found on disk" } });
       return;
     }
-    const sample = layout.type === "single" ? layout : layout.notes[req.params.note];
+    // Own keys only: a note named "constructor" or "__proto__" must not reach Object's members.
+    const note = req.params.note;
+    const sample = layout.type === "single" ? layout : Object.hasOwn(layout.notes, note) ? layout.notes[note] : undefined;
     if (!sample) {
       res.status(404).json({ error: { code: "not_found", message: "Sample note not found" } });
       return;
