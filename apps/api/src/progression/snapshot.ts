@@ -86,7 +86,18 @@ export interface Snapshot {
   challengeAttempts: ChallengeAttemptRow[];
 }
 
-const asDate = (value: unknown): Date => new Date(value as string);
+/**
+ * Prisma's DateTime columns are `timestamp without time zone` holding UTC. to_jsonb
+ * renders them with no offset ("2026-10-24T00:30:00.123"), which `new Date()` would
+ * read as the server's local time, shifting every attempt by the server's UTC offset
+ * and moving attempts near midnight onto the wrong day.
+ */
+export const asDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  const text = String(value);
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  return new Date(hasZone ? text : `${text}Z`);
+};
 const asNumber = (value: unknown): number => (typeof value === "number" ? value : Number(value ?? 0));
 
 function songInfo(row: {
