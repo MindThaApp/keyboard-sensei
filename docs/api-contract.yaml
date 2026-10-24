@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: OctaviApp API
+  title: Midivory API
   version: 0.2.0
   description: Authoritative frontend/backend contract.
 servers:

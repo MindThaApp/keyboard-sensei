@@ -38,7 +38,7 @@ describe("scrubString", () => {
     expect(scrubString("at run (/Users/ada/dev/Keyboard Sensei/apps/api/src/app.ts:12:3)")).not.toContain("ada");
     expect(scrubString("/home/ada/apps/keyboard-sensei/server.js")).toBe("/~/apps/keyboard-sensei/server.js");
     expect(scrubString("C:\\Users\\Ada Lovelace\\AppData\\x.js")).toBe("~\\AppData\\x.js");
-    expect(scrubString("file:///data/user/0/com.octaviapp.app/files/a.mid")).toBe(
+    expect(scrubString("file:///data/user/0/com.midivory.app/files/a.mid")).toBe(
       "file:///data/app/files/a.mid",
     );
   });

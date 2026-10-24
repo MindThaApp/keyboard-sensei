@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Android build environment for OctaviApp (macOS, Linux, WSL).
+# Android build environment for Midivory (macOS, Linux, WSL).
 #
 # Source it, don't run it:   source apps/mobile/scripts/android-env.sh
 #

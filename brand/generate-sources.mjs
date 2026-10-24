@@ -1,10 +1,10 @@
-// Writes the OctaviApp mark sources from one description of the "Ring":
+// Writes the Midivory mark sources from one description of the "Ring":
 // twelve keys in a circle, one lit red, a glass hub.
 //
 //   node brand/generate-sources.mjs
 //
 // Output:
-//   brand/octaviapp-icon.svg                       master, 108x108, #background + #foreground
+//   brand/midivory-icon.svg                       master, 108x108, #background + #foreground
 //   apps/web/public/favicon.svg                    simplified: ring and one red dot
 //   apps/mobile/.../drawable/ic_launcher_*.xml     Android adaptive icon layers
 //
@@ -42,7 +42,7 @@ const keysSvg = Array.from({ length: 12 }, (_, i) => {
 }).join("");
 
 const master = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="512" height="512">
-  <!-- OctaviApp "Ring": twelve keys in a circle (an octave), one lit red, a glass hub.
+  <!-- Midivory "Ring": twelve keys in a circle (an octave), one lit red, a glass hub.
        #background and #foreground are separate so the same file feeds the Android adaptive
        icon, the maskable PWA icon and the favicons. The mark stays inside the 66 unit safe zone
        when #foreground is scaled to 0.9. -->
@@ -64,7 +64,7 @@ const master = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" wi
 
 /* ---------- simplified favicon: a ring and one red dot, no hub, no keys ---------- */
 const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <!-- Simplified OctaviApp mark for 16 to 32 px. Twelve keys blur into a spinner at this size,
+  <!-- Simplified Midivory mark for 16 to 32 px. Twelve keys blur into a spinner at this size,
        so the favicon keeps only the ring and the one red dot. -->
   <rect width="32" height="32" rx="7" fill="#17171A"/>
   <circle cx="16" cy="16" r="8.6" fill="none" stroke="${IVORY}" stroke-width="3.6"/>
@@ -149,7 +149,7 @@ const write = (file, content) => {
   fs.writeFileSync(file, content);
 };
 
-write(path.join(root, "brand/octaviapp-icon.svg"), master);
+write(path.join(root, "brand/midivory-icon.svg"), master);
 write(path.join(root, "apps/web/public/favicon.svg"), favicon);
 write(path.join(res, "drawable/ic_launcher_foreground.xml"), foregroundXml);
 write(path.join(res, "drawable/ic_launcher_monochrome.xml"), monochromeXml);

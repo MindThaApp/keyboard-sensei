@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-/** The Ring: twelve keys around a glass hub, one lit red. Source of truth: brand/octaviapp-icon.svg. */
+/** The Ring: twelve keys around a glass hub, one lit red. Source of truth: brand/midivory-icon.svg. */
 const KEY_ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
 const LIT_KEY_ANGLE = 30;
 
@@ -60,7 +60,7 @@ export function BrandMark({ size = 32, className }: { size?: number; className?:
   );
 }
 
-/** The symbol and the name. The name is always spelled "OctaviApp". */
+/** The symbol and the name. The name is always spelled "Midivory"; "ivory" is set in a lighter weight. */
 export default function Wordmark({ size = "md", className = "" }: { size?: "md" | "lg"; className?: string }) {
   const large = size === "lg";
   return (
@@ -70,7 +70,7 @@ export default function Wordmark({ size = "md", className = "" }: { size?: "md" 
         className={`font-display font-extrabold tracking-tighter ${large ? "text-3xl" : "text-lg"}`}
         style={{ fontWeight: 800, letterSpacing: "-0.04em" }}
       >
-        OctaviApp
+        Mid<span style={{ fontWeight: 500 }}>ivory</span>
       </span>
     </span>
   );

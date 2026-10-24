@@ -10,8 +10,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const devApi = process.env.KS_ANDROID_DEV_API === "1";
 
 const config: CapacitorConfig = {
-  appId: "com.octaviapp.app",
-  appName: "OctaviApp",
+  appId: "com.midivory.app",
+  appName: "Midivory",
   // The production build of apps/web. Build it first (`pnpm build:web`).
   webDir: "../web/dist",
   server: {

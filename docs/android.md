@@ -4,7 +4,7 @@ The Android app wraps the `apps/web` production build in a Capacitor 8 shell
 (`apps/mobile`). Everything the user sees is the same React app; the native
 side adds hardware MIDI, keep-awake, the back button and the Play packaging.
 
-- appId `com.octaviapp.app`, name "OctaviApp"
+- appId `com.midivory.app`, name "Midivory"
 - minSdk 24 (Android 7), targetSdk/compileSdk 36 (Android 16)
 - The page is served from `https://localhost` inside the app
 
@@ -20,7 +20,7 @@ apps/mobile/
     build-web.mjs              builds apps/web; requires an https VITE_API_URL
     generate-android-assets.sh splash images from the PWA icon (launcher icons: brand/)
   android/                     the Gradle project (committed)
-    app/src/main/java/com/octaviapp/app/
+    app/src/main/java/com/midivory/app/
       MainActivity.kt          registers the MIDI plugin
       midi/NativeMidiPlugin.kt android.media.midi: USB + Bluetooth LE input
       midi/MidiMessageParser.kt byte stream -> note on/off + CC messages
@@ -128,13 +128,13 @@ minified) signed with the debug key, with:
   `192.168.4.4` (no subdomains, no cleartext).
 
 The CA certificate is not in git. Gradle copies it in when building `home`, from
-the file named by `OCTAVIAPP_HOME_CA` (the copy, `app/src/home/res/raw/`, is
+the file named by `MIDIVORY_HOME_CA` (the copy, `app/src/home/res/raw/`, is
 gitignored). The build fails with a clear message if the variable is unset or
 the file is missing or not PEM. Release/Play builds never need it and are
 byte-for-byte unchanged (system CAs only).
 
 ```sh
-export OCTAVIAPP_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt
+export MIDIVORY_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt
 apps/mobile/scripts/build-home.sh
 # -> apps/mobile/android/app/build/outputs/apk/home/app-home.apk
 ```
@@ -207,7 +207,7 @@ keytool -genkeypair -v \
   -keystore keyboard-sensei-upload.jks \
   -alias upload \
   -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=OctaviApp, O=OctaviApp"
+  -dname "CN=Midivory, O=Midivory"
 ```
 
 `keytool` asks for the keystore password (and uses the same one for the key by
@@ -269,7 +269,9 @@ fingerprint production users present; register it too.
 
 1. Create a Google Play developer account (one-time fee; identity
    verification can take a few days).
-2. **Create app**: name "OctaviApp", app (not game), free, accept the
+2. **Create app**: name "Midivory: Piano MIDI Player" (store title; the
+   installed app is just "Midivory"), short description starting "Piano MIDI
+   Player", app (not game), free, accept the
    declarations.
 3. Complete the **App content** forms: privacy policy URL (required; the app
    has accounts and stores practice history), data safety (account email,

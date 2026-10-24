@@ -107,7 +107,7 @@ describe("Batch D authored scores", () => {
   it("credits the source and says the harmony is original, and is public domain and eligible once published", () => {
     for (const piece of authored) {
       const credit = attributionFor(piece, null);
-      expect(credit, piece.slug).toContain("arranged for OctaviApp");
+      expect(credit, piece.slug).toContain("arranged for Midivory");
       expect(credit).toContain("Harmony and bass are original to this project.");
       expect(credit).toMatch(/Public Domain\.$/);
       expect(fileLicenceOf(piece)).toBe("public-domain");

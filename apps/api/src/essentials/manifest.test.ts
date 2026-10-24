@@ -41,7 +41,7 @@ describe("Essentials manifest", () => {
       expect(new Set(source.verifiedAgainst.map((ref) => ref.url)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
       expect(new Set(source.verifiedAgainst.map((ref) => ref.title)).size, `${piece.slug}: two sources`).toBeGreaterThanOrEqual(2);
       expect(contentRights(piece)).toBe("public-domain");
-      expect(attribution(piece)).toContain("arranged for OctaviApp");
+      expect(attribution(piece)).toContain("arranged for Midivory");
     }
     const authored = new Set(ESSENTIALS.filter((piece) => isAuthored(piece.source)).map((piece) => piece.slug));
     expect(Object.keys(AUTHORED_SCORES).filter((slug) => !authored.has(slug))).toEqual([]);
