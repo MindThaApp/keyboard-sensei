@@ -8,7 +8,7 @@ import { pathLabel, pathsInOrder } from "../../utils/paths";
 import { songPracticeLink } from "../../utils/practiceLinks";
 import { LEVEL_LABELS } from "../play/practiceSession";
 import { levelTitle } from "../ui/glossary";
-import { Advanced, Button, Card, EmptyState, ErrorState, ProgressRing, SegmentedControl, Skeleton } from "../ui";
+import { Button, Card, EmptyState, ErrorState, ProgressRing, SegmentedControl, Skeleton } from "../ui";
 import PracticeHistory from "./PracticeHistory";
 import { buildWeek, formatMinutes, StarRating, WeekDots } from "./ProgressBits";
 
@@ -236,28 +236,26 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
           <StarsCard progression={progression} />
         </div>
       </div>
-      <Advanced>
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          <Card as="section" aria-label="Skills">
-            <h2 className="mb-3 text-headline text-label">Skills</h2>
-            <Skills progression={progression} />
-            <p className="mt-3 text-footnote text-label-2a">Earned from completed lessons (more for more stars) and from song stars.</p>
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <Card as="section" aria-label="Skills">
+          <h2 className="mb-3 text-headline text-label">Skills</h2>
+          <Skills progression={progression} />
+          <p className="mt-3 text-footnote text-label-2a">Earned from completed lessons (more for more stars) and from song stars.</p>
+        </Card>
+        {progression.recentXp.length > 0 && (
+          <Card as="section" aria-label="Recent points">
+            <h2 className="mb-2 text-headline text-label">Recent points</h2>
+            <ul className="space-y-1.5">
+              {progression.recentXp.map((entry, index) => (
+                <li key={index} className="flex justify-between gap-3 text-subhead text-label-2">
+                  <span className="truncate">{entry.reason}</span>
+                  <span className="shrink-0 font-semibold tabular-nums text-tint">+{entry.amount}</span>
+                </li>
+              ))}
+            </ul>
           </Card>
-          {progression.recentXp.length > 0 && (
-            <Card as="section" aria-label="Recent points">
-              <h2 className="mb-2 text-headline text-label">Recent points</h2>
-              <ul className="space-y-1.5">
-                {progression.recentXp.map((entry, index) => (
-                  <li key={index} className="flex justify-between gap-3 text-subhead text-label-2">
-                    <span className="truncate">{entry.reason}</span>
-                    <span className="shrink-0 font-semibold tabular-nums text-tint">+{entry.amount}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-      </Advanced>
+        )}
+      </div>
     </div>
   );
 }

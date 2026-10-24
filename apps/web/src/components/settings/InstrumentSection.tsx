@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
 import { pianoSynth } from "../../utils/synth";
-import { Advanced } from "../ui";
 import { describeInstrument } from "./instrumentText";
 import { clearInstrumentPickerCache, groupInstruments } from "../instruments/InstrumentPicker";
 
@@ -252,16 +251,14 @@ export default function InstrumentSection() {
             Choose the sampled voice used across lessons, Practice Gym, and Play-Along, or manage your custom packs.
           </p>
         </div>
-        <Advanced>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "upload" ? null : "upload"))}>
-              Upload pack
-            </button>
-            <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "url" ? null : "url"))}>
-              Import URL
-            </button>
-          </div>
-        </Advanced>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "upload" ? null : "upload"))}>
+            Upload pack
+          </button>
+          <button type="button" className="secondary-button text-sm" onClick={() => setAdding((value) => (value === "url" ? null : "url"))}>
+            Import URL
+          </button>
+        </div>
       </div>
 
       {adding && (
