@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <Prose>
         <p className="text-sm text-slate-500 dark:text-slate-400">Last updated {PRIVACY_LAST_UPDATED}</p>
         <p>
-          OctaviApp is a piano-learning app. This page explains, in plain English, what we store about you, why,
+          Midivory is a piano-learning app. This page explains, in plain English, what we store about you, why,
           who else sees any of it, and how to delete it. We don't sell your data, show ads, or use analytics or
           tracking tools. The only diagnostic tool is the anonymous crash reporting described below, which you can turn off.
         </p>
@@ -161,7 +161,7 @@ export default function PrivacyPage() {
 
         <h2>Children</h2>
         <p>
-          OctaviApp isn't directed at children under 13. If a younger child wants to learn, a parent or guardian
+          Midivory isn't directed at children under 13. If a younger child wants to learn, a parent or guardian
           should create and manage the account. If you think a child under 13 has given us personal data, email us and
           we'll delete it.
         </p>

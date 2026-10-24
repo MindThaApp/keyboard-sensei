@@ -1,4 +1,4 @@
-# Restore OctaviApp backups
+# Restore Midivory backups
 
 Restore the PostgreSQL custom-format dump while the API is stopped or in maintenance:
 

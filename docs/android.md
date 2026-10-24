@@ -4,7 +4,7 @@ The Android app wraps the `apps/web` production build in a Capacitor 8 shell
 (`apps/mobile`). Everything the user sees is the same React app; the native
 side adds hardware MIDI, keep-awake, the back button and the Play packaging.
 
-- appId `com.midivory.app`, name "OctaviApp"
+- appId `com.midivory.app`, name "Midivory"
 - minSdk 24 (Android 7), targetSdk/compileSdk 36 (Android 16)
 - The page is served from `https://localhost` inside the app
 
@@ -207,7 +207,7 @@ keytool -genkeypair -v \
   -keystore keyboard-sensei-upload.jks \
   -alias upload \
   -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=OctaviApp, O=OctaviApp"
+  -dname "CN=Midivory, O=Midivory"
 ```
 
 `keytool` asks for the keystore password (and uses the same one for the key by
@@ -269,7 +269,9 @@ fingerprint production users present; register it too.
 
 1. Create a Google Play developer account (one-time fee; identity
    verification can take a few days).
-2. **Create app**: name "OctaviApp", app (not game), free, accept the
+2. **Create app**: name "Midivory: Piano MIDI Player" (store title; the
+   installed app is just "Midivory"), short description starting "Piano MIDI
+   Player", app (not game), free, accept the
    declarations.
 3. Complete the **App content** forms: privacy policy URL (required; the app
    has accounts and stores practice history), data safety (account email,

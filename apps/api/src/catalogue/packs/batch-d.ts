@@ -79,7 +79,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Sakura", kind: "title" }, { alias: "Cherry Blossoms", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The tune (the Japanese folk song, 1888 school songbook form) as transcribed in the Essen Folksong Collection (test0, no. 5), with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The tune (the Japanese folk song, 1888 school songbook form) as transcribed in the Essen Folksong Collection (test0, no. 5), with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://github.com/cuthbertLab/music21/blob/master/music21/corpus/essenFolksong/test0.abc",
       score: sakuraSakura,
     },
@@ -91,7 +91,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Korobeyniki", kind: "title" }, { alias: "Tetris theme", kind: "nickname" }, { alias: "Коробейники", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The folk tune (Nikolay Nekrasov's 1861 poem set to a traditional air) as transcribed in The Session, setting 24502 by SturdyPete (moved from E minor to A minor), checked against setting 32073 by Erin Hennessy. Played twice, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The folk tune (Nikolay Nekrasov's 1861 poem set to a traditional air) as transcribed in The Session, setting 24502 by SturdyPete (moved from E minor to A minor), checked against setting 32073 by Erin Hennessy. Played twice, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/13747#setting24502",
       score: korobeiniki,
     },
@@ -104,7 +104,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "The Bonnie Banks o' Loch Lomond", kind: "title" }, { alias: "Bonnie Banks of Loch Lomond", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The traditional air as transcribed in The Session, setting 25640 by TomBom (moved from D to G), checked against setting 4952 by GoneAway. One strain, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The traditional air as transcribed in The Session, setting 25640 by TomBom (moved from D to G), checked against setting 4952 by GoneAway. One strain, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/4952#setting25640",
       score: lochLomond,
     },
@@ -117,7 +117,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "O Waly, Waly", kind: "title" }, { alias: "Waly Waly", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The traditional air (Cecil Sharp's 1906 form of \"O Waly, Waly\") as transcribed in The Session, setting 31954 by suskin, checked against setting 31970 by DonaldK. One verse, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The traditional air (Cecil Sharp's 1906 form of \"O Waly, Waly\") as transcribed in The Session, setting 31954 by suskin, checked against setting 31970 by DonaldK. One verse, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/16776#setting31954",
       score: theWaterIsWide,
     },
@@ -129,7 +129,7 @@ const PIECES: PackPiece[] = [
     genre: "folk", era: "traditional", level: 1,
     primary: {
       kind: "authored",
-      basis: "The traditional song (published 1896) as transcribed in Colin Hume's ABC tune collection, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The traditional song (published 1896) as transcribed in Colin Hume's ABC tune collection, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://colinhume.com/ABC.txt",
       score: redRiverValley,
     },
@@ -141,7 +141,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "'Tis the Gift to Be Simple", kind: "title" }, { alias: "Lord of the Dance", kind: "nickname" }],
     primary: {
       kind: "authored",
-      basis: "The Shaker song (Elder Joseph Brackett, 1848) as transcribed in Colin Hume's ABC tune collection, checked against The Session, setting 8033 by Joseph Chordmichael. The first two strains, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The Shaker song (Elder Joseph Brackett, 1848) as transcribed in Colin Hume's ABC tune collection, checked against The Session, setting 8033 by Joseph Chordmichael. The first two strains, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/8033#setting8033",
       score: simpleGifts,
     },
@@ -154,7 +154,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Muss i denn zum Städtele hinaus", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The folk song (Friedrich Silcher's 1827 setting) as transcribed in the Essen Folksong Collection (Erk, no. E0785), with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The folk song (Friedrich Silcher's 1827 setting) as transcribed in the Essen Folksong Collection (Erk, no. E0785), with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://github.com/cuthbertLab/music21/blob/master/music21/corpus/essenFolksong/erk20.abc",
       score: mussIDenn,
     },
@@ -166,7 +166,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Hickory, Dickory, Dock", kind: "title" }, { alias: "Dickory, Dickory, Dock", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The nursery rhyme as printed in The Everyday Song Book (1927, no. 19), in John Chambers' ABC transcription. Played twice, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The nursery rhyme as printed in The Everyday Song Book (1927, no. 19), in John Chambers' ABC transcription. Played twice, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/019_Dickory_Dickory_Dock.abc",
       score: hickoryDickoryDock,
     },
@@ -177,7 +177,7 @@ const PIECES: PackPiece[] = [
     genre: "childrens", era: "traditional", level: 1, tags: ["kids"],
     primary: {
       kind: "authored",
-      basis: "The nursery tune (published in the 1850s as a country dance) as transcribed in The Session, setting 10534 by ceolachan, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The nursery tune (published in the 1850s as a country dance) as transcribed in The Session, setting 10534 by ceolachan, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/10534#setting10534",
       score: popGoesTheWeasel,
     },
@@ -189,7 +189,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Bingo Was His Name-O", kind: "title" }, { alias: "B-I-N-G-O", kind: "nickname" }],
     primary: {
       kind: "authored",
-      basis: "The children's song as printed in The Everyday Song Book (1927, no. 138), in John Chambers' ABC transcription. Played twice, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The children's song as printed in The Everyday Song Book (1927, no. 138), in John Chambers' ABC transcription. Played twice, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/138_Bingo.abc",
       score: bingo,
     },
@@ -201,7 +201,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "We Three Kings of Orient Are", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The carol (John Henry Hopkins Jr., 1863) as printed in The Everyday Song Book (1927, no. 154), in John Chambers' ABC transcription, checked against Colin Hume's ABC transcription. Verse and refrain, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The carol (John Henry Hopkins Jr., 1863) as printed in The Everyday Song Book (1927, no. 154), in John Chambers' ABC transcription, checked against Colin Hume's ABC transcription. Verse and refrain, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/154_We_Three_Kings_of_Orient_Are.abc",
       score: weThreeKings,
     },
@@ -236,7 +236,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "O Tannenbaum", kind: "translation" }, { alias: "O Christmas Tree", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The folk song (Ernst Anschütz's 1824 text set to an older melody) as transcribed in the Essen Folksong Collection (Böhme, no. B0638), with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The folk song (Ernst Anschütz's 1824 text set to an older melody) as transcribed in the Essen Folksong Collection (Böhme, no. B0638), with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://github.com/cuthbertLab/music21/blob/master/music21/corpus/essenFolksong/boehme20.abc",
       score: oChristmasTree,
     },
@@ -248,7 +248,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Jolly Old St. Nicholas", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The children's carol as printed in The Everyday Song Book (1927, no. 21), in John Chambers' ABC transcription (the top line of the printed parts is the tune). One verse, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The children's carol as printed in The Everyday Song Book (1927, no. 21), in John Chambers' ABC transcription (the top line of the printed parts is the tune). One verse, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/021-Jolly_Old_St_Nicholas-V1.abc",
       score: jollyOldSaintNicholas,
     },
@@ -260,7 +260,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Ding Dong! Merrily on High", kind: "title" }, { alias: "Branle de l'Officiel", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The tune (Thoinot Arbeau's \"Branle de l'Officiel\", Orchésographie, 1589) as transcribed in The Session, setting 27786 by Javi V, checked against Colin Hume's ABC transcription. One verse and refrain, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The tune (Thoinot Arbeau's \"Branle de l'Officiel\", Orchésographie, 1589) as transcribed in The Session, setting 27786 by Javi V, checked against Colin Hume's ABC transcription. One verse and refrain, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/15031#setting27786",
       score: dingDongMerrilyOnHigh,
     },
@@ -273,7 +273,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "The Coventry Carol", kind: "title" }, { alias: "Lully, Lulla, Thou Little Tiny Child", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The carol (Coventry Shearmen and Taylors' Pageant, 1534) as transcribed in Colin Hume's ABC tune collection, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The carol (Coventry Shearmen and Taylors' Pageant, 1534) as transcribed in Colin Hume's ABC tune collection, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://colinhume.com/ABC.txt",
       score: coventryCarol,
     },
@@ -320,7 +320,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Slane", kind: "nickname" }, { alias: "Be Thou My Vision", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The Irish melody \"Slane\" (melody only; the harmony is original) as transcribed in The Session, setting 6415 by nicholas, checked against setting 54364 by Jim Sime. One verse, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The Irish melody \"Slane\" (melody only; the harmony is original) as transcribed in The Session, setting 6415 by nicholas, checked against setting 54364 by Jim Sime. One verse, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/6415#setting6415",
       score: beThouMyVision,
     },
@@ -333,7 +333,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Bunessan", kind: "nickname" }, { alias: "Morning Has Broken", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The Gaelic tune \"Bunessan\" (melody only; the 1931 words are not used) as transcribed in The Session, setting 46149 by JACKB, checked against setting 28658 by Greetings. One verse, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The Gaelic tune \"Bunessan\" (melody only; the 1931 words are not used) as transcribed in The Session, setting 46149 by JACKB, checked against setting 28658 by Greetings. One verse, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/15358#setting46149",
       score: morningHasBroken,
     },

@@ -43,7 +43,7 @@ export const env = z
     SMTP_SECURE: booleanFlag("false"),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
-    MAIL_FROM: z.string().default("OctaviApp <no-reply@localhost>"),
+    MAIL_FROM: z.string().default("Midivory <no-reply@localhost>"),
     // Google sign-in: comma-separated OAuth client IDs whose ID tokens are accepted
     // (the Web client and the Android client). Unset = POST /auth/google answers 503.
     GOOGLE_CLIENT_IDS: z

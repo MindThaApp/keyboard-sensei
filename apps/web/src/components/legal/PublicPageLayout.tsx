@@ -34,7 +34,7 @@ export default function PublicPageLayout({ title, children, wide = false }: { ti
     <div className="min-h-screen">
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className={`mx-auto flex ${wide ? "max-w-4xl" : "max-w-3xl"} items-center px-4 py-3`}>
-          <Link to="/" aria-label="OctaviApp home">
+          <Link to="/" aria-label="Midivory home">
             <Wordmark />
           </Link>
         </div>

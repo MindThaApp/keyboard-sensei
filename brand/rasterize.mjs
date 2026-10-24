@@ -1,4 +1,4 @@
-// Rasterises the OctaviApp icon PNGs from the SVG sources.
+// Rasterises the Midivory icon PNGs from the SVG sources.
 //
 //   node brand/generate-sources.mjs
 //   PLAYWRIGHT_MODULE=/path/to/node_modules/playwright/index.mjs node brand/rasterize.mjs [contact-sheet-dir]
@@ -15,7 +15,7 @@ const { chromium } = await import(
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const res = path.join(root, "apps/mobile/android/app/src/main/res");
 const pub = path.join(root, "apps/web/public");
-const master = fs.readFileSync(path.join(root, "brand/octaviapp-icon.svg"), "utf8");
+const master = fs.readFileSync(path.join(root, "brand/midivory-icon.svg"), "utf8");
 const favicon = fs.readFileSync(path.join(pub, "favicon.svg"), "utf8");
 
 /** The master with its width/height replaced, optionally with the mark shrunk into the safe zone. */
@@ -73,7 +73,7 @@ if (sheetDir) {
       ${small(favicon, 64)}${small(favicon, 48)}${small(favicon, 32)}${small(favicon, 16)}
       <p style="margin:12px 0 8px">Wordmark</p>
       <div style="display:flex;align-items:center;gap:10px;font:800 28px -apple-system,system-ui,sans-serif;letter-spacing:-0.03em">
-        <span style="line-height:0;border-radius:8px;overflow:hidden">${sized(master, 36)}</span>OctaviApp</div>
+        <span style="line-height:0;border-radius:8px;overflow:hidden">${sized(master, 36)}</span>Midivory</div>
     </section>`;
   };
   fs.mkdirSync(sheetDir, { recursive: true });
