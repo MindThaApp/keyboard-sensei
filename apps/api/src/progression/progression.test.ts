@@ -246,3 +246,14 @@ describe("content checks", () => {
     for (const link of CURRICULUM_SONGS) expect(beginner.has(link.slug), link.slug).toBe(true);
   });
 });
+
+describe("snapshot timestamps", () => {
+  it("reads zone-less to_jsonb timestamps as UTC, whatever the server's timezone", async () => {
+    const { asDate } = await import("./snapshot.js");
+    expect(asDate("2026-10-24T00:30:00.123").toISOString()).toBe("2026-10-24T00:30:00.123Z");
+    expect(asDate("2026-10-24T00:30:00.123Z").toISOString()).toBe("2026-10-24T00:30:00.123Z");
+    expect(asDate("2026-10-24T01:30:00+01:00").toISOString()).toBe("2026-10-24T00:30:00.000Z");
+    // Just after UTC midnight it is still "today" in UTC, not yesterday.
+    expect(dayKey(asDate("2026-10-24T00:30:00"), null)).toBe("2026-10-24");
+  });
+});
