@@ -333,6 +333,51 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         await rm(dir, { recursive: true, force: true });
       }
     });
+
+    it("hides a song whose Work is a draft or in review by id, exactly as the list does", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-draft-work-"));
+      const write = async (name: string) => {
+        const file = join(dir, name);
+        await writeFile(file, midiBytes());
+        return file;
+      };
+      const player = await createUser();
+      const admin = await createUserWithPassword("admin");
+      const work = (id: string, curation_status: string) =>
+        m.prisma.work.create({ data: { id, title: id, genre: "classical", pd_status: "pd-worldwide", curation_status } });
+      const works = [await work("test-draft-work", "draft"), await work("test-review-work", "in_review"), await work("test-published-work", "published")];
+      const base = { artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8, content_rights: "public-domain" };
+      const create = async (title: string, workId: string) =>
+        m.prisma.song.create({
+          data: { ...base, title, work_id: workId, file_path: await write(`${workId}.mid`), notation_path: await write(`${workId}.mxl`) },
+        });
+      const draft = await create("Draft", "test-draft-work");
+      const review = await create("In review", "test-review-work");
+      const published = await create("Published", "test-published-work");
+      const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
+      try {
+        const listed = new Set(((await api("GET", "/songs", { token: player.token })).body.songs as { id: string }[]).map((row) => row.id));
+        expect(listed.has(published.id)).toBe(true);
+        for (const hidden of [draft, review]) {
+          expect(listed.has(hidden.id)).toBe(false);
+          for (const path of [`/songs/${hidden.id}/file`, `/songs/${hidden.id}/notation`]) {
+            expect((await api("GET", path, { token: player.token })).status, path).toBe(404);
+          }
+          expect((await api("POST", `/songs/${hidden.id}/attempts`, { token: player.token, body: attempt })).status).toBe(404);
+          // Admins see everything, as in the list.
+          expect((await api("GET", `/songs/${hidden.id}/file`, { token: admin.token })).status).toBe(200);
+        }
+        expect((await api("GET", `/songs/${published.id}/file`, { token: player.token })).status).toBe(200);
+        expect((await api("GET", `/songs/${published.id}/notation`, { token: player.token })).status).toBe(200);
+        expect((await api("POST", `/songs/${published.id}/attempts`, { token: player.token, body: attempt })).status).toBe(201);
+      } finally {
+        const songIds = [draft.id, review.id, published.id];
+        await m.prisma.playAlongAttempt.deleteMany({ where: { song_id: { in: songIds } } });
+        await m.prisma.song.deleteMany({ where: { id: { in: songIds } } });
+        await m.prisma.work.deleteMany({ where: { id: { in: works.map((row) => row.id) } } });
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("experience mode (Simple / Advanced)", () => {
