@@ -184,7 +184,7 @@ app.use(
     // invisible to the browser on cross-origin development (web :5174 -> API
     // :3001); production uses nginx's same-origin /api proxy. Without this,
     // URL-import preview silently showed "0:00 / 0 notes / difficulty 1" in dev.
-    exposedHeaders: ["x-song-duration-sec", "x-song-note-count", "x-song-difficulty"],
+    exposedHeaders: ["x-song-duration-sec", "x-song-note-count", "x-song-difficulty", "content-disposition"],
   }),
 );
 // Before the JSON parser: envelopes are not JSON, and the tunnel reads its own raw body.
