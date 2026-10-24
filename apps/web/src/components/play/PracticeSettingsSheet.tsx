@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { lazy, Suspense, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
   difficultyMultiplier,
   handsMultiplier,
@@ -52,6 +52,9 @@ interface Props {
   /** About the song: stars so far, length, edition credit. */
   header?: ReactNode;
 }
+
+// The FX look controls are only needed once FX is the chosen style, so they load then.
+const FxLookSettings = lazy(() => import("./FxLookSettings"));
 
 const VERSION_OPTIONS = [...PRACTICE_LEVELS].map((level) => ({ value: level, label: LEVEL_LABELS[level] }));
 const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
@@ -307,6 +310,12 @@ export default function PracticeSettingsSheet(props: Props) {
               }
             />
           </ListGroup>
+
+          {settings.notesStyle === "fx" && (
+            <Suspense fallback={null}>
+              <FxLookSettings />
+            </Suspense>
+          )}
 
           <ListGroup
             header="Metronome"
