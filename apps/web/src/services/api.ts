@@ -590,11 +590,11 @@ export interface ScoreImportReport {
   warnings: string[];
 }
 
-/** Score files the server turns into songs: MusicXML (plain or compressed) and MEI. */
-export const SCORE_FILE_EXTENSIONS = [".musicxml", ".xml", ".mxl", ".mei"] as const;
+/** Score files the server turns into songs: MusicXML (plain or compressed), MEI, ABC and Humdrum **kern. */
+export const SCORE_FILE_EXTENSIONS = [".musicxml", ".xml", ".mxl", ".mei", ".abc", ".krn"] as const;
 export const isScoreFile = (name: string): boolean => SCORE_FILE_EXTENSIONS.some((extension) => name.toLowerCase().endsWith(extension));
 
-/** Uploads a MusicXML / MXL / MEI score. Title and artist default to what the score names. */
+/** Uploads a MusicXML / MXL / MEI / ABC / **kern score. Title and artist default to what the score names. */
 export const uploadScore = async (
   file: File | Blob,
   meta: { title?: string; artist?: string; genre: SongGenre },
