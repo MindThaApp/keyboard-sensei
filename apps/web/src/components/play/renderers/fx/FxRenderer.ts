@@ -551,6 +551,8 @@ export class FxRenderer implements WaterfallRenderer {
     n.uNoiseSpeed.value = p.noiseSpeed;
     n.uGlassNoise.value = tier.glassNoise ? 1 : 0;
     n.uNoteGlow.value = p.noteGlow;
+    // Per-note colours shift hue slightly along each bar, so a bar reads as lit neon.
+    n.uHueDrift.value = p.colorMode === "byPitch" || p.colorMode === "rainbow" ? 0.45 : 0;
     n.uTopFade.value = p.topFade;
 
     // Accent: the colour of the hit line and the sparks' base.

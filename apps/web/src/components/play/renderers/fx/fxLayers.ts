@@ -55,6 +55,7 @@ export interface NoteLayer {
     uNoiseSpeed: { value: number };
     uGlassNoise: { value: number };
     uNoteGlow: { value: number };
+    uHueDrift: { value: number };
     uPxSize: { value: number };
     uPad: { value: number };
     uTime: { value: number };
@@ -83,6 +84,7 @@ export function createNoteLayer(capacity: number, time: { value: number }, noise
     uNoiseSpeed: { value: 0.5 },
     uGlassNoise: { value: 1 },
     uNoteGlow: { value: 0.3 },
+    uHueDrift: { value: 0 },
     uPxSize: { value: 1 },
     uPad: { value: NOTE_PAD_PX },
     uTime: time,

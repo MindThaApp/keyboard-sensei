@@ -257,45 +257,66 @@ function single(hex: string, extra: Partial<FxParams>): FxParams {
 }
 
 /**
- * The eight looks from the reference video (values: reference notes §e), plus Ramin's own
- * target as the starting point of Custom: red glass notes with a smoky inside, a
+ * The eight looks from the reference video (reference notes §e), tuned against its frames:
+ * wide rounded glass bars with a bright rim, a wide glow, dense spark clouds and a
+ * starburst where notes land. Spectrum follows the owner's second reference instead:
+ * neon bars across the whole colour range (by pitch), each with a slight hue shift.
+ * Custom starts from Ramin's own target: red glass notes with a smoky inside, a
  * flickering line and red sparks and smoke rising from the keys.
  */
 export const FX_PRESET_PARAMS: Record<Exclude<FxPresetId, "custom">, FxParams> = {
   ember: fromStops(["#FFD25A", "#FF9A4A", "#FF5C6E"], {
-    cornerRadius: 0.35, rim: 0.1, sparkCount: 3000, sparkSize: 1.5, sparkRise: 60, sparkLife: 0.8, sparkSwirl: 0.4,
-    smokeDensity: 0.05, flare: 0.9, keyTint: 0.5, flameHeight: 26, glow: 0.55,
+    body: "glass", cornerRadius: 0.6, rim: 0.5, noiseAmt: 0.3, noiseSpeed: 0.5,
+    sparkCount: 3500, sparkSize: 1.5, sparkRise: 60, sparkLife: 0.9, sparkSwirl: 0.6,
+    smokeDensity: 0.08, smokeColor: "#A0583A", smokeTint: 0.5, flare: 1, keyTint: 0.6, flameHeight: 36, flameFlicker: 0.7,
+    glow: 0.95, noteGlow: 0.6, lineBrightness: 0.75,
   }),
-  spectrum: fromStops(["#FFE066", "#FF7A3C", "#E8336B", "#8A4BFF"], {
-    sparkCount: 3500, sparkRise: 50, sparkSwirl: 0.5, smokeDensity: 0.05, flare: 0.8, keyTint: 0.5, flameHeight: 24, glow: 0.55,
-  }),
+  spectrum: {
+    ...BASE, ...hexHsl("#8A4BFF"), colorMode: "byPitch", pitchSpan: 300, saturation: 1, lightness: 0.6, stops: ["#FFE066", "#FF7A3C", "#E8336B", "#8A4BFF"],
+    body: "glass", cornerRadius: 0.6, rim: 0.55, noiseAmt: 0.35, noiseSpeed: 0.5,
+    sparkCount: 4000, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.7,
+    smokeDensity: 0.12, smokeSwirl: 0.6, smokeTint: 0.85, flare: 0.9, keyTint: 0.6, flameHeight: 28, flameFlicker: 0.6,
+    glow: 1.05, noteGlow: 0.7, lineBrightness: 0.6,
+  },
   gold: single("#FFC83D", {
-    body: "gradient", sparkCount: 2000, sparkRise: 45, sparkLife: 0.9, smokeDensity: 0.03, flare: 0.7, keyTint: 0.4, flameHeight: 30, flameFlicker: 0.7, glow: 0.5,
+    body: "glass", cornerRadius: 0.6, rim: 0.45, noiseAmt: 0.3, noiseSpeed: 0.45,
+    sparkCount: 3000, sparkSize: 1.4, sparkRise: 45, sparkLife: 1, sparkSwirl: 0.6,
+    smokeDensity: 0.06, smokeColor: "#8A6A30", smokeTint: 0.5, flare: 0.85, keyTint: 0.6, flameHeight: 38, flameFlicker: 0.75,
+    glow: 0.9, noteGlow: 0.55, lineBrightness: 0.7,
   }),
   frost: single("#DDF3FF", {
-    cornerRadius: 0.3, sparkCount: 2500, sparkSize: 1.2, sparkRise: 40, sparkLife: 0.9, sparkSwirl: 0.6,
-    smokeDensity: 0.15, smokeColor: "#8FA6BF", smokeTint: 0.25, flare: 0.9, keyTint: 0.6, flameHeight: 14, glow: 0.6,
+    body: "glass", cornerRadius: 0.55, rim: 0.65, noiseAmt: 0.45, noiseSpeed: 0.4,
+    sparkCount: 3500, sparkSize: 1.2, sparkRise: 45, sparkLife: 1.1, sparkSwirl: 0.75,
+    smokeDensity: 0.3, smokeSwirl: 0.65, smokeColor: "#8FA6BF", smokeTint: 0.25, flare: 1, keyTint: 0.7, flameHeight: 18,
+    glow: 0.95, noteGlow: 0.5, lineBrightness: 0.7,
   }),
   crimson: single("#FF2A2A", {
-    sparkCount: 3500, sparkSize: 1.3, sparkRise: 50, smokeDensity: 0.03, flare: 0.4, keyTint: 0.8, noteGlow: 0.5, glow: 0.7, flameHeight: 24,
+    body: "glass", cornerRadius: 0.55, rim: 0.8, noiseAmt: 0.8, noiseSpeed: 0.45, lightness: 0.52,
+    sparkCount: 4000, sparkSize: 1.3, sparkRise: 50, sparkLife: 1, sparkSwirl: 0.75,
+    smokeDensity: 0.18, smokeSwirl: 0.6, smokeColor: "#9A1C1C", smokeTint: 0.7, flare: 0.8, keyTint: 0.9, flameHeight: 30, flameFlicker: 0.8,
+    glow: 1.05, noteGlow: 0.7, lineBrightness: 0.85,
   }),
   glassBlue: single("#4A6BFF", {
-    body: "glass", noiseAmt: 0.5, noiseSpeed: 0.5, rim: 0.4, sparkCount: 3000, sparkRise: 55, sparkLife: 0.9, sparkSwirl: 0.8,
-    smokeDensity: 0.2, smokeColor: "#6F86C8", smokeTint: 0.4, flare: 1, keyTint: 0.8, glow: 0.7, flameHeight: 18,
+    body: "glass", cornerRadius: 0.55, rim: 0.65, noiseAmt: 0.65, noiseSpeed: 0.55,
+    sparkCount: 3500, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.85,
+    smokeDensity: 0.25, smokeColor: "#6F86C8", smokeTint: 0.45, flare: 1, keyTint: 0.85, flameHeight: 22,
+    glow: 1.05, noteGlow: 0.7, lineBrightness: 0.75,
   }),
   moonlight: single("#F2F8FF", {
-    sparkCount: 4000, sparkSize: 1.3, sparkRise: 50, sparkLife: 1, sparkSwirl: 0.8, smokeDensity: 0.35, smokeSwirl: 0.7,
-    smokeColor: "#9DB0C8", smokeTint: 0.2, flare: 1, keyTint: 0.7, noteGlow: 0.3, glow: 0.6, flameHeight: 16,
+    body: "glass", cornerRadius: 0.55, rim: 0.7, noiseAmt: 0.4, noiseSpeed: 0.35,
+    sparkCount: 3500, sparkSize: 1.2, sparkRise: 55, sparkLife: 1.2, sparkSwirl: 0.85,
+    smokeDensity: 0.5, smokeSwirl: 0.8, smokeColor: "#AFC0D8", smokeTint: 0.15, flare: 1, keyTint: 0.75, flameHeight: 16,
+    glow: 0.9, noteGlow: 0.35, lineBrightness: 0.7,
   }),
-  clean: { ...BASE, ...hexHsl("#5AA9FF"), colorMode: "byHand", handOffset: 150, stops: ["#5AA9FF"], sparkCount: 0, smokeDensity: 0, flare: 0.2, keyTint: 0.3, glow: 0.2, noteGlow: 0.1, flameHeight: 0, flameFlicker: 0 },
+  clean: { ...BASE, ...hexHsl("#5AA9FF"), colorMode: "byHand", handOffset: 150, stops: ["#5AA9FF"], cornerRadius: 0.5, sparkCount: 0, smokeDensity: 0, flare: 0.2, keyTint: 0.3, glow: 0.2, noteGlow: 0.1, flameHeight: 0, flameFlicker: 0 },
 };
 
 /** Where Custom starts, until the user's own tweaks replace it. */
 export const FX_CUSTOM_START: FxParams = single("#FF2A2A", {
-  body: "glass", cornerRadius: 0.4, rim: 0.35, noiseAmt: 0.65, noiseSpeed: 0.45, lightness: 0.55,
-  glow: 0.85, noteGlow: 0.45, lineBrightness: 0.8, flameHeight: 34, flameFlicker: 0.85, flare: 0.8,
-  sparkCount: 3500, sparkSize: 1.6, sparkRise: 55, sparkSwirl: 0.7, sparkLife: 1,
-  smokeDensity: 0.3, smokeSwirl: 0.6, smokeColor: "#B02020", smokeTint: 0.7, keyTint: 0.8,
+  body: "glass", cornerRadius: 0.55, rim: 0.75, noiseAmt: 0.75, noiseSpeed: 0.45, lightness: 0.55,
+  glow: 1.05, noteGlow: 0.65, lineBrightness: 0.85, flameHeight: 34, flameFlicker: 0.85, flare: 0.85,
+  sparkCount: 4000, sparkSize: 1.4, sparkRise: 55, sparkSwirl: 0.75, sparkLife: 1,
+  smokeDensity: 0.3, smokeSwirl: 0.6, smokeColor: "#B02020", smokeTint: 0.7, keyTint: 0.85,
 });
 
 export interface FxPresetInfo {

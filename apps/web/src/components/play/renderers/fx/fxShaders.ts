@@ -43,6 +43,7 @@ uniform float uNoiseAmt;
 uniform float uNoiseSpeed;
 uniform float uGlassNoise;
 uniform float uNoteGlow;
+uniform float uHueDrift;   // radians of hue shift from the bottom of a bar to its top
 uniform float uTime;
 uniform float uPxSize;
 uniform sampler2D uNoise;
@@ -56,6 +57,13 @@ varying float vWorldY;
 float roundedBox(vec2 p, vec2 halfSize, float radius) {
   vec2 q = abs(p) - (halfSize - radius);
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+// Rotates a colour's hue about the grey axis.
+vec3 hueShift(vec3 c, float a) {
+  const vec3 k = vec3(0.57735);
+  float cs = cos(a);
+  return c * cs + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - cs);
 }
 
 vec3 heightColour(float t) {
@@ -91,6 +99,10 @@ void main() {
   if (cover <= 0.0) discard;
 
   vec3 c = uColorHeight > 0.5 ? heightColour(clamp(vWorldY / uHeight, 0.0, 1.0)) : vColor;
+  if (uHueDrift != 0.0) {
+    float up = clamp(vLocal.y / max(vHalf.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);
+    c = clamp(hueShift(c, uHueDrift * (up - 0.5)), 0.0, 1.0);
+  }
   if (missed > 0.5) c = vec3(dot(c, vec3(0.3, 0.59, 0.11)) * 0.55);
 
   float along = clamp(vLocal.y / max(vHalf.y * 2.0, 1.0) + 0.5, 0.0, 1.0);
@@ -103,21 +115,35 @@ void main() {
   float a;
   float smoky = 0.0;
   if (uMode > 2.5) {
-    // Glass: dark tinted body with a smoky inside that drifts, a bright rim and a sheen.
-    vec2 uv = (vLocal + vec2(seed * 57.0, seed * 91.0)) / 84.0;
+    // Glass: a rounded tube of tinted glass. A bright near-white rim all round (so each
+    // bar's ends read as caps, even in the white looks), a coloured inner glow under it,
+    // a lit stripe down one side, and a drifting inside: soft clouds plus the wavy
+    // bright streaks light makes through moving water.
+    vec2 uv = (vLocal + vec2(seed * 57.0, seed * 91.0)) / 72.0;
+    float n1 = 0.5;
+    float n2 = 0.5;
     if (uGlassNoise > 0.5 && uEmissive < 0.5) {
-      float n1 = texture2D(uNoise, uv + vec2(t * 0.09, -t * 0.21)).r;
-      float n2 = texture2D(uNoise, uv * 1.85 + vec2(-t * 0.15, -t * 0.33) + 0.37).g;
-      smoky = smoothstep(0.28, 0.92, n1 * 0.62 + n2 * 0.52);
-    } else {
-      smoky = 0.5;
+      n1 = texture2D(uNoise, uv * vec2(1.4, 0.55) + vec2(t * 0.07, -t * 0.22)).r;
+      n2 = texture2D(uNoise, uv * vec2(2.6, 1.1) + vec2(-t * 0.12, -t * 0.35) + 0.37).g;
     }
-    float base = 0.2 + (1.0 - uNoiseAmt) * 0.22 + smoky * uNoiseAmt * 0.95;
-    float sheen = smoothstep(0.55, 1.0, 1.0 - abs(vLocal.x / max(vHalf.x, 1.0) + 0.45)) * 0.16;
-    col = c * base * mix(1.2, 0.8, along)
-      + mix(c, vec3(1.0), 0.55) * edge * (0.25 + 0.9 * uRim)
-      + vec3(sheen) * c;
-    a = clamp(0.5 + smoky * uNoiseAmt * 0.38 + edge * 0.5 * (0.4 + uRim), 0.0, 1.0);
+    smoky = smoothstep(0.3, 0.85, n1 * 0.6 + n2 * 0.5);
+    float ridge = 1.0 - abs(n1 + n2 - 1.0) * 3.2;
+    float caustic = smoothstep(0.35, 0.95, ridge) * step(0.5, uGlassNoise);
+    float across = vLocal.x / max(vHalf.x, 1.0);
+    float body = (0.8 - 0.42 * uNoiseAmt) + smoky * uNoiseAmt * 0.5;
+    // Near-white looks: hold the inside down so the white rim and caps still read.
+    body *= 1.0 - 0.28 * smoothstep(0.7, 0.95, dot(c, vec3(0.3, 0.59, 0.11)));
+    vec3 inner = c * body * mix(1.08, 0.78, along);
+    inner += mix(c, vec3(1.0), 0.65) * caustic * uNoiseAmt * 0.85;
+    float stripe = exp(-pow((across + 0.42) / 0.2, 2.0));
+    inner += mix(c, vec3(1.0), 0.7) * stripe * 0.28;
+    inner *= 1.0 - 0.25 * smoothstep(0.55, 1.0, abs(across));
+    float rimLine = 1.0 - smoothstep(0.5 + 0.9 * uRim, 1.4 + 1.2 * uRim, depth);
+    float innerGlow = exp(-depth / 3.2);
+    col = inner
+      + mix(c, vec3(1.0), 0.35) * innerGlow * (0.2 + 0.5 * uRim)
+      + mix(c, vec3(1.0), 0.82) * rimLine * (0.45 + 0.75 * uRim);
+    a = clamp(0.84 + innerGlow * 0.16, 0.0, 1.0);
   } else if (uMode > 1.5) {
     float ring = smoothstep(0.0, aa, depth) * (1.0 - smoothstep(1.6, 1.6 + aa, depth));
     col = c * (0.14 + ring * 1.1);
@@ -133,8 +159,11 @@ void main() {
   }
 
   if (uEmissive > 0.5) {
-    float body = uMode > 2.5 ? 0.45 + smoky * uNoiseAmt * 0.8 : 0.6;
-    vec3 glow = c * (0.2 + 0.6 * sounding + flash) * uNoteGlow * (0.35 + 0.65 * edge + 0.5 * body);
+    // What blooms: the whole bar, brightest at its rim, much brighter while it sounds.
+    float body = uMode > 2.5 ? 0.55 + smoky * uNoiseAmt * 0.6 : 0.7;
+    // Near-white bars already sit at full brightness: less glow, or the bloom swallows their rims.
+    body *= 1.0 - 0.45 * smoothstep(0.7, 0.95, dot(c, vec3(0.3, 0.59, 0.11)));
+    vec3 glow = mix(c, vec3(1.0), 0.15 * edge) * (0.45 + 0.9 * sounding + 1.2 * flash) * uNoteGlow * (0.5 + 0.9 * edge + 0.6 * body);
     gl_FragColor = vec4(glow * cover * fade, 0.0);
     return;
   }
