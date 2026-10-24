@@ -926,7 +926,7 @@ export function attribution(piece: EssentialsPiece): string {
   const { source } = piece;
   if (isAuthored(source)) {
     const checked = source.verifiedAgainst.map((ref) => ref.title).join("; ");
-    return `${piece.title} (${piece.composer}), arranged for Keyboard Sensei. ${source.basis} Tune checked against: ${checked}. Public Domain.`;
+    return `${piece.title} (${piece.composer}), arranged for OctaviApp. ${source.basis} Tune checked against: ${checked}. Public Domain.`;
   }
   const who = source.maintainer && source.maintainer !== "Anonymous" ? ` typeset by ${source.maintainer}` : "";
   return `${piece.title} (${piece.composer}),${who} for the Mutopia Project, ${source.mutopiaId}. ${source.licence}. ${source.infoUrl}`;

@@ -99,7 +99,7 @@ describe("Authored folk scores", () => {
   it("credits the source and says the harmony is original, and is public domain and eligible once published", () => {
     for (const piece of pieces) {
       const credit = attributionFor(piece, null);
-      expect(credit, piece.slug).toContain("arranged for Keyboard Sensei");
+      expect(credit, piece.slug).toContain("arranged for OctaviApp");
       expect(credit).toContain("Harmony and bass are original to this project.");
       expect(credit).toMatch(/Public Domain\.$/);
       expect(fileLicenceOf(piece)).toBe("public-domain");

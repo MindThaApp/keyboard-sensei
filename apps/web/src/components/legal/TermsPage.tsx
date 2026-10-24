@@ -9,7 +9,7 @@ export default function TermsPage() {
       <Prose>
         <p className="text-sm text-slate-500 dark:text-slate-400">Last updated {TERMS_LAST_UPDATED}</p>
         <p>
-          These terms apply when you use Keyboard Sensei, on the web or in the Android app. By creating an account or
+          These terms apply when you use OctaviApp, on the web or in the Android app. By creating an account or
           using the app, you agree to them. They're written to be read, so please do.
         </p>
 
@@ -58,7 +58,7 @@ export default function TermsPage() {
 
         <h2>The app is provided "as is"</h2>
         <p>
-          We work hard to make Keyboard Sensei useful and reliable, but we can't promise it will always be available,
+          We work hard to make OctaviApp useful and reliable, but we can't promise it will always be available,
           error-free, or that scores and feedback are perfectly accurate. It's a practice aid, not a substitute for a
           teacher. As far as the law allows, we aren't liable for indirect losses or for data you lose, and our total
           liability to you is limited to the amount you've paid us (the app is currently free). Nothing here limits

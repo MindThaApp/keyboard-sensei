@@ -1,8 +1,8 @@
-package com.keyboardsensei.app
+package com.octaviapp.app
 
 import android.os.Bundle
 import com.getcapacitor.BridgeActivity
-import com.keyboardsensei.app.midi.NativeMidiPlugin
+import com.octaviapp.app.midi.NativeMidiPlugin
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

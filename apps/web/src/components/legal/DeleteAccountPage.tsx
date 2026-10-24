@@ -47,7 +47,7 @@ export default function DeleteAccountPage() {
     <PublicPageLayout title="Delete your account">
       <Prose>
         <p>
-          You can delete your Keyboard Sensei account and all of its data at any time. Deletion is immediate and can't be
+          You can delete your OctaviApp account and all of its data at any time. Deletion is immediate and can't be
           undone. It removes:
         </p>
         <ul>
