@@ -138,7 +138,7 @@ function TierSection({
         <span className="text-sm font-medium tabular-nums text-slate-500 dark:text-slate-400">Level {group.tier}</span>
         <h2 className="font-display text-base font-semibold text-slate-900 dark:text-slate-100">{group.name}</h2>
         <span className="text-xs text-slate-500 dark:text-slate-400">Coming soon</span>
-        <Link to="/library" className="ml-auto inline-flex min-h-[44px] items-center text-sm font-medium text-felt-700 underline-offset-2 hover:underline dark:text-felt-300">
+        <Link to="/practice" className="ml-auto inline-flex min-h-[44px] items-center text-sm font-medium text-felt-700 underline-offset-2 hover:underline dark:text-felt-300">
           Play songs from the library meanwhile
         </Link>
       </div>

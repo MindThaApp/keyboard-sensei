@@ -79,16 +79,24 @@ function GoalChip({ compact = false }: { compact?: boolean }) {
   const { minutesToday, goalMinutes, met } = summary.dailyGoal;
   const minutes = Math.floor(minutesToday);
   return (
-    <Link
-      to="/"
-      className="ks-goal-chip"
-      aria-label={`Daily goal: ${minutes} of ${goalMinutes} minutes${met ? ", met" : ""}. Streak: ${summary.streak.current} days`}
-      data-testid="header-goal"
-    >
-      <ProgressRing value={goalMinutes > 0 ? minutesToday / goalMinutes : 0} size={28} stroke={4} aria-label="Daily goal" />
-      <span className="ks-goal-chip__text glass-text" aria-hidden="true">
+    <Link to="/" className="ks-goal-chip" data-testid="header-goal">
+      {/* The name is built from the visible text plus screen-reader-only context, so
+          what is read out always contains what is shown (WCAG 2.5.3). */}
+      <span aria-hidden="true">
+        <ProgressRing value={goalMinutes > 0 ? minutesToday / goalMinutes : 0} size={28} stroke={4} />
+      </span>
+      <span className="sr-only">Daily goal: </span>
+      <span className="ks-goal-chip__text glass-text">
         {compact ? `${minutes}/${goalMinutes}` : `${minutes} of ${goalMinutes} min today`}
-        {summary.streak.current > 0 && <span className="ks-goal-chip__streak"> {"🔥"}{summary.streak.current}</span>}
+        {met && <span className="sr-only">, met</span>}
+        {summary.streak.current > 0 && (
+          <span className="ks-goal-chip__streak">
+            {" "}
+            <span aria-hidden="true">{"🔥"}</span>
+            <span className="sr-only">streak </span>
+            {summary.streak.current}
+          </span>
+        )}
       </span>
     </Link>
   );
@@ -207,7 +215,7 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
     <>
       <div className="edge-top ks-edge ks-edge--top" aria-hidden="true" />
       <div className="edge-bottom ks-edge ks-edge--bottom" aria-hidden="true" />
-      <GlassSurface className="ks-float-cluster" data-device={device}>
+      <GlassSurface as="header" className="ks-float-cluster" data-device={device}>
         <GoalChip compact={device === "phone"} />
         <AccountMenu {...account} />
       </GlassSurface>

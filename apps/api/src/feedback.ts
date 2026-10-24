@@ -5,6 +5,7 @@ import express, { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { requireAdmin } from "./auth.js";
+import { slidingWindowLimit } from "./rate-limits.js";
 
 export const FEEDBACK_SCREENSHOT_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -54,16 +55,9 @@ const statusSchema = z.object({ status: z.enum(["open", "resolved"]) });
 // accidental spam (stuck key, retry loop) — not a security boundary.
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
-const recentByUser = new Map<string, number[]>();
+const recentByUser = slidingWindowLimit(RATE_LIMIT, RATE_WINDOW_MS);
 
-const rateLimited = (uid: string): boolean => {
-  const now = Date.now();
-  const timestamps = (recentByUser.get(uid) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  if (timestamps.length >= RATE_LIMIT) return true;
-  timestamps.push(now);
-  recentByUser.set(uid, timestamps);
-  return false;
-};
+const rateLimited = (uid: string): boolean => !recentByUser.allow(uid);
 
 const uid = (req: Request): string => {
   if (!req.userId) throw new Error("Authenticated user missing");

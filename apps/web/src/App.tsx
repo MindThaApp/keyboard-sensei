@@ -126,6 +126,17 @@ export default function App() {
   );
 }
 
+/**
+ * Route guard: the API already 403s non-admins; this just keeps them off the pages.
+ * Declared at module scope: a component defined inside AppShell would be a new type on
+ * every shell render, remounting the admin page (and losing its state) each time.
+ */
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user === null) return null;
+  return user.role === "admin" ? <>{children}</> : <Navigate to="/" replace />;
+}
+
 function AppShell() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -139,10 +150,6 @@ function AppShell() {
 
   // Focus mode belongs to the screen that asked for it: navigating away ends it.
   useEffect(() => exitFocusMode(), [location.pathname]);
-
-  // Route guard: the API already 403s non-admins; this just keeps them off the pages.
-  const RequireAdmin = ({ children }: { children: ReactNode }) =>
-    auth.user === null ? null : auth.user.role === "admin" ? <>{children}</> : <Navigate to="/" replace />;
 
   const PublicPage = PUBLIC_PAGES[location.pathname.replace(/\/+$/, "") || "/"];
   if (PublicPage) return <PublicPage />;

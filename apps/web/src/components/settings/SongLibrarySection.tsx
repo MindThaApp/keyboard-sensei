@@ -38,7 +38,7 @@ const PAGE_SIZE = 50;
 
 function DifficultyDots({ level }: { level: number }) {
   return (
-    <span aria-label={`Difficulty ${level} of 5`} className="inline-flex gap-0.5">
+    <span role="img" aria-label={`Difficulty ${level} of 5`} className="inline-flex gap-0.5">
       {[1, 2, 3, 4, 5].map((dot) => (
         <span
           key={dot}
