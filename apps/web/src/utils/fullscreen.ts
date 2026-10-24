@@ -32,13 +32,21 @@ export const isFullscreenSupported = (): boolean =>
 export const isFullscreen = (): boolean => typeof document !== "undefined" && document.fullscreenElement !== null;
 
 /** Fullscreen for the whole page. Resolves to whether it actually took effect. */
+/** The wrapper app ships a plugin that hides the system bars (status bar, immersive navigation bar). */
+const hasSystemBarPlugins = (): boolean => {
+  const plugins = capacitor()?.Plugins;
+  return typeof plugins?.StatusBar?.hide === "function" || typeof plugins?.NavigationBar?.hide === "function";
+};
+
 export async function enterFullscreen(): Promise<boolean> {
-  if (isNative()) {
+  if (isNative() && hasSystemBarPlugins()) {
     // Status bar plus an immersive-sticky navigation bar plugin, when the wrapper has them.
     await callPlugin("StatusBar", "hide");
     await callPlugin("NavigationBar", "hide");
     return true;
   }
+  // A browser, or a native wrapper without those plugins: the web Fullscreen API, which
+  // the Android WebView also honours where the app's chrome client supports it.
   if (!isFullscreenSupported()) return false;
   if (isFullscreen()) return true;
   try {
@@ -50,7 +58,7 @@ export async function enterFullscreen(): Promise<boolean> {
 }
 
 export async function exitFullscreen(): Promise<void> {
-  if (isNative()) {
+  if (isNative() && hasSystemBarPlugins()) {
     await callPlugin("StatusBar", "show");
     await callPlugin("NavigationBar", "show");
     return;
