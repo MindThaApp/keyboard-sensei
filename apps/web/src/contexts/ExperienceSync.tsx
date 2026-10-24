@@ -19,6 +19,15 @@ export default function ExperienceSync() {
   const pendingRef = useRef(pendingSync);
   pendingRef.current = pendingSync;
 
+  // Signing out drops a choice still waiting to be saved: it belongs to the account that
+  // made it, not to whoever signs in next on this device. (A choice made before any
+  // sign-in, e.g. during onboarding, is kept for the new account.)
+  const previousUserRef = useRef(userId);
+  useEffect(() => {
+    if (previousUserRef.current && !userId && pendingRef.current) markSynced();
+    previousUserRef.current = userId;
+  }, [userId, markSynced]);
+
   // Save a choice made here.
   useEffect(() => {
     if (!userId || !pendingSync) return;
