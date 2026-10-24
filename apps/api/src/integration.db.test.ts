@@ -24,6 +24,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { Midi } from "@tonejs/midi";
 import bcrypt from "bcryptjs";
+import { readCopyrightNotices, toAscii } from "./midi-credit.js";
 import type { NextFunction, Request, Response } from "express";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -530,6 +531,71 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         for (const row of rows) {
           if (row.id === scoreSong.id) for (const file of [row.file_path, row.notation_path, row.score_path]) if (file) await rm(file, { force: true });
         }
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("song export: attribution travels with CC downloads", () => {
+    it("embeds the /credits text in the MIDI, leaves MusicXML/MEI bytes alone, and exposes it for the UI", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-credit-"));
+      const owner = await createUser();
+      const other = await createUser();
+      const original = midiBytes();
+      const file = join(dir, "cc.mid");
+      await writeFile(file, original);
+      const attribution = "Nocturne (Chopin). MIDI sequence by Bernd Krüger, piano-midi.de. Copyright © 2008.";
+      const base = { artist: "Chopin", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 64, file_path: file };
+      const ccSa = await m.prisma.song.create({
+        data: { ...base, title: "CC-SA library", content_rights: "cc-by-sa-4.0", source_kind: "essentials", file_licence: "cc-by-sa-4.0", public_eligible: true, attribution },
+      });
+      const pd = await m.prisma.song.create({
+        data: { ...base, title: "PD library", content_rights: "public-domain", source_kind: "beginner", file_licence: "public-domain", public_eligible: true },
+      });
+      const uploaded = await fetch(`${baseUrl}/songs/upload/score?genre=classical`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/octet-stream" },
+        body: new Uint8Array(readFileSync(SCORE_FIXTURE)),
+      });
+      expect(uploaded.status).toBe(201);
+      const scoreId = ((await uploaded.json()) as { id: string }).id;
+      const score = await m.prisma.song.update({ where: { id: scoreId }, data: { file_licence: "cc-by-4.0", attribution: "Aloha Oe (Liliuokalani) typeset by Someone." } });
+      const get = async (path: string, token: string) => {
+        const res = await fetch(`${baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });
+        return Buffer.from(await res.arrayBuffer());
+      };
+      const notes = (bytes: Buffer) => new Midi(bytes).tracks.map((t) => t.notes.map((n) => [n.midi, n.ticks, n.durationTicks, n.velocity]));
+      try {
+        // /credits and the download say the same thing.
+        const credits = (await (await fetch(`${baseUrl}/credits`)).json()) as { credits: { song_id: string; credit: string }[] };
+        const listedCredit = credits.credits.find((c) => c.song_id === ccSa.id)!.credit;
+        expect(listedCredit).toContain("Bernd Krüger");
+
+        const downloaded = await get(`/songs/${ccSa.id}/file?download=1`, other.token);
+        const notices = readCopyrightNotices(downloaded);
+        expect(notices).toHaveLength(1);
+        expect(notices[0]).toBe(toAscii(listedCredit));
+        expect(notices[0]).toContain("Bernd Kruger");
+        expect(notices[0]).toContain("(c) 2008");
+        expect(notices[0]).toContain("cc-by-sa-4.0");
+        expect(notes(downloaded)).toEqual(notes(original));
+        // The in-app play route is untouched.
+        expect((await get(`/songs/${ccSa.id}/file`, other.token)).equals(original)).toBe(true);
+        // Public domain needs no credit: the file is byte-identical.
+        expect((await get(`/songs/${pd.id}/file?download=1`, other.token)).equals(original)).toBe(true);
+
+        // A CC score import: MIDI is credited, MusicXML and MEI are the original bytes.
+        expect(readCopyrightNotices(await get(`/songs/${scoreId}/file?download=1`, owner.token))).toHaveLength(1);
+        expect((await get(`/songs/${scoreId}/file?download=1&format=musicxml`, owner.token)).equals(readFileSync(score.score_path!))).toBe(true);
+        expect((await get(`/songs/${scoreId}/file?download=1&format=mei`, owner.token)).equals(readFileSync(score.notation_path!))).toBe(true);
+
+        // The list exposes the credit so the UI does not recompute it.
+        const listed = (await api("GET", "/songs", { token: other.token })).body.songs as { id: string; download_credit: { required: boolean; summary: string; text: string } | null }[];
+        expect(listed.find((s) => s.id === ccSa.id)!.download_credit).toMatchObject({ required: true, summary: "by Chopin, licence cc-by-sa-4.0", text: listedCredit });
+        expect(listed.find((s) => s.id === pd.id)!.download_credit).toMatchObject({ required: false, summary: "Public domain" });
+      } finally {
+        await m.prisma.song.deleteMany({ where: { id: { in: [ccSa.id, pd.id, scoreId] } } });
+        for (const f of [score.file_path, score.notation_path, score.score_path]) if (f) await rm(f, { force: true });
         await rm(dir, { recursive: true, force: true });
       }
     });
