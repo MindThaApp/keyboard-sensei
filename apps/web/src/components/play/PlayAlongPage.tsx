@@ -21,7 +21,7 @@ import { Button, ErrorState, GlassSurface, SegmentedControl, Toast, Toggle } fro
 import { useExperienceMode } from "../ui/useExperienceMode";
 import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
 import { LiveOsmdNotation, LiveVerovioNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
-import PracticeResultSheet, { type FinishedRun } from "./PracticeResultSheet";
+import PracticeResultSheet, { submitStateForError, type FinishedRun, type SubmitState } from "./PracticeResultSheet";
 import PracticeSettingsSheet from "./PracticeSettingsSheet";
 import { loadRenderer, NOTES_STYLE_FALLBACK_EVENT, styleFallbackToast, type NotesStyleFallback, type WaterfallRenderer } from "./renderers";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
@@ -171,7 +171,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [hands, setHands] = useState<PracticeHands>(initial.hands);
   const [finished, setFinished] = useState<FinishedRun | null>(null);
   const [resultOpen, setResultOpen] = useState(false);
-  const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "failed" | "skipped">("idle");
+  const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{ id: number; title: string; body: string } | null>(null);
@@ -432,7 +432,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
           is_loop: ranRun.loop !== null,
         })
           .then(() => setSubmitState("saved"))
-          .catch(() => setSubmitState("failed"));
+          .catch((error: unknown) => setSubmitState(submitStateForError(error)));
       }
 
       // Remember where this song got to, so Simple mode opens it one rung up after a pass.
