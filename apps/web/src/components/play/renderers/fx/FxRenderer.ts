@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { PlayAlongJudgment, PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import { noteMotion, type NotePalette } from "../../notePalette";
 import { ClassicRenderer, judgementMark, type KeyboardGeometry } from "../../waterfall";
+import { KeyLightWriter } from "../../../piano/keyLights";
 import { NOTES_STYLE_FALLBACK_EVENT, type NotesStyleFallback, type WaterfallFrame, type WaterfallRenderer } from "../types";
 import { Bloom } from "../neon3d/bloom";
 import { clearMarks, createFlatLayer, createMarkLayer, MARK_KIND, pushMark, type FlatLayer, type MarkLayer } from "../neon3d/blockMaterial";
@@ -133,6 +134,7 @@ export class FxRenderer implements WaterfallRenderer {
   private readonly keyW = new Float32Array(128);
   /** The key's own left edge (bars sit inside it). */
   private readonly keyLeft = new Float32Array(128);
+  private readonly keyLights = new KeyLightWriter();
 
   private song: readonly PlayAlongNote[] | null = null;
   private songSorted = false;
@@ -220,6 +222,7 @@ export class FxRenderer implements WaterfallRenderer {
     });
     this.readDebugFlag();
     this.applyTier(this.tier);
+    this.keyLights.setActive(true);
     liveRenderers++;
     exposeForDebugging(this);
   }
@@ -334,6 +337,8 @@ export class FxRenderer implements WaterfallRenderer {
     }
     this.lastFrame = null;
     this.hitAtMs.fill(-Infinity);
+    this.keyLights.begin();
+    this.keyLights.commit();
     this.sparks?.clear();
     this.smoke?.clear();
     if (this.marks) clearMarks(this.marks);
@@ -351,6 +356,7 @@ export class FxRenderer implements WaterfallRenderer {
 
   private releaseWebGL(): void {
     this.lastFrame = null;
+    this.keyLights.setActive(false);
     this.hostWatcher?.disconnect();
     this.hostWatcher = null;
     this.unsubscribe?.();
@@ -777,6 +783,8 @@ export class FxRenderer implements WaterfallRenderer {
     const sparkRate = sparks.size > 0 ? sparks.size / (sparkLife * FILL_NOTES) : 0;
     const smokeRate = smoke.size > 0 ? smoke.size / (SMOKE_LIFE_S * 3) : 0;
     let emitted = 0;
+    const lights = this.keyLights;
+    lights.begin();
     if (dt > 0) {
       sparks.beginBatch();
       smoke.beginBatch();
@@ -815,6 +823,7 @@ export class FxRenderer implements WaterfallRenderer {
       kColor[a * 4 + 1] = g;
       kColor[a * 4 + 2] = b;
       kColor[a * 4 + 3] = age;
+      lights.light(note.midi, r, g, b);
 
       if (dt <= 0 || emitted >= MAX_EMIT_PER_FRAME) continue;
       const onset = 1 + 1.5 * Math.exp(-age * 9);
@@ -834,6 +843,7 @@ export class FxRenderer implements WaterfallRenderer {
       sparks.endBatch();
       smoke.endBatch();
     }
+    lights.commit();
     keys.geometry.instanceCount = count;
     uploadRange(keys.key, count);
     uploadRange(keys.color, count);
