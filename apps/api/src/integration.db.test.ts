@@ -1681,6 +1681,26 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         await m.prisma.work.delete({ where: { id: "test-draft-ode" } });
       }
     });
+
+    it("answers one song's stars from that song's attempts only, matching the full progression view", async () => {
+      const user = await createUser();
+      const other = await createUser();
+      await makeSong("one-song-stars-a");
+      await makeSong("one-song-stars-b");
+      await playWith(user.id, "one-song-stars-a", 99, { arrangement_level: "full", hands: "both" });
+      await playWith(user.id, "one-song-stars-a", 99, { arrangement_level: "easy" });
+      await playWith(user.id, "one-song-stars-a", 99, { is_loop: true, loop_start_bar: 1, loop_end_bar: 2 });
+      await playWith(user.id, "one-song-stars-b", 70, {});
+      await playWith(other.id, "one-song-stars-a", 50, {});
+
+      const a = await api("GET", "/songs/one-song-stars-a/stars", { token: user.token });
+      expect(a.body).toEqual({ songId: "one-song-stars-a", best: 3, byLevel: { full: 3, easy: 1 } });
+      const progression = await api("GET", "/users/me/progression", { token: user.token });
+      expect({ best: a.body.best, byLevel: a.body.byLevel }).toEqual(progression.body.songStars["one-song-stars-a"]);
+      expect((await api("GET", "/songs/one-song-stars-b/stars", { token: user.token })).body).toEqual({ songId: "one-song-stars-b", best: 1, byLevel: { full: 1 } });
+      expect((await api("GET", "/songs/never-played/stars", { token: user.token })).body).toEqual({ songId: "never-played", best: 0, byLevel: {} });
+      expect((await api("GET", "/songs/one-song-stars-a/stars", { token: other.token })).body).toEqual({ songId: "one-song-stars-a", best: 0, byLevel: { full: 0 } });
+    });
   });
 
   describe("catalogue backfill", () => {

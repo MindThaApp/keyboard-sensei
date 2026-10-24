@@ -5,7 +5,7 @@ import { CATEGORY_LABEL, achievementStats, achievementViews } from "./achievemen
 import { addDays } from "./days.js";
 import { dailySummary } from "./rewards.js";
 import { SKILLS, readingGameSkillPoints, skillPoints } from "./skills.js";
-import { lessonStarsById, loadSnapshot, songStarsById } from "./snapshot.js";
+import { lessonStarsById, loadSnapshot, loadSongPlayAlong, songStarsById } from "./snapshot.js";
 import { liveExerciseIds, pickContinue, pickReview, pickSong, readyForYou } from "./today.js";
 
 const uid = (req: Request): string => {
@@ -127,8 +127,7 @@ progressionRouter.get("/songs/stars/me", async (req, res, next) => {
 progressionRouter.get("/songs/:id/stars", async (req, res, next) => {
   try {
     const songId = z.string().min(1).parse(req.params.id);
-    const snapshot = await loadSnapshot(prisma, uid(req));
-    const stars = songStarsById(snapshot.playAlong.filter((attempt) => attempt.songId === songId)).get(songId);
+    const stars = songStarsById(await loadSongPlayAlong(prisma, uid(req), songId)).get(songId);
     res.json({ songId, best: stars?.best ?? 0, byLevel: stars?.byLevel ?? {} });
   } catch (e) {
     next(e);
