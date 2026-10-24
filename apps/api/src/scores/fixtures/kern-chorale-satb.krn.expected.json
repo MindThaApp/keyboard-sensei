@@ -1,0 +1,264 @@
+{
+ "source": "kern-chorale-satb.krn",
+ "reader": "music21 10.5.1",
+ "notes": [
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 59,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 43,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 64,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 60,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 45,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 66,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 62,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 47,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 72,
+   "onsetQ": 3.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 67,
+   "onsetQ": 3.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 64,
+   "onsetQ": 3.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 48,
+   "onsetQ": 3.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 4.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 66,
+   "onsetQ": 4.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 2,
+   "midi": 57,
+   "onsetQ": 4.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 3,
+   "midi": 50,
+   "onsetQ": 4.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 5.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 74,
+   "onsetQ": 6.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 1,
+   "midi": 67,
+   "onsetQ": 6.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 62,
+   "onsetQ": 6.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 47,
+   "onsetQ": 6.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 7.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 59,
+   "onsetQ": 7.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 55,
+   "onsetQ": 7.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 64,
+   "onsetQ": 8.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 55,
+   "onsetQ": 8.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 48,
+   "onsetQ": 8.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 9.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 2,
+   "midi": 57,
+   "onsetQ": 9.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 3,
+   "midi": 54,
+   "onsetQ": 9.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 10.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 10.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 10.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 2,
+   "midi": 59,
+   "onsetQ": 10.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 3,
+   "midi": 55,
+   "onsetQ": 10.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 12.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 12.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 2,
+   "midi": 59,
+   "onsetQ": 12.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 3,
+   "midi": 43,
+   "onsetQ": 12.0,
+   "durationQ": 4.0
+  }
+ ]
+}
