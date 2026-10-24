@@ -105,7 +105,7 @@ void main() {
   if (uMode > 2.5) {
     // Glass: dark tinted body with a smoky inside that drifts, a bright rim and a sheen.
     vec2 uv = (vLocal + vec2(seed * 57.0, seed * 91.0)) / 84.0;
-    if (uGlassNoise > 0.5) {
+    if (uGlassNoise > 0.5 && uEmissive < 0.5) {
       float n1 = texture2D(uNoise, uv + vec2(t * 0.09, -t * 0.21)).r;
       float n2 = texture2D(uNoise, uv * 1.85 + vec2(-t * 0.15, -t * 0.33) + 0.37).g;
       smoky = smoothstep(0.28, 0.92, n1 * 0.62 + n2 * 0.52);
