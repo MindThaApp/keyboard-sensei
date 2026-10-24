@@ -400,6 +400,141 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("song export (GET /songs/:id/file?download=1&format=...)", () => {
+    const get = async (path: string, token?: string) => {
+      const res = await fetch(`${baseUrl}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+      return { res, status: res.status, bytes: Buffer.from(await res.arrayBuffer()) };
+    };
+    const url = (id: string, format?: string) => `/songs/${id}/file?download=1${format ? `&format=${format}` : ""}`;
+
+    it("applies ownership, admin and licence rules to every format", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-export-"));
+      const write = async (name: string, bytes: Buffer = midiBytes()) => {
+        const file = join(dir, name);
+        await writeFile(file, bytes);
+        return file;
+      };
+      const owner = await createUser();
+      const other = await createUser();
+      const admin = await createUserWithPassword("admin");
+      const base = { artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8 };
+
+      // A real score import for the owner (MXL original, Verovio MEI, derived MIDI).
+      const original = readFileSync(SCORE_FIXTURE);
+      const uploaded = await fetch(`${baseUrl}/songs/upload/score?genre=classical`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/octet-stream" },
+        body: new Uint8Array(original),
+      });
+      expect(uploaded.status).toBe(201);
+      const scoreSong = (await uploaded.json()) as { id: string; downloads: Record<string, boolean> };
+      expect(scoreSong.downloads).toEqual({ midi: true, musicxml: true, mei: true });
+
+      const songs = {
+        upload: await m.prisma.song.create({ data: { ...base, title: 'Owner "upload"/x', content_rights: "user-upload", source_kind: "upload", file_licence: "unknown", file_path: await write("up.mid"), uploader_id: owner.id } }),
+        free: await m.prisma.song.create({ data: { ...base, title: "Free library", content_rights: "public-domain", source_kind: "beginner", file_licence: "public-domain", public_eligible: true, file_path: await write("beginner-free.mid") } }),
+        restricted: await m.prisma.song.create({ data: { ...base, title: "Restricted library", content_rights: "cover-arrangement", source_kind: "adl", file_licence: "unknown", public_eligible: false, file_path: await write("seed-restricted.mid") } }),
+        // Eligible flag set but the file licence is non-commercial: the licence fields still gate it.
+        nc: await m.prisma.song.create({ data: { ...base, title: "NC library", content_rights: "cc-by-nc-4.0", source_kind: "essentials", file_licence: "cc-by-nc-4.0", public_eligible: true, file_path: await write("essentials-nc.mid") } }),
+        missingFile: await m.prisma.song.create({ data: { ...base, title: "Gone", content_rights: "user-upload", source_kind: "upload", file_path: join(dir, "nope.mid"), uploader_id: owner.id } }),
+      };
+      const ids = [...Object.values(songs).map((song) => song.id), scoreSong.id];
+      const contentTypes = { midi: "audio/midi", musicxml: "application/vnd.recordare.musicxml", mei: "application/mei+xml" } as const;
+
+      try {
+        // Anonymous: signed out is 401 for every song and format, and nothing leaks.
+        for (const id of ids) {
+          for (const format of ["midi", "musicxml", "mei"]) expect((await get(url(id, format))).status, `${id} ${format}`).toBe(401);
+        }
+
+        // Owner: own upload (MIDI only) and score import (all three).
+        const upMidi = await get(url(songs.upload.id), owner.token);
+        expect(upMidi.status).toBe(200);
+        expect(upMidi.res.headers.get("content-type")).toContain("audio/midi");
+        expect(upMidi.res.headers.get("content-disposition")).toBe(`attachment; filename="Owner uploadx.mid"; filename*=UTF-8''Owner%20uploadx.mid`);
+        expect(upMidi.bytes.equals(midiBytes())).toBe(true);
+        for (const format of ["musicxml", "mei"] as const) {
+          const missing = await get(url(songs.upload.id, format), owner.token);
+          expect(missing.status, format).toBe(404);
+          expect(JSON.parse(missing.bytes.toString()).error.code).toBe("format_unavailable");
+        }
+        const stored = await m.prisma.song.findUniqueOrThrow({ where: { id: scoreSong.id } });
+        for (const format of ["midi", "musicxml", "mei"] as const) {
+          const got = await get(url(scoreSong.id, format), owner.token);
+          expect(got.status, format).toBe(200);
+          expect(got.res.headers.get("content-type")).toContain(contentTypes[format]);
+          expect(got.res.headers.get("content-disposition")).toMatch(/^attachment; filename="[^"]+\.(mid|mxl|mei)"; filename\*=UTF-8''/);
+          expect(got.res.headers.get("cache-control")).toContain("no-store");
+          const expected = format === "midi" ? stored.file_path : format === "mei" ? stored.notation_path! : stored.score_path!;
+          expect(got.bytes.equals(readFileSync(expected)), format).toBe(true);
+        }
+        expect(Buffer.from(readFileSync(stored.score_path!))).toEqual(original);
+        // Format is validated; ?download must be 1; no download param keeps the player's plain MIDI.
+        expect((await get(url(scoreSong.id, "pdf"), owner.token)).status).toBe(400);
+        expect((await get(`/songs/${scoreSong.id}/file?download=yes`, owner.token)).status).toBe(400);
+        const plain = await get(`/songs/${scoreSong.id}/file`, owner.token);
+        expect(plain.status).toBe(200);
+        expect(plain.res.headers.get("content-disposition")).toBeNull();
+        // A file that vanished from disk is a 404, not a 500.
+        expect((await get(url(songs.missingFile.id), owner.token)).status).toBe(404);
+
+        // Another user: private songs are invisible (404, not 403); library depends on the licence.
+        for (const id of [songs.upload.id, scoreSong.id]) {
+          for (const format of ["midi", "musicxml", "mei"]) expect((await get(url(id, format), other.token)).status, `${id} ${format}`).toBe(404);
+        }
+        const free = await get(url(songs.free.id), other.token);
+        expect(free.status).toBe(200);
+        expect(free.res.headers.get("content-disposition")).toContain('filename="Free library.mid"');
+        expect((await get(url(songs.free.id, "musicxml"), other.token)).status).toBe(404);
+        // Playable but never downloadable: 403, and the player's plain file route still works.
+        for (const key of ["restricted", "nc"] as const) {
+          const denied = await get(url(songs[key].id), other.token);
+          expect(denied.status, key).toBe(403);
+          expect(JSON.parse(denied.bytes.toString()).error.code).toBe("download_not_allowed");
+          expect((await get(url(songs[key].id, "musicxml"), other.token)).status, key).toBe(403);
+          expect((await get(`/songs/${songs[key].id}/file`, other.token)).status, key).toBe(200);
+        }
+        // The owner of nothing in the library gets no special treatment either.
+        expect((await get(url(songs.restricted.id), owner.token)).status).toBe(403);
+
+        // Admin: everything, including restricted library songs and other people's uploads.
+        for (const id of [songs.upload.id, songs.free.id, songs.restricted.id, songs.nc.id, scoreSong.id]) {
+          expect((await get(url(id), admin.token)).status, id).toBe(200);
+        }
+        for (const format of ["musicxml", "mei"]) {
+          expect((await get(url(scoreSong.id, format), admin.token)).status, format).toBe(200);
+          expect((await get(url(songs.restricted.id, format), admin.token)).status, format).toBe(404);
+        }
+
+        // The list tells the UI what to show, by the same rule.
+        const listed = async (token: string) =>
+          new Map(((await api("GET", "/songs", { token })).body.songs as { id: string; downloads: Record<string, boolean> }[]).map((song) => [song.id, song.downloads]));
+        const asOther = await listed(other.token);
+        expect(asOther.get(songs.free.id)).toEqual({ midi: true, musicxml: false, mei: false });
+        expect(asOther.get(songs.restricted.id)).toEqual({ midi: false, musicxml: false, mei: false });
+        expect(asOther.has(songs.upload.id)).toBe(false);
+        const asAdmin = await listed(admin.token);
+        expect(asAdmin.get(songs.restricted.id)).toEqual({ midi: true, musicxml: false, mei: false });
+        expect(asAdmin.get(scoreSong.id)).toEqual({ midi: true, musicxml: true, mei: true });
+
+        // The public catalogue changes visibility, never the licence gate.
+        m.env.PUBLIC_CATALOGUE = true;
+        expect((await get(url(songs.free.id), other.token)).status).toBe(200);
+        expect((await get(url(songs.nc.id), other.token)).status).toBe(403);
+        expect((await get(url(songs.restricted.id), other.token)).status).toBe(404);
+        expect((await get(url(songs.nc.id), admin.token)).status).toBe(200);
+      } finally {
+        m.env.PUBLIC_CATALOGUE = false;
+        const rows = await m.prisma.song.findMany({ where: { id: { in: ids } } });
+        await m.prisma.song.deleteMany({ where: { id: { in: ids } } });
+        for (const row of rows) {
+          if (row.id === scoreSong.id) for (const file of [row.file_path, row.notation_path, row.score_path]) if (file) await rm(file, { force: true });
+        }
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("score import", () => {
     const upload = (token: string, bytes: Uint8Array<ArrayBuffer>, query = "") =>
       fetch(`${baseUrl}/songs/upload/score${query}`, {
