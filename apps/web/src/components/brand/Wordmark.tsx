@@ -70,7 +70,7 @@ export default function Wordmark({ size = "md", className = "" }: { size?: "md" 
         className={`font-display font-extrabold tracking-tighter ${large ? "text-3xl" : "text-lg"}`}
         style={{ fontWeight: 800, letterSpacing: "-0.04em" }}
       >
-        Midi<span style={{ fontWeight: 500 }}>ivory</span>
+        Mid<span style={{ fontWeight: 500 }}>ivory</span>
       </span>
     </span>
   );
