@@ -575,6 +575,35 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(res.status).toBe(503);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("omr_unavailable");
     });
+
+    it("counts only accepted jobs against the recognition limit, and not against MIDI uploads", async () => {
+      const user = await createUser();
+      /** `remaining` from the draft-8 RateLimit header, e.g. `"60-in-1hr"; r=59; t=3600`. */
+      const remaining = (res: globalThis.Response) => Number(/;\s*r=(\d+)/.exec(res.headers.get("ratelimit") ?? "")?.[1]);
+      // More refusals than the hourly limit of 10: none of them use it up.
+      for (let i = 0; i < 12; i += 1) {
+        const refused = await submit(user.token, new TextEncoder().encode("<html>"));
+        expect(refused.status).toBe(415);
+      }
+      m.env.OMR_SERVICE_URL = undefined;
+      expect((await submit(user.token, new TextEncoder().encode("%PDF-1.7"))).status).toBe(503);
+      m.env.OMR_SERVICE_URL = `http://127.0.0.1:${(omrServer.address() as AddressInfo).port}`;
+
+      const accepted = await submit(user.token, new TextEncoder().encode("%PDF-1.7 two pages of music"));
+      expect(accepted.status).toBe(202);
+      expect(remaining(accepted)).toBe(9);
+      await settled(user.token, ((await accepted.json()) as { id: string }).id);
+
+      // The general upload limit (60/h) hasn't been touched by any of the above. (A refused
+      // MIDI upload still counts there, so this first one leaves 59.)
+      const midi = await fetch(`${baseUrl}/songs/upload?title=Limit%20check`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${user.token}`, "content-type": "audio/midi" },
+        body: new TextEncoder().encode("not a midi file"),
+      });
+      expect(midi.status).toBeGreaterThanOrEqual(400);
+      expect(remaining(midi)).toBe(59);
+    });
   });
 
   describe("account deletion", () => {
