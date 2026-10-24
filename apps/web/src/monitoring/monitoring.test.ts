@@ -139,7 +139,7 @@ describe("monitoring lifecycle", () => {
 });
 
 describe("feedback to Sentry", () => {
-  const report = { message: "It broke", category: "bug", feedbackId: "fb-1", page: "/play" };
+  const report = { message: "It broke", category: "bug", feedbackId: "fb-1", page: "/play", experienceMode: "simple" };
 
   it("sends nothing while monitoring is off", async () => {
     const { sdk, load } = fakeSdk();
@@ -154,10 +154,53 @@ describe("feedback to Sentry", () => {
     await monitoring.reportFeedback(report);
     expect(sdk.captureFeedback).toHaveBeenCalledTimes(1);
     const [params, hint] = sdk.captureFeedback.mock.calls[0]!;
-    expect(params).toMatchObject({ message: "It broke", tags: { category: "bug", feedback_id: "fb-1" }, url: "/play" });
+    expect(params).toMatchObject({ message: "It broke", url: "/play" });
     expect(params.associatedEventId).toBeUndefined();
     expect(params).not.toHaveProperty("email");
     expect(hint).toBeUndefined();
+  });
+
+  it("tags the feedback with kind, route, experience mode, platform and app version", async () => {
+    const { sdk, load } = fakeSdk();
+    const monitoring = createMonitoring(config(), { load });
+    await monitoring.apply("always");
+    await monitoring.reportFeedback({ ...report, experienceMode: "advanced" });
+    expect(sdk.captureFeedback.mock.calls[0]![0].tags).toEqual({
+      feedback_kind: "bug",
+      feedback_id: "fb-1",
+      route: "/play",
+      experience_mode: "advanced",
+      platform: "web",
+      app_version: config().release,
+    });
+  });
+
+  it("reports the android platform for the native app", async () => {
+    const { sdk, load } = fakeSdk();
+    const monitoring = createMonitoring({ ...config(), native: true }, { load });
+    await monitoring.apply("always");
+    await monitoring.reportFeedback(report);
+    expect(sdk.captureFeedback.mock.calls[0]![0].tags?.platform).toBe("android");
+  });
+
+  it("includes the contact email only when one was given", async () => {
+    const { sdk, load } = fakeSdk();
+    const monitoring = createMonitoring(config(), { load });
+    await monitoring.apply("always");
+    await monitoring.reportFeedback({ ...report, email: "ada@example.com" });
+    expect(sdk.captureFeedback.mock.calls[0]![0].email).toBe("ada@example.com");
+  });
+
+  it("keeps the contact email through redaction while still redacting emails in the message", async () => {
+    const { load, feedbackHook } = fakeSdk();
+    await createMonitoring(config(), { load }).apply("always");
+    const event: Record<string, unknown> = {
+      contexts: { feedback: { message: "mail bob@example.com", contact_email: "ada@example.com" } },
+      user: { id: "u1", email: "acct@example.com" },
+    };
+    feedbackHook()!(event);
+    expect(event.contexts).toEqual({ feedback: { message: "mail [email]", contact_email: "ada@example.com" } });
+    expect(event.user).toEqual({ id: "u1" });
   });
 
   it("links to the last error when there was one recently, and not when it is old", async () => {
@@ -183,6 +226,14 @@ describe("feedback to Sentry", () => {
     expect(hint?.attachments).toHaveLength(1);
     expect(hint?.attachments?.[0]).toMatchObject({ filename: "screenshot.png", contentType: "image/png" });
     expect(Array.from(hint!.attachments![0]!.data)).toEqual([1, 2, 3]);
+  });
+
+  it("sends the original image where it cannot be re-encoded", async () => {
+    const { sdk, load } = fakeSdk();
+    const monitoring = createMonitoring(config(), { load });
+    await monitoring.apply("always");
+    await monitoring.reportFeedback({ ...report, screenshot: new Blob([new Uint8Array([9])], { type: "image/webp" }) });
+    expect(sdk.captureFeedback.mock.calls[0]![1]?.attachments?.[0]).toMatchObject({ filename: "screenshot.webp" });
   });
 
   it("never throws into the feedback form", async () => {
