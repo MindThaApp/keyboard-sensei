@@ -1,0 +1,192 @@
+{
+ "source": "kern-edge-cases.krn",
+ "reader": "music21 10.5.1",
+ "notes": [
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 1.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 59,
+   "onsetQ": 1.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 74,
+   "onsetQ": 3.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 1,
+   "midi": 50,
+   "onsetQ": 3.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 57,
+   "onsetQ": 3.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 5.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 59,
+   "onsetQ": 5.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 72,
+   "onsetQ": 7.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 50,
+   "onsetQ": 7.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 1,
+   "midi": 57,
+   "onsetQ": 7.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 9.0,
+   "durationQ": 0.3333333333333333
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 9.0,
+   "durationQ": 4.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 9.333333333333334,
+   "durationQ": 0.3333333333333333
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 9.666666666666666,
+   "durationQ": 0.3333333333333333
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 10.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 11.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 71,
+   "onsetQ": 13.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 13.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 13.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 1,
+   "midi": 67,
+   "onsetQ": 13.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 14.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 15.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 16.0,
+   "durationQ": 6.0
+  },
+  {
+   "staff": 1,
+   "midi": 55,
+   "onsetQ": 16.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 1,
+   "midi": 62,
+   "onsetQ": 16.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 1,
+   "midi": 50,
+   "onsetQ": 19.0,
+   "durationQ": 3.0
+  },
+  {
+   "staff": 1,
+   "midi": 57,
+   "onsetQ": 19.0,
+   "durationQ": 3.0
+  }
+ ]
+}

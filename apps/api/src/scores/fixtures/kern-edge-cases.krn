@@ -1,0 +1,38 @@
+!! Fixture for the score import tests. CC0 1.0: public domain dedication (see README.md).
+!!!COM: Fixture written for this project (CC0)
+!!!OTL: Edge-case study
+**kern	**kern
+*staff2	*staff1
+*clefF4	*clefG2
+*k[]	*k[]
+*C:	*C:
+*M4/4	*M4/4
+*MM90	*MM90
+=-	=-
+4G	4d
+=1	=1
+2G 2B	4g
+.	4b
+2D 2A	[2dd
+=2	=2
+2G 2B	2dd]
+2D 2A	2cc
+=3	=3
+1G	12b
+.	12a
+.	12g
+.	4f#
+.	2g
+=4	=4
+*k[f#]	*k[f#]
+*G:	*G:
+*M3/4	*M3/4
+2.G 2.d 2.g	4b
+.	4a
+.	4g
+=5	=5
+2.G 2.d	[2.d
+=6	=6
+2.D 2.A	2.d]
+==	==
+*-	*-

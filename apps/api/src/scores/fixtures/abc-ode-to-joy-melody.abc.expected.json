@@ -1,0 +1,186 @@
+{
+ "source": "abc-ode-to-joy-melody.abc",
+ "reader": "music21 10.5.1",
+ "notes": [
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 0.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 1.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 2.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 3.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 4.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 5.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 6.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 7.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 8.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 9.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 10.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 11.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 12.0,
+   "durationQ": 1.5
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 13.5,
+   "durationQ": 0.5
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 14.0,
+   "durationQ": 2.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 16.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 17.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 18.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 19.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 69,
+   "onsetQ": 20.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 67,
+   "onsetQ": 21.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 22.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 23.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 24.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 25.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 26.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 66,
+   "onsetQ": 27.0,
+   "durationQ": 1.0
+  },
+  {
+   "staff": 0,
+   "midi": 64,
+   "onsetQ": 28.0,
+   "durationQ": 1.5
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 29.5,
+   "durationQ": 0.5
+  },
+  {
+   "staff": 0,
+   "midi": 62,
+   "onsetQ": 30.0,
+   "durationQ": 2.0
+  }
+ ]
+}

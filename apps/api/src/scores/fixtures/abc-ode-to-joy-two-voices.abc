@@ -1,0 +1,17 @@
+% Fixture for the score import tests. CC0 1.0: public domain dedication (see README.md).
+X:1
+T:Ode to Joy (two-hand setting)
+C:Ludwig van Beethoven
+M:4/4
+L:1/4
+Q:1/4=90
+%%score {RH | LH}
+V:RH clef=treble name="Right hand"
+V:LH clef=bass name="Left hand"
+K:D
+V:RH
+F F G A | A G F E | D D E F | F3/2 E/2 E2 |
+F F G A | A G F E | D D E F | E3/2 D/2 D2 |]
+V:LH
+[D,A,D]4 | [A,,E,A,]4 | [D,A,D]4 | [A,,E,A,]4 |
+[D,A,D]4 | [A,,E,A,]4 | [D,A,D]4 | [A,,E,A,]2 [D,A,D]2 |]

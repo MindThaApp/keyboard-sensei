@@ -1,0 +1,28 @@
+!! Fixture for the score import tests. CC0 1.0: public domain dedication (see README.md).
+!!!COM: Fixture written for this project (CC0)
+!!!OTL: Four-part chorale phrase
+**kern	**kern	**kern	**kern
+*staff4	*staff3	*staff2	*staff1
+*clefF4	*clefF4	*clefG2	*clefG2
+*k[f#]	*k[f#]	*k[f#]	*k[f#]
+*G:	*G:	*G:	*G:
+*M4/4	*M4/4	*M4/4	*M4/4
+*MM72	*MM72	*MM72	*MM72
+=1	=1	=1	=1
+4GG	4B	4d	4g
+4AA	4c	4e	4a
+4BB	4d	4f#	4b
+4C	4e	4g	4cc
+=2	=2	=2	=2
+2D	2A	2f#	4b
+.	.	.	4g
+4BB	4d	4g	[2dd
+4G	4B	4d	.
+=3	=3	=3	=3
+4C	4G	4e	2dd]
+4F#	4A	4d	.
+2G	2B	2d	2b 2g
+=4	=4	=4	=4
+1GG	1B	1d	1g
+==	==	==	==
+*-	*-	*-	*-

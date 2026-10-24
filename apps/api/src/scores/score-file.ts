@@ -2,15 +2,16 @@ import { strFromU8, unzipSync } from "fflate";
 
 export class InvalidScoreError extends Error {}
 
-export type ScoreFormat = "musicxml" | "mei";
+/** The value is also Verovio's `inputFrom` name for the notation. */
+export type ScoreFormat = "musicxml" | "mei" | "abc" | "humdrum";
 
 /** Extensions the original upload is stored under, by what the bytes turned out to be. */
-export type ScoreFileKind = "musicxml" | "mxl" | "mei";
+export type ScoreFileKind = "musicxml" | "mxl" | "mei" | "abc" | "krn";
 
 export interface DecodedScore {
   kind: ScoreFileKind;
   format: ScoreFormat;
-  /** The score as XML text (an .mxl is unzipped to its root file). */
+  /** The score as text: XML (an .mxl is unzipped to its root file), ABC or Humdrum. */
   text: string;
 }
 
@@ -57,10 +58,84 @@ function formatOf(text: string): ScoreFormat {
   if (root === "score-partwise") return "musicxml";
   if (root === "mei" || root === "meiHead" || root === "music") return "mei";
   if (root === "score-timewise") throw new InvalidScoreError("Timewise MusicXML isn't supported: export the score as standard (partwise) MusicXML");
-  throw new InvalidScoreError("This isn't a MusicXML or MEI score");
+  throw new InvalidScoreError(NOT_A_SCORE);
 }
 
-/** Bytes of an uploaded .musicxml / .xml / .mxl / .mei file, as score text. */
+const NOT_A_SCORE = "This isn't a MusicXML, MEI, ABC or **kern score";
+
+/** Anything but tab, line breaks and printable characters: a text score never holds these. */
+// eslint-disable-next-line no-control-regex
+const BINARY = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+
+/** Header lines are only looked for this far in. */
+const SNIFF_CHARS = 8192;
+
+const linesOf = (text: string): string[] => text.split(/\r\n|\r|\n/);
+
+/**
+ * Verovio's ABC reader takes one voice: given several it only warns, and then lays them
+ * end to end as one long melody. So a second voice (`V:` fields or `[V:]` inline) or a
+ * voice overlay (`&`) is refused rather than imported wrongly.
+ */
+function refuseMultiVoiceAbc(text: string): void {
+  const voices = new Set<string>();
+  for (const line of linesOf(text)) {
+    const field = /^V:\s*([^\s%]+)/.exec(line);
+    if (field) voices.add(field[1]);
+    for (const inline of line.matchAll(/\[V:\s*([^\s\]]+)/g)) voices.add(inline[1]);
+    const isMusic = !/^\s*(%|[A-Za-z+]:)/.test(line);
+    if (isMusic && /&/.test(line.replace(/"[^"]*"|![^!]*!/g, ""))) throw new InvalidScoreError("This ABC file overlays voices with &, which isn't supported: use a single-voice tune");
+  }
+  if (voices.size > 1) throw new InvalidScoreError(`This ABC file has ${voices.size} voices (${[...voices].slice(0, 4).join(", ")}): only single-voice tunes are supported`);
+}
+
+/**
+ * ABC: a tune starts with an `X:` reference number, and its header runs on to the `K:`
+ * (key) line, with no blank line between. Blank lines and `%` comments (including the
+ * `%abc-2.1` version line) may come before the X:. A file header ahead of the X: is not
+ * accepted. Returns false when the text doesn't start like ABC at all.
+ */
+function sniffAbc(text: string): boolean {
+  const lines = linesOf(text.slice(0, SNIFF_CHARS));
+  const start = lines.findIndex((line) => line.trim() !== "" && !line.startsWith("%"));
+  if (start < 0 || !/^X:\s*\d+\s*(%.*)?$/.test(lines[start])) return false;
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") break;
+    if (/^K:/.test(line)) {
+      // The tune ends at a blank line, so a second X: starts a second tune.
+      const tunes = text.match(/^X:\s*\d+/gm)?.length ?? 1;
+      if (tunes > 1) throw new InvalidScoreError(`This ABC file holds ${tunes} tunes: upload one tune per file`);
+      refuseMultiVoiceAbc(text);
+      return true;
+    }
+  }
+  throw new InvalidScoreError("This looks like ABC (it starts with X:) but its header has no K: (key) line");
+}
+
+/**
+ * Humdrum: after any `!` comment and reference lines, the first line is the exclusive
+ * interpretations, tab-separated, each starting `**`, and one of them must be `**kern`.
+ * A second `**` line (a second movement, after the first one's `*-`) is refused.
+ */
+function sniffKern(text: string): boolean {
+  const lines = linesOf(text.slice(0, SNIFF_CHARS));
+  const first = lines.find((line) => line.trim() !== "" && !line.startsWith("!"));
+  if (first === undefined || !first.startsWith("**")) return false;
+  if (!first.split("\t").some((spine) => spine.trim() === "**kern")) throw new InvalidScoreError("This Humdrum file has no **kern spine to read notes from");
+  const movements = text.match(/^\*\*/gm)?.length ?? 1;
+  if (movements > 1) throw new InvalidScoreError(`This Humdrum file holds ${movements} movements: upload one movement per file`);
+  return true;
+}
+
+/** ABC or **kern text, or null when it is neither (binary and XML never are). */
+function textFormatOf(text: string): "abc" | "humdrum" | null {
+  if (BINARY.test(text)) return null;
+  if (sniffAbc(text)) return "abc";
+  if (sniffKern(text)) return "humdrum";
+  return null;
+}
+
+/** Bytes of an uploaded .musicxml / .xml / .mxl / .mei / .abc / .krn file, as score text. */
 export function decodeScoreFile(bytes: Uint8Array): DecodedScore {
   if (isZip(bytes)) {
     const text = unzipMxl(bytes);
@@ -74,7 +149,12 @@ export function decodeScoreFile(bytes: Uint8Array): DecodedScore {
   try {
     text = new TextDecoder(utf16 ?? "utf-8", { fatal: true }).decode(bytes).replace(/^﻿/, "");
   } catch {
-    throw new InvalidScoreError("This isn't a MusicXML or MEI score");
+    throw new InvalidScoreError(NOT_A_SCORE);
+  }
+  if (!text.trimStart().startsWith("<")) {
+    const format = textFormatOf(text);
+    if (!format) throw new InvalidScoreError(NOT_A_SCORE);
+    return { kind: format === "abc" ? "abc" : "krn", format, text };
   }
   const format = formatOf(text);
   return { kind: format === "mei" ? "mei" : "musicxml", format, text };

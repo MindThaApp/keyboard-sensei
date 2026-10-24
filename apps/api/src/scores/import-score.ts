@@ -1,5 +1,7 @@
 import type { Document } from "@xmldom/xmldom";
 import ToneMidi from "@tonejs/midi";
+import { normalizeAbcChords } from "./abc-chords.js";
+import { meiMeasureMeters } from "./mei-meters.js";
 import { meterLengthQ, parseMusicXml, repairRepeats, scoreForm, serializeMusicXml, type ScoreForm } from "./musicxml-structure.js";
 import { decodeScoreFile, InvalidScoreError, type ScoreFileKind } from "./score-file.js";
 import { convertScore, type ConvertedScore } from "./verovio.js";
@@ -74,7 +76,7 @@ function signatureForLength(lengthQ: number, meter: [number, number]): [number, 
  * a short final bar, a mis-encoded rhythm) gets one of exactly its length, so every
  * barline lands where the score's does.
  */
-function rewriteTimeSignatures(midi: MidiFile, form: ScoreForm, converted: ConvertedScore) {
+function rewriteTimeSignatures(midi: MidiFile, form: { measures: { meter: [number, number] | null }[] }, converted: ConvertedScore) {
   const ppq = midi.header.ppq;
   const events: { ticks: number; timeSignature: [number, number] }[] = [];
   let meter: [number, number] = [4, 4];
@@ -107,7 +109,25 @@ function meiCredits(text: string): { title: string | null; composer: string | nu
   return { title: clean(title), composer: clean(composer) };
 }
 
-/** MusicXML/MXL/MEI bytes to MEI notation plus a playable MIDI of the expanded score. */
+function abcCredits(text: string): { title: string | null; composer: string | null } {
+  // The tune's own header: from X: to the K: line.
+  const header: string[] = [];
+  for (const line of text.split(/\r\n|\r|\n/)) {
+    header.push(line);
+    if (/^K:/.test(line)) break;
+  }
+  const field = (name: string) => header.find((line) => line.startsWith(`${name}:`))?.slice(2).replace(/\s%.*$/, "");
+  return { title: clean(field("T")), composer: clean(field("C")) };
+}
+
+function humdrumCredits(text: string): { title: string | null; composer: string | null } {
+  const reference = (code: string) => new RegExp(`^!!!${code}[^:]*:\\s*(.*)$`, "m").exec(text)?.[1];
+  // Humdrum names composers "Last, First".
+  const composer = reference("COM")?.replace(/^([^,]+),\s*(.+)$/, "$2 $1");
+  return { title: clean(reference("OTL")), composer: clean(composer) };
+}
+
+/** MusicXML/MXL/MEI/ABC/**kern bytes to MEI notation plus a playable MIDI of the expanded score. */
 export async function importScore(bytes: Uint8Array): Promise<ImportedScore> {
   const decoded = decodeScoreFile(bytes);
   const warnings: string[] = [];
@@ -132,8 +152,11 @@ export async function importScore(bytes: Uint8Array): Promise<ImportedScore> {
   }
 
   if (decoded.format === "mei") ({ title, composer } = meiCredits(text));
+  if (decoded.format === "abc") ({ title, composer } = abcCredits(text));
+  if (decoded.format === "humdrum") ({ title, composer } = humdrumCredits(text));
 
-  const converted = await convertScore(text, decoded.format);
+  // Verovio's ABC reader drops the length written after a chord; the stored original is untouched.
+  const converted = await convertScore(decoded.format === "abc" ? normalizeAbcChords(text) : text, decoded.format);
   const repeatsVerified = form ? sameOrder(form.playOrder, converted.playedOrder) : null;
   if (form && !repeatsVerified) {
     warnings.push(
@@ -162,6 +185,9 @@ export async function importScore(bytes: Uint8Array): Promise<ImportedScore> {
     warnings.push("Only the piano part is played; the other parts are shown in the sheet music.");
   }
   if (form) rewriteTimeSignatures(midi, form, converted);
+  // ABC and **kern have no separate reading of the form (and no repeats are checked), but
+  // their meters, pickups included, come from the MEI so the bar grid lands on the barlines.
+  else if (decoded.format === "abc" || decoded.format === "humdrum") rewriteTimeSignatures(midi, { measures: meiMeasureMeters(converted.mei) }, converted);
 
   return {
     kind: decoded.kind,
