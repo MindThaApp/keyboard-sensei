@@ -669,6 +669,10 @@ const NotationRenderer = forwardRef<NotationRendererHandle, {
         }
       });
       hugContent(container, verticalRange, rangeStaves);
+      // A staff wider than the screen scrolls, so keyboard users need to be able to
+      // focus it; one that fits stays out of the tab order.
+      if (container.scrollWidth > container.clientWidth) container.tabIndex = 0;
+      else container.removeAttribute("tabindex");
       activeNoteElementsRef.current = syncActiveNoteElements(
         noteElementsById,
         activeNoteElementsRef.current,
@@ -686,7 +690,7 @@ const NotationRenderer = forwardRef<NotationRendererHandle, {
     <div className="max-w-full overflow-x-auto">
       <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-1 text-slate-900 shadow-sm">
         {title && <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h3>}
-        <div ref={containerRef} className="overflow-x-auto" />
+        <div ref={containerRef} className="overflow-x-auto" role="group" aria-label={title ?? "Notation"} />
       </div>
     </div>
   );

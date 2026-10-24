@@ -6,19 +6,22 @@ export interface ListGroupProps {
   /** Uppercase footnote above the group. */
   header?: ReactNode;
   footer?: ReactNode;
+  /** Heading level of `header`: 2 when the group sits directly under the page's h1. */
+  headingLevel?: 2 | 3;
   children: ReactNode;
   className?: string;
   "aria-label"?: string;
 }
 
 /** Inset grouped list on a solid cell. Rows are separated by 0.5px hairlines inset past the icon. */
-export function ListGroup({ header, footer, children, className, "aria-label": ariaLabel }: ListGroupProps) {
+export function ListGroup({ header, footer, headingLevel = 3, children, className, "aria-label": ariaLabel }: ListGroupProps) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const hasIcons = Children.toArray(children).some(
     (child) => isValidElement<ListRowProps>(child) && Boolean(child.props.icon),
   );
   return (
     <section className={cx("ks-list-section", className)} aria-label={ariaLabel}>
-      {header && <h3 className="ks-list-header">{header}</h3>}
+      {header && <Heading className="ks-list-header">{header}</Heading>}
       <ul className="ks-list" data-has-icons={hasIcons}>
         {children}
       </ul>

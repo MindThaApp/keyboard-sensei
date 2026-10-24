@@ -234,8 +234,9 @@ export default function PracticeSettingsSheet(props: Props) {
           <ListGroup header="Advanced">
             <li className="ks-row ks-practice-row--stack">
               <div className="ks-row__main">
-                <span className="ks-row__title" id="ks-lookahead-label">
-                  How far ahead you see
+                <span className="ks-row__title">
+                  {/* The id is on the text alone, so the slider's name leaves out the tip button. */}
+                  <span id="ks-lookahead-label">How far ahead you see</span>
                   <InfoTip>Seconds of upcoming notes shown. More is easier to read, with a slightly lower score.</InfoTip>
                 </span>
                 <Slider

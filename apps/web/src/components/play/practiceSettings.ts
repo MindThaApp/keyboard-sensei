@@ -98,6 +98,20 @@ export function loadSettings(experience: "simple" | "advanced"): Settings {
   }
 }
 
+/**
+ * What to store as the settings every song starts from. Simple mode opens a song at
+ * its own tempo and Wait for me (the beginner start, the song's ladder rung); those
+ * are about that song, so they are not stored until the user changes them. Otherwise
+ * opening one song would set the tempo of the next, and of Advanced mode.
+ */
+export function settingsToPersist(current: Settings, opened: Settings, saved: Settings): Settings {
+  return {
+    ...current,
+    tempoPct: current.tempoPct === opened.tempoPct ? saved.tempoPct : current.tempoPct,
+    waitMode: current.waitMode === opened.waitMode ? saved.waitMode : current.waitMode,
+  };
+}
+
 export function saveSettings(settings: Settings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));

@@ -2,7 +2,7 @@ import { LESSON_PASS_SCORE, resolveLessonStatus } from "@keyboard-sensei/lesson-
 import { ESSENTIALS } from "../essentials/manifest.js";
 import { CURRICULUM_SONGS, curriculumSongId } from "./curriculum-songs.js";
 import { dayKey, daysBetween } from "./days.js";
-import { songStarsById, type ExerciseAttemptRow, type LiveLesson, type Snapshot, type SongInfo } from "./snapshot.js";
+import { songStarsById, type ExerciseAttemptRow, type LiveLesson, type Snapshot } from "./snapshot.js";
 import type { Hands, PracticeLevel } from "./stars.js";
 
 /** The picks on the Today screen: continue, review and a song. */
@@ -132,8 +132,13 @@ export interface ReadySong {
   stars: number;
 }
 
-export function readyForYou(snapshot: Snapshot, available: ReadonlyMap<string, SongInfo>): ReadySong[] {
+/**
+ * Curriculum songs the learner has unlocked. Looked up among the Essentials the user
+ * may see (not every song they ever played), so a piece hidden since cannot be offered.
+ */
+export function readyForYou(snapshot: Snapshot): ReadySong[] {
   const stars = songStarsById(snapshot.playAlong);
+  const available = new Map(snapshot.essentials.map((song) => [song.id, song]));
   return CURRICULUM_SONGS.flatMap((link) => {
     const song = available.get(curriculumSongId(link.slug));
     const lesson = snapshot.lessons.find((item) => item.id === link.lessonId);

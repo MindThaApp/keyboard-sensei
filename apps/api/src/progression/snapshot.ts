@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { validateLesson } from "@keyboard-sensei/lesson-engine";
+import { sharedSongWhere } from "../catalogue/eligibility.js";
 import { songCollection, type SongCollection } from "../songs.js";
 import { dayKey } from "./days.js";
 import { lessonStars, playAlongExtras, playAlongStars, type PlayAlongExtras, type PracticeLevel } from "./stars.js";
@@ -86,7 +87,18 @@ export interface Snapshot {
   challengeAttempts: ChallengeAttemptRow[];
 }
 
-const asDate = (value: unknown): Date => new Date(value as string);
+/**
+ * Prisma's DateTime columns are `timestamp without time zone` holding UTC. to_jsonb
+ * renders them with no offset ("2026-10-24T00:30:00.123"), which `new Date()` would
+ * read as the server's local time, shifting every attempt by the server's UTC offset
+ * and moving attempts near midnight onto the wrong day.
+ */
+export const asDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  const text = String(value);
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  return new Date(hasZone ? text : `${text}Z`);
+};
 const asNumber = (value: unknown): number => (typeof value === "number" ? value : Number(value ?? 0));
 
 function songInfo(row: {
@@ -124,6 +136,25 @@ const SONG_SELECT = {
   retired_at: true,
 } as const;
 
+/** A play-along attempt read whole (to_jsonb), as loadSnapshot and loadSongPlayAlong read them. */
+const playAlongRow = ({ row }: { row: Record<string, unknown> }): PlayAlongRow => ({
+  id: String(row.id),
+  songId: String(row.song_id),
+  createdAt: asDate(row.created_at),
+  score: asNumber(row.score),
+  accuracy: asNumber(row.accuracy),
+  tempoPct: asNumber(row.tempo_pct),
+  extras: playAlongExtras(row),
+});
+
+/** One song's play-along attempts for a user, without loading the whole snapshot. */
+export async function loadSongPlayAlong(db: Pick<PrismaClient, "$queryRaw">, userId: string, songId: string): Promise<PlayAlongRow[]> {
+  const rows = await db.$queryRaw<{ row: Record<string, unknown> }[]>`
+    SELECT to_jsonb(p) AS row FROM "PlayAlongAttempt" p
+    WHERE p.user_id = ${userId} AND p.song_id = ${songId} ORDER BY p.created_at ASC`;
+  return rows.map(playAlongRow);
+}
+
 export async function loadSnapshot(db: Db, userId: string, now: Date = new Date()): Promise<Snapshot> {
   const user = await db.user.findUniqueOrThrow({
     where: { id: userId },
@@ -146,7 +177,11 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
       db.practiceDay.findMany({ where: { user_id: userId }, orderBy: { day: "asc" } }),
       db.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }),
       db.userAchievement.findMany({ where: { user_id: userId } }),
-      db.song.findMany({ where: { id: { startsWith: "essentials-" }, retired_at: null, uploader_id: null }, select: SONG_SELECT }),
+      // Only what the song list would show this user, so nothing recommended 404s on open.
+      db.song.findMany({
+        where: { ...sharedSongWhere(), id: { startsWith: "essentials-" }, retired_at: null },
+        select: SONG_SELECT,
+      }),
       db.challengeAttempt.findMany({
         where: { user_id: userId, finished_at: { not: null } },
         orderBy: { finished_at: "asc" },
@@ -154,15 +189,7 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
       }),
     ]);
 
-  const playAlong: PlayAlongRow[] = playAlongRaw.map(({ row }) => ({
-    id: String(row.id),
-    songId: String(row.song_id),
-    createdAt: asDate(row.created_at),
-    score: asNumber(row.score),
-    accuracy: asNumber(row.accuracy),
-    tempoPct: asNumber(row.tempo_pct),
-    extras: playAlongExtras(row),
-  }));
+  const playAlong = playAlongRaw.map(playAlongRow);
 
   const playedSongIds = [...new Set(playAlong.map((attempt) => attempt.songId))];
   const playedSongs = playedSongIds.length

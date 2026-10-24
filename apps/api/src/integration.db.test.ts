@@ -333,6 +333,51 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         await rm(dir, { recursive: true, force: true });
       }
     });
+
+    it("hides a song whose Work is a draft or in review by id, exactly as the list does", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-draft-work-"));
+      const write = async (name: string) => {
+        const file = join(dir, name);
+        await writeFile(file, midiBytes());
+        return file;
+      };
+      const player = await createUser();
+      const admin = await createUserWithPassword("admin");
+      const work = (id: string, curation_status: string) =>
+        m.prisma.work.create({ data: { id, title: id, genre: "classical", pd_status: "pd-worldwide", curation_status } });
+      const works = [await work("test-draft-work", "draft"), await work("test-review-work", "in_review"), await work("test-published-work", "published")];
+      const base = { artist: "x", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8, content_rights: "public-domain" };
+      const create = async (title: string, workId: string) =>
+        m.prisma.song.create({
+          data: { ...base, title, work_id: workId, file_path: await write(`${workId}.mid`), notation_path: await write(`${workId}.mxl`) },
+        });
+      const draft = await create("Draft", "test-draft-work");
+      const review = await create("In review", "test-review-work");
+      const published = await create("Published", "test-published-work");
+      const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
+      try {
+        const listed = new Set(((await api("GET", "/songs", { token: player.token })).body.songs as { id: string }[]).map((row) => row.id));
+        expect(listed.has(published.id)).toBe(true);
+        for (const hidden of [draft, review]) {
+          expect(listed.has(hidden.id)).toBe(false);
+          for (const path of [`/songs/${hidden.id}/file`, `/songs/${hidden.id}/notation`]) {
+            expect((await api("GET", path, { token: player.token })).status, path).toBe(404);
+          }
+          expect((await api("POST", `/songs/${hidden.id}/attempts`, { token: player.token, body: attempt })).status).toBe(404);
+          // Admins see everything, as in the list.
+          expect((await api("GET", `/songs/${hidden.id}/file`, { token: admin.token })).status).toBe(200);
+        }
+        expect((await api("GET", `/songs/${published.id}/file`, { token: player.token })).status).toBe(200);
+        expect((await api("GET", `/songs/${published.id}/notation`, { token: player.token })).status).toBe(200);
+        expect((await api("POST", `/songs/${published.id}/attempts`, { token: player.token, body: attempt })).status).toBe(201);
+      } finally {
+        const songIds = [draft.id, review.id, published.id];
+        await m.prisma.playAlongAttempt.deleteMany({ where: { song_id: { in: songIds } } });
+        await m.prisma.song.deleteMany({ where: { id: { in: songIds } } });
+        await m.prisma.work.deleteMany({ where: { id: { in: works.map((row) => row.id) } } });
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("experience mode (Simple / Advanced)", () => {
@@ -529,6 +574,35 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const res = await submit(user.token, new TextEncoder().encode("%PDF-1.7"));
       expect(res.status).toBe(503);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("omr_unavailable");
+    });
+
+    it("counts only accepted jobs against the recognition limit, and not against MIDI uploads", async () => {
+      const user = await createUser();
+      /** `remaining` from the draft-8 RateLimit header, e.g. `"60-in-1hr"; r=59; t=3600`. */
+      const remaining = (res: globalThis.Response) => Number(/;\s*r=(\d+)/.exec(res.headers.get("ratelimit") ?? "")?.[1]);
+      // More refusals than the hourly limit of 10: none of them use it up.
+      for (let i = 0; i < 12; i += 1) {
+        const refused = await submit(user.token, new TextEncoder().encode("<html>"));
+        expect(refused.status).toBe(415);
+      }
+      m.env.OMR_SERVICE_URL = undefined;
+      expect((await submit(user.token, new TextEncoder().encode("%PDF-1.7"))).status).toBe(503);
+      m.env.OMR_SERVICE_URL = `http://127.0.0.1:${(omrServer.address() as AddressInfo).port}`;
+
+      const accepted = await submit(user.token, new TextEncoder().encode("%PDF-1.7 two pages of music"));
+      expect(accepted.status).toBe(202);
+      expect(remaining(accepted)).toBe(9);
+      await settled(user.token, ((await accepted.json()) as { id: string }).id);
+
+      // The general upload limit (60/h) hasn't been touched by any of the above. (A refused
+      // MIDI upload still counts there, so this first one leaves 59.)
+      const midi = await fetch(`${baseUrl}/songs/upload?title=Limit%20check`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${user.token}`, "content-type": "audio/midi" },
+        body: new TextEncoder().encode("not a midi file"),
+      });
+      expect(midi.status).toBeGreaterThanOrEqual(400);
+      expect(remaining(midi)).toBe(59);
     });
   });
 
@@ -1578,6 +1652,54 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const today = await api("GET", "/users/me/today", { token: user.token });
       expect(today.body.readyForYou.map((song: { songId: string }) => song.songId)).toEqual(["essentials-ode-to-joy-beginner"]);
       expect(today.body.song).toMatchObject({ songId: "essentials-ode-to-joy-beginner", hands: "right", level: "full" });
+    });
+
+    it("never recommends or unlocks an Essentials song the song list hides (draft Work)", async () => {
+      const user = await createUser();
+      await m.prisma.work.create({ data: { id: "test-draft-ode", title: "Ode", genre: "classical", pd_status: "pd-worldwide", curation_status: "draft" } });
+      await makeSong("essentials-ode-to-joy-beginner", { title: "Ode to Joy (Beginner)", arrangement_group: "ode-to-joy", arrangement_level: "beginner" });
+      await m.prisma.song.update({ where: { id: "essentials-ode-to-joy-beginner" }, data: { work_id: "test-draft-ode" } });
+      try {
+        // Played once before it was hidden: history must not bring it back as a recommendation.
+        await playWith(user.id, "essentials-ode-to-joy-beginner", 50, {});
+        let unlocked: { id: string }[] = [];
+        for (const exerciseId of exerciseIdsOf("lesson-05")) {
+          const res = await api("POST", `/exercises/${exerciseId}/attempts`, { token: user.token, body: { performedNotes: perfectRun(exerciseId) } });
+          unlocked = unlocked.concat(res.body.rewards.unlockedSongs);
+        }
+        expect(unlocked).toEqual([]);
+        const today = await api("GET", "/users/me/today", { token: user.token });
+        expect(today.body.readyForYou).toEqual([]);
+        expect(today.body.song?.songId).not.toBe("essentials-ode-to-joy-beginner");
+        for (const path of ["/songs/stars/me", "/users/me/progression"]) {
+          expect((await api("GET", path, { token: user.token })).body.readyForYou, path).toEqual([]);
+        }
+        expect((await api("GET", "/songs/essentials-ode-to-joy-beginner/file", { token: user.token })).status).toBe(404);
+      } finally {
+        await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
+        await m.prisma.song.update({ where: { id: "essentials-ode-to-joy-beginner" }, data: { work_id: null } });
+        await m.prisma.work.delete({ where: { id: "test-draft-ode" } });
+      }
+    });
+
+    it("answers one song's stars from that song's attempts only, matching the full progression view", async () => {
+      const user = await createUser();
+      const other = await createUser();
+      await makeSong("one-song-stars-a");
+      await makeSong("one-song-stars-b");
+      await playWith(user.id, "one-song-stars-a", 99, { arrangement_level: "full", hands: "both" });
+      await playWith(user.id, "one-song-stars-a", 99, { arrangement_level: "easy" });
+      await playWith(user.id, "one-song-stars-a", 99, { is_loop: true, loop_start_bar: 1, loop_end_bar: 2 });
+      await playWith(user.id, "one-song-stars-b", 70, {});
+      await playWith(other.id, "one-song-stars-a", 50, {});
+
+      const a = await api("GET", "/songs/one-song-stars-a/stars", { token: user.token });
+      expect(a.body).toEqual({ songId: "one-song-stars-a", best: 3, byLevel: { full: 3, easy: 1 } });
+      const progression = await api("GET", "/users/me/progression", { token: user.token });
+      expect({ best: a.body.best, byLevel: a.body.byLevel }).toEqual(progression.body.songStars["one-song-stars-a"]);
+      expect((await api("GET", "/songs/one-song-stars-b/stars", { token: user.token })).body).toEqual({ songId: "one-song-stars-b", best: 1, byLevel: { full: 1 } });
+      expect((await api("GET", "/songs/never-played/stars", { token: user.token })).body).toEqual({ songId: "never-played", best: 0, byLevel: {} });
+      expect((await api("GET", "/songs/one-song-stars-a/stars", { token: other.token })).body).toEqual({ songId: "one-song-stars-a", best: 0, byLevel: { full: 0 } });
     });
   });
 
