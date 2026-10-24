@@ -50,6 +50,11 @@ and the Android SDK with platform 36 and build-tools 36. On this Mac:
 - SDK: `~/Library/Android/sdk`, with `cmdline-tools/latest` from Google's
   command-line tools zip.
 
+On Linux/WSL the SDK defaults to `~/Android/Sdk`, and the script finds a JDK 21
+in this order: an existing `JAVA_HOME` that is 21, `/usr/lib/jvm/*21*`, then the
+JDK behind `javac` on `PATH` if `javac -version` reports 21 (the macOS locations
+above are tried first and simply don't exist on Linux).
+
 `apps/mobile/scripts/android-env.sh` finds a JDK 21 and the SDK and exports
 `JAVA_HOME`, `ANDROID_HOME` and `PATH`. Source it in a shell, or prefix one
 command with `with-android-env.sh`. It never edits your shell rc files.
