@@ -27,6 +27,8 @@ apps/mobile/
     app/src/test/...           JUnit tests for the parser
     app/src/main/res/xml/network_security_config.xml   HTTPS only
     app/src/debug/res/xml/network_security_config.xml  debug: + 10.0.2.2 cleartext
+    app/src/home/res/xml/network_security_config.xml   home: + home CA for 192.168.4.4
+  scripts/build-home.sh        builds the home APK (see "Home build")
 
 packages/midi-engine/src/capacitor.ts   CapacitorMidiAdapter (JS side)
 apps/web/src/native/                    platform checks, adapter factory,
@@ -107,6 +109,59 @@ settings (`checkReleaseConfig` in `app/build.gradle`). Run a normal
 
 Debug builds have WebView debugging on: `chrome://inspect` on the Mac shows
 the app's page while it runs in the emulator or on a USB-connected phone.
+
+## Home build (sideload, home server)
+
+The release app trusts system CAs only, so it cannot reach the home server's
+internal-CA HTTPS. The `home` build type is a release build (not debuggable, not
+minified) signed with the debug key, with:
+
+- the API at `https://192.168.4.4:8181/api` (`VITE_API_URL`, baked into the web
+  bundle by `build-web.mjs`; `build-home.sh` sets it);
+- its own `src/home/res/xml/network_security_config.xml`: system CAs everywhere,
+  plus the home CA (`res/raw/home_ca.crt`) trusted for the single domain
+  `192.168.4.4` (no subdomains, no cleartext).
+
+The CA certificate is not in git. Gradle copies it in when building `home`, from
+the file named by `OCTAVIAPP_HOME_CA` (the copy, `app/src/home/res/raw/`, is
+gitignored). The build fails with a clear message if the variable is unset or
+the file is missing or not PEM. Release/Play builds never need it and are
+byte-for-byte unchanged (system CAs only).
+
+```sh
+export OCTAVIAPP_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt
+apps/mobile/scripts/build-home.sh
+# -> apps/mobile/android/app/build/outputs/apk/home/app-home.apk
+```
+
+The server must allow the app's origin: `https://localhost` in the API's
+`CORS_ORIGIN`.
+
+### Sideloading onto a tablet
+
+1. Copy `app-home.apk` to the tablet (USB file transfer, cloud drive, `scp`).
+2. Allow installs from the app you open it with (Files, Chrome): Settings, Apps,
+   Special app access, Install unknown apps, then switch that app on (older
+   Android: Settings, Security, Unknown sources). Open the APK and tap Install.
+3. Or from a computer with USB debugging on: `adb install -r app-home.apk`.
+
+The home APK uses the same application id as the Play build, so it cannot be
+installed over a Play-signed copy (and vice versa) without uninstalling first.
+
+### USB cable for the Yamaha PSR-E353
+
+The PSR-E353 has a **USB TO HOST** port (square USB-B, the printer-style
+connector). The tablet is the host, so you need:
+
+- keyboard end: a standard USB-A to USB-B cable (a printer cable), or a
+  USB-C to USB-B cable, plugged into USB TO HOST;
+- tablet end: a **USB OTG adapter** that turns the tablet's port into a
+  USB-A socket: a USB-C OTG adapter for a USB-C tablet, a micro-USB OTG
+  adapter for a micro-USB tablet. Chain: tablet, OTG adapter, USB-A to USB-B
+  cable, keyboard's USB TO HOST.
+
+Use a data cable (not charge-only). Turn the keyboard on, then open the app;
+the MIDI status bar should show the keyboard's name.
 
 ## Native MIDI
 
