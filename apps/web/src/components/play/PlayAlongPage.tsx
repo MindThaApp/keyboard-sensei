@@ -17,12 +17,14 @@ import { useReducedMotion } from "../../utils/motion";
 import { useMidiContext } from "../midi/MidiContext";
 import { snapRangeToWhiteKeys, useKeyboardSizing } from "../piano/useKeyboardSizing";
 import SongStars from "../progress/SongStars";
-import { Button, ErrorState, GlassSurface, SegmentedControl, Toast, Toggle } from "../ui";
+import { Button, ErrorState, GlassSurface, SegmentedControl, Stepper, Toast } from "../ui";
 import { useExperienceMode } from "../ui/useExperienceMode";
 import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
 import { LiveOsmdNotation, LiveVerovioNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
 import PracticeResultSheet, { submitStateForError, type FinishedRun, type SubmitState } from "./PracticeResultSheet";
-import PracticeSettingsSheet from "./PracticeSettingsSheet";
+import PracticeSettingsSheet, { VIEW_OPTIONS, type SettingsTab } from "./PracticeSettingsSheet";
+import { LedToggle, LookSwitcher, PopoverButton, StripGroup } from "./PlayControls";
+import { AUTO_HIDE_IGNORE_ATTRIBUTE, useAutoHide } from "./useAutoHide";
 import { loadRenderer, NOTES_STYLE_FALLBACK_EVENT, styleFallbackToast, type NotesStyleFallback, type WaterfallRenderer } from "./renderers";
 import ScrollingScore, { type ScrollingScoreHandle } from "./ScrollingScore";
 import { stageLayout } from "./stageLayout";
@@ -47,7 +49,7 @@ import {
   simpleOpening,
   type LadderState,
 } from "./practiceSession";
-import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, type Settings } from "./practiceSettings";
+import { defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, TEMPO_MAX_PCT, TEMPO_MIN_PCT, type Settings } from "./practiceSettings";
 import "./practice.css";
 
 /** A loop starts out this long when switched on with no preset. */
@@ -55,7 +57,7 @@ const DEFAULT_LOOP_BARS = 4;
 
 // The letter grades how well you played (accuracy), so a clean run on easier settings
 // still earns an A; the difficulty bonus shows up in the score number instead. "S" is
-// kept for near-perfect runs at full difficulty or harder. Advanced mode only.
+// kept for near-perfect runs at full difficulty or harder.
 const gradeFor = (accuracyPct: number, score: number): string =>
   accuracyPct >= 95 && score >= 100 ? "S" : accuracyPct >= 90 ? "A" : accuracyPct >= 75 ? "B" : accuracyPct >= 60 ? "C" : "D";
 
@@ -141,24 +143,26 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const { subscribe, devices, deviceRange, calibration } = useMidiContext();
   const { scheme } = useAppearance();
   const { device, orientation } = useDeviceClass();
-  const experience = useExperienceMode();
+  // Only where a song opens (the beginner start and its ladder) still follows the
+  // onboarding answer; nothing on this screen is hidden by it.
+  const beginnerOpening = useExperienceMode() === "simple";
   const reducedMotion = useReducedMotion();
   const focus = useFocusMode({ hotkey: true });
   const location = useLocation();
   const preset = useMemo(() => parsePracticePreset(location.search), [location.search]);
   const barCount = Math.max(1, parsed.grid.bars.length);
 
-  // Where the song opens. A link's preset (from the Gym) wins; otherwise Simple mode
-  // starts a beginner gently and one rung up after a pass, and Advanced mode keeps the
+  // Where the song opens. A link's preset (from the Gym) wins; otherwise a beginner
+  // starts gently and one rung up after a pass, and everyone else keeps the
   // settings carried over from the last song.
   const [initial] = useState(() => {
-    const saved = loadSettings(experience);
+    const saved = loadSettings(device);
     const opened = preset.level ?? sources.openedLevel;
     // Just the tune has no left hand: a left-hand preset gets the easiest level that has one.
     const level: PracticeLevel = opened === "melody" && preset.hands === "left" ? "easy" : opened;
     const hands: PracticeHands = preset.hands ?? "both";
     const hasPreset = preset.level !== undefined || preset.hands !== undefined || preset.loop !== undefined;
-    if (experience === "simple" && !hasPreset) {
+    if (beginnerOpening && !hasPreset) {
       const start = simpleOpening(loadSongMemory(sources.baseId), loadSongChoices(sources.baseId), { level, hands, tempoPct: saved.tempoPct, waitMode: saved.waitMode });
       return { saved, settings: { ...saved, tempoPct: start.tempoPct, waitMode: start.waitMode }, level: start.level, hands: start.hands };
     }
@@ -174,6 +178,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [notationBytes, setNotationBytes] = useState<ArrayBuffer | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("play");
+  const [lookOpen, setLookOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [toast, setToast] = useState<{ id: number; title: string; body: string } | null>(null);
   const showStyleFallback = useCallback((detail: NotesStyleFallback) => {
     setToast({ id: Date.now(), ...styleFallbackToast(detail) });
@@ -271,9 +278,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   // the default, so the keys stay big enough to hit.
   const phonePortrait = device === "phone" && orientation === "portrait";
 
-  // The notation starts below the floating modules. They wrap onto several rows on a
-  // narrow screen, so their height is measured, not assumed; the tallest height seen
-  // is kept, so pressing Play (when the legend and tools give way to the HUD) never
+  // Outside full screen the stage starts below the controls. They wrap onto several
+  // rows on a narrow screen, so their height is measured, not assumed; the tallest
+  // height seen is kept, so pressing Play (when the legend gives way to the HUD) never
   // shifts the stage. The CSS var is set directly: no render per measurement.
   const topRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -435,7 +442,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
           .catch((error: unknown) => setSubmitState(submitStateForError(error)));
       }
 
-      // Remember where this song got to, so Simple mode opens it one rung up after a pass.
+      // Remember where this song got to, so a beginner opens it one rung up after a pass.
       if (!ranRun.loop && played > 0) {
         const ladder: LadderState = { ...practice, tempoPct: ran.tempoPct, waitMode: ran.waitMode };
         const passed = ran.waitMode ? played === ranRun.notes.length : runStars(result.accuracyPct, { ...practice, isLoop: false }) >= 1;
@@ -492,6 +499,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
 
   const nothingToPlay = run.notes.length === 0;
 
+  const autoFullscreenRef = useRef(false);
   const start = useCallback(() => {
     if (runRef.current.notes.length === 0) return;
     setResultOpen(false);
@@ -509,12 +517,17 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     } else {
       setLoopStatus(null);
     }
-    // Phone landscape is the main Android posture: the first Play goes into focus so the
-    // stage and keyboard have the whole screen.
-    if (experience === "simple" && device === "phone" && orientation === "landscape") enterFocusMode();
+    // A phone needs the whole screen: the first Play goes full screen, where the
+    // controls fade away until the screen is touched.
+    if (device === "phone" && !autoFullscreenRef.current) {
+      autoFullscreenRef.current = true;
+      enterFocusMode();
+    }
+    setLookOpen(false);
+    setMoreOpen(false);
     startRun(tempoPct);
     setPhase("playing");
-  }, [level, hands, authored, sources, settings.autoSpeedUp, settings.speedUpStartPct, startRun, experience, device, orientation]);
+  }, [level, hands, authored, sources, settings.autoSpeedUp, settings.speedUpStartPct, startRun, device]);
 
   // Some actions change the settings and then play: start once React has rebuilt the
   // run with them (the state updates and this request land in the same render).
@@ -563,7 +576,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   };
 
   const resetSettings = () => {
-    const defaults = experience === "simple" ? defaultSettingsFor("simple") : DEFAULT_SETTINGS;
+    const defaults = defaultSettingsFor(device);
     setSettings((s) => ({ ...defaults, notesStyle: s.notesStyle }));
     rememberWaitChoice(defaults.waitMode);
     setLoopOn(false);
@@ -580,7 +593,147 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       : `There are no ${hands === "both" ? "" : `${hands}-hand `}notes to play here: pick other bars or hands.`;
 
   const stageStyle = notePaletteCssVars(palette) as CSSProperties;
-  const playButtonLabel = paused ? "Resume" : "Pause";
+  const phone = device === "phone";
+
+  const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings((s) => ({ ...s, [key]: value }));
+  const setWait = (on: boolean) => {
+    set("waitMode", on);
+    rememberWaitChoice(on);
+  };
+  /** The gear works while playing too: the run pauses under the sheet. */
+  const openSettings = (tab?: SettingsTab) => {
+    if (tab) setSettingsTab(tab);
+    setLookOpen(false);
+    setMoreOpen(false);
+    if (playing && !paused) togglePause();
+    setSettingsOpen(true);
+  };
+
+  // Full screen: the controls fade after a few seconds with no input, never while they
+  // are in use (pointer over them, keyboard focus in them, a popover or sheet open).
+  const [controlsEngaged, setControlsEngaged] = useState(false);
+  const controlsVisible = useAutoHide({
+    enabled: focus.active,
+    hold: controlsEngaged || lookOpen || moreOpen || settingsOpen || calibrating || resultOpen || nothingToPlay,
+  });
+  useEffect(() => {
+    if (!focus.active) setControlsEngaged(false);
+  }, [focus.active]);
+
+  const pausedHint = "Pause to change this";
+  const stoppedHint = "Stop the song to change this";
+  const loopBarsLabel = `Bars ${loopRange.startBar + 1}–${loopRange.endBar + 1}`;
+  const viewOptions = VIEW_OPTIONS.map((option) => ({ ...option, disabled: !notationFits && option.value !== "falling" }));
+
+  const playIcon = (
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
+    </svg>
+  );
+  const pauseIcon = (
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" />
+    </svg>
+  );
+  const playButton = playing ? (
+    <button type="button" className="ks-practice-play" data-state={paused ? "paused" : "playing"} onClick={togglePause} aria-label={paused ? "Resume" : "Pause"}>
+      {paused ? playIcon : pauseIcon}
+    </button>
+  ) : (
+    <button type="button" className="ks-practice-play" onClick={start} disabled={nothingToPlay} aria-label={phase === "done" ? "Play again" : "Play"}>
+      {playIcon}
+    </button>
+  );
+  const stopButton = (
+    <button type="button" className="ks-practice-iconbtn ks-practice-stop" onClick={cancelRun} aria-label="Stop">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+      </svg>
+    </button>
+  );
+  const easierButton = (
+    <Button
+      variant="gray"
+      size="sm"
+      disabled={easierRung === null || practiceLocked}
+      title={easierRung === null ? "This is the easiest setting" : PRACTICE_LADDER[easierRung]!.detail}
+      onClick={() => easierRung !== null && goToRung(easierRung, -1)}
+    >
+      Easier
+    </Button>
+  );
+  const harderButton = (
+    <Button
+      variant="gray"
+      size="sm"
+      disabled={harderRung === null || practiceLocked}
+      title={harderRung === null ? "This is the hardest setting" : PRACTICE_LADDER[harderRung]!.detail}
+      onClick={() => harderRung !== null && goToRung(harderRung, 1)}
+    >
+      Harder
+    </Button>
+  );
+
+  const handsGroup = (
+    <StripGroup caption="Hands" disabled={practiceLocked} hint={stoppedHint}>
+      <SegmentedControl aria-label="Hands" options={HANDS_OPTIONS} value={hands} onChange={setHands} />
+    </StripGroup>
+  );
+  const speedGroup = (
+    <StripGroup caption="Speed" disabled={settingsLocked} hint={pausedHint} className="ks-strip-group--speed">
+      <Stepper aria-label="Speed" min={TEMPO_MIN_PCT} max={TEMPO_MAX_PCT} step={5} value={settings.tempoPct} formatValue={(value) => `${value}%`} onChange={(value) => set("tempoPct", value)} />
+    </StripGroup>
+  );
+  const loopGroup = (
+    <StripGroup caption="Loop A–B" disabled={practiceLocked} hint={stoppedHint}>
+      <LedToggle label="Loop" pressed={loopOn} onChange={setLoopOn} />
+      <button type="button" className="ks-strip-link" onClick={() => openSettings("loop")} aria-label={`Choose the bars to loop: ${loopBarsLabel}`}>
+        {loopBarsLabel}
+      </button>
+    </StripGroup>
+  );
+  const waitGroup = (
+    <StripGroup caption="Wait" disabled={settingsLocked} hint={pausedHint}>
+      <LedToggle label={phone ? "Wait" : "Wait for me"} title="Wait for me" pressed={settings.waitMode} onChange={setWait} />
+    </StripGroup>
+  );
+  const metronomeGroup = (
+    <StripGroup caption="Metronome">
+      <LedToggle
+        label="Click"
+        pressed={settings.metronome && parsed.grid.clickSafe}
+        disabled={!parsed.grid.clickSafe}
+        title={parsed.grid.clickSafe ? undefined : "This recording's speed drifts too much for a steady click"}
+        onChange={(on) => set("metronome", on)}
+      />
+    </StripGroup>
+  );
+  const viewGroup = (
+    <StripGroup caption="View">
+      <SegmentedControl aria-label="View" options={viewOptions} value={notationFits ? settings.viewMode : "falling"} onChange={(value) => set("viewMode", value)} />
+    </StripGroup>
+  );
+  const levelGroup = (
+    <StripGroup caption="Level">
+      {easierButton}
+      {harderButton}
+    </StripGroup>
+  );
+
+  const engagedHandlers = {
+    onPointerEnter: (event: React.PointerEvent) => {
+      if (event.pointerType === "mouse") setControlsEngaged(true);
+    },
+    onPointerLeave: (event: React.PointerEvent) => {
+      if (event.pointerType === "mouse") setControlsEngaged(false);
+    },
+    onFocus: (event: React.FocusEvent) => {
+      if (event.target instanceof HTMLElement && event.target.matches(":focus-visible")) setControlsEngaged(true);
+    },
+    onBlur: (event: React.FocusEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setControlsEngaged(false);
+    },
+  };
 
   return (
     <div
@@ -591,6 +744,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       data-device={device}
       data-orientation={orientation}
       data-focus={focus.active || undefined}
+      data-controls={controlsVisible ? undefined : "hidden"}
       style={stageStyle}
     >
       <h1 className="sr-only">{song?.title ?? "Practice"}</h1>
@@ -633,148 +787,175 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
             {showFalling && (
               <canvas ref={setCanvas} className="ks-practice__canvas" style={{ width: geometry.widthPx, height: heightPx }} aria-label="Falling notes" />
             )}
-            <PlayAlongPiano
-              sizing={sizing}
-              scrollable={false}
-              showControls={false}
-              showHint={false}
-              showLabels={settings.showLabels}
-              handByNote={handByNote}
-              maxWhiteKeyHeightPx={pianoHeightPx}
-            />
+            {/* Pressing the keys is playing: it does not bring full-screen controls back. */}
+            <div {...{ [AUTO_HIDE_IGNORE_ATTRIBUTE]: "" }}>
+              <PlayAlongPiano
+                sizing={sizing}
+                scrollable={false}
+                showControls={false}
+                showHint={false}
+                showLabels={settings.showLabels}
+                handByNote={handByNote}
+                maxWhiteKeyHeightPx={pianoHeightPx}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Floating modules. Translucent clear-dark fills with no blur: nothing blurs the
-          animating canvas, and none of them moves the stage when Play is pressed. */}
-      <div ref={topRef} className="ks-practice__top">
-        {focus.active ? (
-          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--round">
-            <button type="button" className="ks-practice-iconbtn" onClick={focus.exit} aria-label="Exit focus mode">
+      {/* The controls: a title row and the control strip. Translucent clear-dark fills
+          with no blur, so nothing blurs the animating canvas. Outside full screen the
+          stage starts below them; in full screen they float over it and fade away. */}
+      <div ref={topRef} className="ks-practice__top" {...engagedHandlers}>
+        <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--title">
+          {focus.active ? (
+            <button type="button" className="ks-practice-iconbtn" onClick={focus.exit} aria-label="Exit full screen">
               <span aria-hidden="true">✕</span>
             </button>
-          </GlassSurface>
-        ) : (
-          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--title">
+          ) : (
             <Link to="/practice" className="ks-practice-iconbtn" aria-label="Back to songs">
               <span aria-hidden="true">‹</span>
             </Link>
-            <div className="ks-practice-title">
-              <p className="ks-practice-title__name glass-text">{song?.title ?? "Practice"}</p>
-              <p className="ks-practice-title__meta glass-text">
-                {song?.artist ? `${song.artist} · ` : ""}
-                {summary}
-              </p>
-            </div>
-          </GlassSurface>
-        )}
-
-        {!playing && !focus.active && (handsInRun.left || handsInRun.right) && (
-          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-legend" aria-label="Hand colours">
-            {handsInRun.right && (
-              <span className="ks-practice-legend__item glass-text">
-                Right hand <span className="ks-practice-legend__chip" data-hand="right" aria-hidden="true" />
-              </span>
-            )}
-            {handsInRun.left && (
-              <span className="ks-practice-legend__item glass-text">
-                Left hand <span className="ks-practice-legend__chip" data-hand="left" aria-hidden="true" />
-              </span>
-            )}
-          </GlassSurface>
-        )}
-
-        {playing ? (
-          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--live">
-            <PlayAlongHud
-              waitMode={settings.waitMode}
-              tempoPct={settings.tempoPct}
-              lookaheadS={settings.lookaheadS}
-              level={level}
-              hands={hands}
-              paused={paused}
-              loopLabel={loopLabel}
-              detailed={experience === "advanced"}
-            />
-            <Button variant="gray" onClick={togglePause} aria-label={playButtonLabel}>
-              {paused ? "▶" : "❚❚"}
-            </Button>
-            {!focus.active && (
-              <Button variant="gray" onClick={cancelRun}>
-                Stop
-              </Button>
-            )}
-            {paused && !focus.active && (
-              <button type="button" className="ks-practice-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Practice settings">
-                <span aria-hidden="true">⚙</span>
-              </button>
-            )}
-          </GlassSurface>
-        ) : (
-          !focus.active && (
-            <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--tools">
-              <SegmentedControl aria-label="Hands" options={HANDS_OPTIONS} value={hands} onChange={setHands} />
-              <button type="button" className="ks-practice-iconbtn" onClick={() => setSettingsOpen(true)} aria-label="Practice settings">
-                <span aria-hidden="true">⚙</span>
-              </button>
-              <button type="button" className="ks-practice-iconbtn" onClick={focus.enter} aria-label="Focus mode (F)" title="Focus mode (F)">
-                <span aria-hidden="true">⤢</span>
-              </button>
-            </GlassSurface>
-          )
-        )}
-      </div>
-
-      {!playing && (
-        <div className="ks-practice__transport" style={{ bottom: pianoHeightPx + 16 }}>
-          {nothingToPlay && (
-            <p className="ks-practice-alert glass-text" role="alert">
-              {nothingMessage}
-            </p>
           )}
-          <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--transport" role="group" aria-label="Play controls">
-            {!focus.active && (
-              <Button
-                variant="gray"
-                disabled={easierRung === null}
-                title={easierRung === null ? "This is the easiest setting" : PRACTICE_LADDER[easierRung]!.detail}
-                onClick={() => easierRung !== null && goToRung(easierRung, -1)}
-              >
-                Easier
-              </Button>
-            )}
-            <button type="button" className="ks-practice-play" onClick={start} disabled={nothingToPlay} aria-label={phase === "done" ? "Play again" : "Play"}>
-              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-                <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
-              </svg>
-            </button>
-            {!focus.active && (
-              <>
-                <Button
-                  variant="gray"
-                  disabled={harderRung === null}
-                  title={harderRung === null ? "This is the hardest setting" : PRACTICE_LADDER[harderRung]!.detail}
-                  onClick={() => harderRung !== null && goToRung(harderRung, 1)}
-                >
-                  Harder
-                </Button>
-                <span className="ks-practice-transport__divider" aria-hidden="true" />
-                <Toggle label="Wait for me" checked={settings.waitMode} onChange={(on) => {
-                    setSettings((s) => ({ ...s, waitMode: on }));
-                    rememberWaitChoice(on);
-                  }}
-                  className="ks-practice-wait" />
-                {finished && (
+          <div className="ks-practice-title">
+            <p className="ks-practice-title__name glass-text">{song?.title ?? "Practice"}</p>
+            <p className="ks-practice-title__meta glass-text">
+              {song?.artist ? `${song.artist} · ` : ""}
+              {summary}
+            </p>
+          </div>
+        </GlassSurface>
+
+        <div className="ks-practice__status">
+          {playing ? (
+            <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--live">
+              <PlayAlongHud
+                waitMode={settings.waitMode}
+                tempoPct={settings.tempoPct}
+                lookaheadS={settings.lookaheadS}
+                level={level}
+                hands={hands}
+                paused={paused}
+                loopLabel={loopLabel}
+                detailed
+              />
+            </GlassSurface>
+          ) : (
+            <>
+              {(handsInRun.left || handsInRun.right) && (
+                <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-legend" aria-label="Hand colours">
+                  {handsInRun.right && (
+                    <span className="ks-practice-legend__item glass-text">
+                      Right hand <span className="ks-practice-legend__chip" data-hand="right" aria-hidden="true" />
+                    </span>
+                  )}
+                  {handsInRun.left && (
+                    <span className="ks-practice-legend__item glass-text">
+                      Left hand <span className="ks-practice-legend__chip" data-hand="left" aria-hidden="true" />
+                    </span>
+                  )}
+                </GlassSurface>
+              )}
+              {finished && (
+                <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--round">
                   <Button variant="plain" onClick={() => setResultOpen(true)}>
                     Result
                   </Button>
-                )}
-              </>
-            )}
-          </GlassSurface>
+                </GlassSurface>
+              )}
+            </>
+          )}
         </div>
-      )}
+
+        <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-module--tools">
+          <LookSwitcher
+            open={lookOpen}
+            onOpenChange={(open) => {
+              setLookOpen(open);
+              if (open) setMoreOpen(false);
+            }}
+            style={settings.notesStyle}
+            onStyle={(style) => set("notesStyle", style)}
+            iconOnly={phone}
+          />
+          <button type="button" className="ks-practice-iconbtn" onClick={() => openSettings()} aria-label="Practice settings" title="Practice settings">
+            <span aria-hidden="true">⚙</span>
+          </button>
+          <button
+            type="button"
+            className="ks-practice-iconbtn"
+            onClick={focus.toggle}
+            aria-label={focus.active ? "Exit full screen (F)" : "Full screen (F)"}
+            title={focus.active ? "Exit full screen (F)" : "Full screen (F)"}
+            aria-pressed={focus.active}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {focus.active ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+            </svg>
+          </button>
+        </GlassSurface>
+
+        <GlassSurface variant="clear-dark" nested className="ks-practice-module ks-practice-strip" role="group" aria-label="Practice controls">
+          {phone ? (
+            <>
+              <div className="ks-practice-strip__transport">
+                {playing && stopButton}
+                {playButton}
+              </div>
+              {handsGroup}
+              {speedGroup}
+              {waitGroup}
+              <PopoverButton
+                open={moreOpen}
+                onOpenChange={(open) => {
+                  setMoreOpen(open);
+                  if (open) setLookOpen(false);
+                }}
+                label="More controls"
+                popoverLabel="More controls"
+                buttonClassName="ks-practice-iconbtn ks-practice-more"
+                className="ks-practice-more-wrap"
+                content={
+                  <div className="ks-practice-more__body">
+                    {levelGroup}
+                    {loopGroup}
+                    {metronomeGroup}
+                    {viewGroup}
+                  </div>
+                }
+              >
+                <span aria-hidden="true">⋯</span>
+              </PopoverButton>
+            </>
+          ) : (
+            <>
+              {handsGroup}
+              {speedGroup}
+              {loopGroup}
+              <div className="ks-practice-strip__transport" role="group" aria-label="Play">
+                {playing ? stopButton : easierButton}
+                {playButton}
+                {playing ? (
+                  <Button variant="gray" size="sm" onClick={start}>
+                    Restart
+                  </Button>
+                ) : (
+                  harderButton
+                )}
+              </div>
+              {waitGroup}
+              {metronomeGroup}
+              {viewGroup}
+            </>
+          )}
+        </GlassSurface>
+
+        {nothingToPlay && (
+          <p className="ks-practice-alert glass-text" role="alert">
+            {nothingMessage}
+          </p>
+        )}
+      </div>
 
       {toast && !playing && (
         <div className="ks-practice__toast">
@@ -785,7 +966,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       {playing && settings.waitMode && <WaitAnnouncer />}
 
       <PracticeSettingsSheet
-        open={(settingsOpen || calibrating) && !settingsLocked}
+        open={settingsOpen || calibrating}
+        tab={settingsTab}
+        onTab={setSettingsTab}
         onClose={() => setSettingsOpen(false)}
         onReset={resetSettings}
         settings={settings}

@@ -4,6 +4,7 @@ import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres"
 import type { LoopOptions } from "./practiceSession";
 import type { VisibilityMode } from "./stageLayout";
 import { isNotesStyle, type NotesStyle } from "./renderers";
+import type { DeviceClass } from "../../utils/appearance";
 
 // Continuous speed and look-ahead. Bounds are set by what the engine and API accept:
 // tempoMultiplier = sqrt(rate) and lookaheadMultiplier are clamped, and their product
@@ -58,15 +59,19 @@ export const DEFAULT_SETTINGS: Settings = {
   showLabels: true,
 };
 
-/** A beginner meets falling notes only; sheet music is one setting away. */
-export const defaultSettingsFor = (experience: "simple" | "advanced"): Settings =>
-  experience === "simple" ? { ...DEFAULT_SETTINGS, viewMode: "falling" } : DEFAULT_SETTINGS;
+/**
+ * The settings a device starts from. Tablets and desktops show sheet music and falling
+ * notes together; an upright phone has room for one, so it starts on falling notes. The
+ * View control on the play screen switches either way in one tap.
+ */
+export const defaultSettingsFor = (device: DeviceClass): Settings =>
+  device === "phone" ? { ...DEFAULT_SETTINGS, viewMode: "falling" } : DEFAULT_SETTINGS;
 
 const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 
-export function loadSettings(experience: "simple" | "advanced"): Settings {
-  const defaults = defaultSettingsFor(experience);
+export function loadSettings(device: DeviceClass): Settings {
+  const defaults = defaultSettingsFor(device);
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return defaults;
