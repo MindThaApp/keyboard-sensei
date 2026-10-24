@@ -30,7 +30,11 @@ export function loadMetronomeSettings(): MetronomeSettings {
 }
 
 export function saveMetronomeSettings(settings: MetronomeSettings): void {
-  localStorage.setItem(METRONOME_SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(METRONOME_SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // Storage blocked or full: the settings last for this visit only.
+  }
 }
 
 interface Props {
