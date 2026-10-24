@@ -47,7 +47,7 @@ import {
   simpleOpening,
   type LadderState,
 } from "./practiceSession";
-import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, type Settings } from "./practiceSettings";
+import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, type Settings } from "./practiceSettings";
 import "./practice.css";
 
 /** A loop starts out this long when switched on with no preset. */
@@ -160,9 +160,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     const hasPreset = preset.level !== undefined || preset.hands !== undefined || preset.loop !== undefined;
     if (experience === "simple" && !hasPreset) {
       const start = simpleOpening(loadSongMemory(sources.baseId), loadSongChoices(sources.baseId), { level, hands, tempoPct: saved.tempoPct, waitMode: saved.waitMode });
-      return { settings: { ...saved, tempoPct: start.tempoPct, waitMode: start.waitMode }, level: start.level, hands: start.hands };
+      return { saved, settings: { ...saved, tempoPct: start.tempoPct, waitMode: start.waitMode }, level: start.level, hands: start.hands };
     }
-    return { settings: saved, level, hands };
+    return { saved, settings: saved, level, hands };
   });
 
   const [phase, setPhase] = useState<Phase>("ready");
@@ -194,7 +194,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [stageWidth, setStageWidth] = useState(0);
   const [stageHeight, setStageHeight] = useState(0);
 
-  useEffect(() => saveSettings(settings), [settings]);
+  useEffect(() => saveSettings(settingsToPersist(settings, initial.settings, initial.saved)), [settings, initial]);
 
   // Opening a song marks it as opened, so the beginner start only happens the first time.
   // Done here, not in the state initialiser above: StrictMode runs that twice, and the
