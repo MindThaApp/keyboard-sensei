@@ -9,7 +9,7 @@ export interface HardwareMidiAdapter extends MidiAdapter {
   onStateChange(listener: (devices: MidiDeviceInfo[]) => void): () => void;
 }
 
-/** The Android plugin (android/app/src/main/java/com/keyboardsensei/app/midi). */
+/** The Android plugin (android/app/src/main/java/com/octaviapp/app/midi). */
 const NativeMidi = registerPlugin<NativeMidiPlugin>("NativeMidi");
 
 export function createHardwareMidiAdapter(): HardwareMidiAdapter {

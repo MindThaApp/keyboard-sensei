@@ -88,7 +88,7 @@ export default function ThirdPartyLicensesPage() {
     <PublicPageLayout title="Third-party licences" wide>
       <Prose>
         <p>
-          Keyboard Sensei is built on other people's generous work. This page credits the music editions, sounds and
+          OctaviApp is built on other people's generous work. This page credits the music editions, sounds and
           open-source software it uses, with their licences. It is generated from the app's own dependency and content
           lists each time the app is built.
         </p>

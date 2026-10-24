@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Android build environment for Keyboard Sensei (macOS).
+# Android build environment for OctaviApp (macOS).
 #
 # Source it, don't run it:   source apps/mobile/scripts/android-env.sh
 #

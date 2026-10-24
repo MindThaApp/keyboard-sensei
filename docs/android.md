@@ -4,7 +4,7 @@ The Android app wraps the `apps/web` production build in a Capacitor 8 shell
 (`apps/mobile`). Everything the user sees is the same React app; the native
 side adds hardware MIDI, keep-awake, the back button and the Play packaging.
 
-- appId `com.keyboardsensei.app`, name "Keyboard Sensei"
+- appId `com.octaviapp.app`, name "OctaviApp"
 - minSdk 24 (Android 7), targetSdk/compileSdk 36 (Android 16)
 - The page is served from `https://localhost` inside the app
 
@@ -18,9 +18,9 @@ apps/mobile/
     android-env.sh             JAVA_HOME (JDK 21) + ANDROID_HOME + PATH; source it
     with-android-env.sh        run one command inside that environment
     build-web.mjs              builds apps/web; requires an https VITE_API_URL
-    generate-android-assets.sh launcher icons + splash from the PWA icon
+    generate-android-assets.sh splash images from the PWA icon (launcher icons: brand/)
   android/                     the Gradle project (committed)
-    app/src/main/java/com/keyboardsensei/app/
+    app/src/main/java/com/octaviapp/app/
       MainActivity.kt          registers the MIDI plugin
       midi/NativeMidiPlugin.kt android.media.midi: USB + Bluetooth LE input
       midi/MidiMessageParser.kt byte stream -> note on/off + CC messages
@@ -147,7 +147,7 @@ keytool -genkeypair -v \
   -keystore keyboard-sensei-upload.jks \
   -alias upload \
   -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=Keyboard Sensei, O=Keyboard Sensei"
+  -dname "CN=OctaviApp, O=OctaviApp"
 ```
 
 `keytool` asks for the keystore password (and uses the same one for the key by
@@ -209,7 +209,7 @@ fingerprint production users present; register it too.
 
 1. Create a Google Play developer account (one-time fee; identity
    verification can take a few days).
-2. **Create app**: name "Keyboard Sensei", app (not game), free, accept the
+2. **Create app**: name "OctaviApp", app (not game), free, accept the
    declarations.
 3. Complete the **App content** forms: privacy policy URL (required; the app
    has accounts and stores practice history), data safety (account email,

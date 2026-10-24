@@ -1,4 +1,4 @@
-package com.keyboardsensei.app.midi
+package com.octaviapp.app.midi
 
 /**
  * Frames a raw MIDI byte stream (one per input port) into complete channel
