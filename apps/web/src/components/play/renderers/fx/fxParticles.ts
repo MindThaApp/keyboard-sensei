@@ -77,7 +77,7 @@ export class SparkPool {
         premultipliedAlpha: true,
         blending: THREE.AdditiveBlending,
       });
-    this.materials = [make(0.6), make(0.8)];
+    this.materials = [make(1.35), make(0.2)];
     this.mesh = new THREE.Points(this.geometry, this.materials[0]);
     this.emissiveMesh = new THREE.Points(this.geometry, this.materials[1]);
     this.mesh.frustumCulled = false;
@@ -122,7 +122,7 @@ export class SparkPool {
 
   /** One spark at the top of a pressed key. `life` seconds; `rgb` is the colour it keeps. */
   emit(x: number, keyWidth: number, timeS: number, life: number, r: number, g: number, b: number): void {
-    if (this.capacity === 0) return;
+    if (this.capacity === 0 || this.batchCount >= this.capacity) return;
     const slot = this.cursor;
     this.cursor = (slot + 1) % this.capacity;
     this.batchCount++;
@@ -145,6 +145,44 @@ export class SparkPool {
     color[slot * 3] = r + (1 - r) * hot;
     color[slot * 3 + 1] = g + (1 - g) * hot;
     color[slot * 3 + 2] = b + (1 - b) * hot;
+  }
+
+  /**
+   * The cloud a note throws up when it lands: `count` sparks that leave together in one
+   * direction and share one curl phase, so the flow field draws them out into a single
+   * curling plume of fine dust rather than scattering them.
+   */
+  burst(x: number, keyWidth: number, timeS: number, life: number, count: number, r: number, g: number, b: number): void {
+    const n = Math.min(count, this.capacity - this.batchCount);
+    if (n <= 0) return;
+    const spawn = this.spawn.array as Float32Array;
+    const velocity = this.velocity.array as Float32Array;
+    const color = this.color.array as Float32Array;
+    const heading = (rnd() - 0.5) * 1.6;
+    const speed = 60 + rnd() * 170;
+    const vx = Math.sin(heading) * speed;
+    const vy = Math.cos(heading) * speed;
+    const seed = rnd();
+    const centre = x + (rnd() - 0.5) * keyWidth * 0.5;
+    for (let k = 0; k < n; k++) {
+      const slot = this.cursor;
+      this.cursor = (slot + 1) % this.capacity;
+      this.batchCount++;
+      const o = slot * 4;
+      spawn[o] = centre + (rnd() - 0.5) * keyWidth * 0.7;
+      spawn[o + 1] = rnd() * 5;
+      spawn[o + 2] = timeS + rnd() * 0.06;
+      spawn[o + 3] = (seed + (rnd() - 0.5) * 0.05 + 1) % 1;
+      const spread = 0.55 + rnd() * 0.9;
+      velocity[o] = vx * spread + (rnd() - 0.5) * 50;
+      velocity[o + 1] = vy * spread + (rnd() - 0.5) * 40;
+      velocity[o + 2] = life * (0.8 + rnd() * 0.6);
+      velocity[o + 3] = 0.45 + rnd() * 0.6;
+      const hot = rnd() < 0.3 ? 0.55 : rnd() * 0.15;
+      color[slot * 3] = r + (1 - r) * hot;
+      color[slot * 3 + 1] = g + (1 - g) * hot;
+      color[slot * 3 + 2] = b + (1 - b) * hot;
+    }
   }
 
   endBatch(): void {
@@ -192,7 +230,7 @@ export class SmokePool {
       depthTest: false,
       depthWrite: false,
       premultipliedAlpha: true,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
     });
     this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.frustumCulled = false;
@@ -223,7 +261,7 @@ export class SmokePool {
   }
 
   emit(x: number, timeS: number, life: number, sizePx: number, risePxS: number, tint: number, r: number, g: number, b: number): void {
-    if (this.capacity === 0) return;
+    if (this.capacity === 0 || this.batchCount >= this.capacity) return;
     const slot = this.cursor;
     this.cursor = (slot + 1) % this.capacity;
     this.batchCount++;

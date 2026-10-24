@@ -26,7 +26,7 @@ export const FX_TIERS: Record<QualityTier, FxTier> = {
 };
 
 /** Most smoke sprites ever alive; the pool is allocated once at this size. */
-export const MAX_SMOKE = 48;
+export const MAX_SMOKE = 72;
 /** Most sparks ever alive. */
 export const MAX_SPARKS = 5000;
 
