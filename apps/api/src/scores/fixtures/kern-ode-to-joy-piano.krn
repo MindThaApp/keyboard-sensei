@@ -1,0 +1,50 @@
+!! Fixture for the score import tests. CC0 1.0: public domain dedication (see README.md).
+!!!COM: Beethoven, Ludwig van
+!!!OTL: Ode to Joy (two-hand setting)
+**kern	**kern
+*staff2	*staff1
+*clefF4	*clefG2
+*k[f#c#]	*k[f#c#]
+*D:	*D:
+*M4/4	*M4/4
+*MM90	*MM90
+=1	=1
+1D 1A 1f#	4f#
+.	4f#
+.	4g
+.	4a
+=2	=2
+1AA 1E 1A	4a
+.	4g
+.	4f#
+.	4e
+=3	=3
+1D 1A 1f#	4d
+.	4d
+.	4e
+.	4f#
+=4	=4
+1AA 1E 1A	4.f#
+.	8e
+.	2e
+=5	=5
+1D 1A 1f#	4f#
+.	4f#
+.	4g
+.	4a
+=6	=6
+1AA 1E 1A	4a
+.	4g
+.	4f#
+.	4e
+=7	=7
+1D 1A 1f#	4d
+.	4d
+.	4e
+.	4f#
+=8	=8
+2AA 2E 2A	4.e
+.	8d
+2D 2A 2f#	2d
+==	==
+*-	*-

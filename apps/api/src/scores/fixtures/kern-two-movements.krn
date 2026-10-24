@@ -1,0 +1,19 @@
+!! Fixture for the score import tests. CC0 1.0: public domain dedication (see README.md).
+**kern
+*clefG2
+*M4/4
+=1
+4c
+4d
+2e
+==
+*-
+**kern
+*clefG2
+*M3/4
+=1
+4c
+4d
+4e
+==
+*-
