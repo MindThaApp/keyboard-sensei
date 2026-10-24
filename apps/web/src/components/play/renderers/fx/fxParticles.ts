@@ -18,8 +18,14 @@ function dynamic(count: number, size: number): THREE.InstancedBufferAttribute {
   return attribute;
 }
 
+function plain(count: number, size: number): THREE.BufferAttribute {
+  const attribute = new THREE.BufferAttribute(new Float32Array(count * size), size);
+  attribute.setUsage(THREE.DynamicDrawUsage);
+  return attribute;
+}
+
 /** Upload the `count` slots written from `start` (wrapping at most once). */
-function flushRange(attributes: readonly THREE.InstancedBufferAttribute[], capacity: number, start: number, count: number): void {
+function flushRange(attributes: readonly THREE.BufferAttribute[], capacity: number, start: number, count: number): void {
   if (count <= 0 || capacity === 0) return;
   const firstRun = Math.min(count, capacity - start);
   for (const attribute of attributes) {
@@ -37,13 +43,13 @@ const rnd = Math.random;
  * the CPU never touches a live spark and nothing is allocated per frame.
  */
 export class SparkPool {
-  readonly geometry = quadGeometry();
-  readonly mesh: THREE.Mesh;
-  readonly emissiveMesh: THREE.Mesh;
-  readonly uniforms = { uRise: { value: 50 }, uSwirl: { value: 0.5 }, uSize: { value: 1.5 } };
-  private readonly spawn = dynamic(MAX_SPARKS, 4);
-  private readonly velocity = dynamic(MAX_SPARKS, 4);
-  private readonly color = dynamic(MAX_SPARKS, 3);
+  readonly geometry = new THREE.BufferGeometry();
+  readonly mesh: THREE.Points;
+  readonly emissiveMesh: THREE.Points;
+  readonly uniforms = { uRise: { value: 50 }, uSwirl: { value: 0.5 }, uSize: { value: 1.5 }, uPxRatio: { value: 1 } };
+  private readonly spawn = plain(MAX_SPARKS, 4);
+  private readonly velocity = plain(MAX_SPARKS, 4);
+  private readonly color = plain(MAX_SPARKS, 3);
   private readonly attributes = [this.spawn, this.velocity, this.color];
   private readonly materials: THREE.ShaderMaterial[];
   private capacity = 0;
@@ -52,9 +58,14 @@ export class SparkPool {
   private batchCount = 0;
 
   constructor(time: { value: number }) {
+    // One vertex per spark (a point), not a quad: a quarter of the vertex work, and the
+    // sparks are a few pixels across anyway. Positions come from the shader, so the
+    // `position` attribute only gives the draw its vertex count.
+    this.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_SPARKS * 3), 3));
     this.geometry.setAttribute("aSpawn", this.spawn);
     this.geometry.setAttribute("aVel", this.velocity);
     this.geometry.setAttribute("aColor", this.color);
+    this.geometry.setDrawRange(0, 0);
     const make = (gain: number) =>
       new THREE.ShaderMaterial({
         vertexShader: SPARK_VERTEX,
@@ -66,9 +77,9 @@ export class SparkPool {
         premultipliedAlpha: true,
         blending: THREE.AdditiveBlending,
       });
-    this.materials = [make(1.2), make(1.5)];
-    this.mesh = new THREE.Mesh(this.geometry, this.materials[0]);
-    this.emissiveMesh = new THREE.Mesh(this.geometry, this.materials[1]);
+    this.materials = [make(0.6), make(0.8)];
+    this.mesh = new THREE.Points(this.geometry, this.materials[0]);
+    this.emissiveMesh = new THREE.Points(this.geometry, this.materials[1]);
     this.mesh.frustumCulled = false;
     this.emissiveMesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
@@ -89,7 +100,7 @@ export class SparkPool {
     (this.velocity.array as Float32Array).fill(0);
     this.velocity.clearUpdateRanges();
     this.velocity.needsUpdate = true;
-    this.geometry.instanceCount = this.capacity;
+    this.geometry.setDrawRange(0, this.capacity);
     this.mesh.visible = this.capacity > 0;
     this.emissiveMesh.visible = this.capacity > 0;
   }
@@ -98,6 +109,10 @@ export class SparkPool {
     this.uniforms.uRise.value = rise;
     this.uniforms.uSwirl.value = swirl;
     this.uniforms.uSize.value = size;
+  }
+
+  setPixelRatio(ratio: number): void {
+    this.uniforms.uPxRatio.value = ratio;
   }
 
   beginBatch(): void {
@@ -120,13 +135,13 @@ export class SparkPool {
     spawn[o + 2] = timeS;
     spawn[o + 3] = rnd();
     const angle = (rnd() - 0.5) * 1.5;
-    const speed = 20 + rnd() * 90;
+    const speed = 30 + rnd() * 130;
     velocity[o] = Math.sin(angle) * speed;
     velocity[o + 1] = Math.cos(angle) * speed;
     velocity[o + 2] = life * (0.55 + rnd() * 0.6);
     velocity[o + 3] = 0.6 + rnd() * 0.8;
     // Some sparks run hot: a little white in the note's colour.
-    const hot = rnd() < 0.3 ? 0.5 : rnd() * 0.15;
+    const hot = rnd() < 0.2 ? 0.45 : rnd() * 0.1;
     color[slot * 3] = r + (1 - r) * hot;
     color[slot * 3 + 1] = g + (1 - g) * hot;
     color[slot * 3 + 2] = b + (1 - b) * hot;

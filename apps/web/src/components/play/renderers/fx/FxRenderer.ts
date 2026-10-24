@@ -49,7 +49,7 @@ const WAITING_WINDOW_S = 0.05;
 /** Seconds of spark life at the slider's value 1 (the slider is the life itself). */
 const SMOKE_LIFE_S = 3.2;
 /** Notes sounding at once that fill the spark and smoke pools. */
-const FILL_NOTES = 7;
+const FILL_NOTES = 22;
 const MAX_EMIT_PER_FRAME = 90;
 const DEBUG_KEY = "ks-fx-debug";
 
@@ -146,6 +146,8 @@ export class FxRenderer implements WaterfallRenderer {
   private lastDrawMs = 0;
   private lastBurstMs = -Infinity;
   private vsyncMs = 1000 / 60;
+  private visibleNotes = 0;
+  private cpuMs = 0;
 
   mount(hostCanvas: HTMLCanvasElement): void {
     this.host = hostCanvas;
@@ -389,6 +391,10 @@ export class FxRenderer implements WaterfallRenderer {
       sparks: this.sparks?.size ?? 0,
       smoke: this.smoke?.size ?? 0,
       pixelRatio: this.pixelRatio,
+      songTimeS: this.lastSongTimeS,
+      visibleNotes: this.visibleNotes,
+      cpuMs: this.cpuMs,
+      sounding: this.activeCount,
       glRenderer: this.glRendererString(),
     };
   }
@@ -402,7 +408,13 @@ export class FxRenderer implements WaterfallRenderer {
 
   private readDebugFlag(): void {
     try {
-      if (localStorage.getItem(DEBUG_KEY) === "pin") this.governorPinned = true;
+      // "pin" holds the starting tier; "pin:medium" holds that one.
+      const flag = localStorage.getItem(DEBUG_KEY) ?? "";
+      if (flag.startsWith("pin")) {
+        this.governorPinned = true;
+        const tier = flag.split(":")[1];
+        if (tier === "ultra" || tier === "high" || tier === "medium" || tier === "minimal") this.tier = tier;
+      }
     } catch {
       // Storage blocked: no debugging hooks.
     }
@@ -471,6 +483,7 @@ export class FxRenderer implements WaterfallRenderer {
     const pxSize = 1 / this.pixelRatio;
     if (this.notes) this.notes.uniforms.uPxSize.value = pxSize;
     if (this.marks) this.marks.uniforms.uPxSize.value = pxSize;
+    this.sparks?.setPixelRatio(this.pixelRatio);
     if (this.line) this.line.uniforms.uSize.value.x = this.cssWidth;
     this.configureBloom();
     this.lookDirty = true;
@@ -696,6 +709,7 @@ export class FxRenderer implements WaterfallRenderer {
         this.activeCount++;
       }
     }
+    this.visibleNotes = n;
     layer.geometry.instanceCount = n;
     uploadRange(layer.rect, n);
     uploadRange(layer.color, n);
@@ -774,7 +788,7 @@ export class FxRenderer implements WaterfallRenderer {
       kColor[a * 4 + 3] = age;
 
       if (dt <= 0 || emitted >= MAX_EMIT_PER_FRAME) continue;
-      const onset = 1 + 2.5 * Math.exp(-age * 9);
+      const onset = 1 + 1.5 * Math.exp(-age * 9);
       const nSparks = Math.floor(sparkRate * onset * dt + Math.random());
       for (let k = 0; k < nSparks; k++) {
         const hot = heightMode && Math.random() < 0.5 ? 3 : 0;
@@ -797,8 +811,10 @@ export class FxRenderer implements WaterfallRenderer {
   }
 
   private measure(startMs: number, interval: number, playing: boolean): void {
+    const cpu = performance.now() - startMs;
+    this.cpuMs += (cpu - this.cpuMs) * 0.05;
     if (this.governorPinned) return;
-    let cost = performance.now() - startMs;
+    let cost = cpu;
     if (interval > 0) {
       // Track the display's frame interval from quick frames; a frame much longer than
       // that was dropped, whatever this renderer's own CPU share of it was (GPU-bound).
@@ -825,6 +841,11 @@ export interface FxStats {
   sparks: number;
   smoke: number;
   pixelRatio: number;
+  songTimeS: number;
+  visibleNotes: number;
+  /** Smoothed CPU time of one draw() call. */
+  cpuMs: number;
+  sounding: number;
   glRenderer: string;
 }
 

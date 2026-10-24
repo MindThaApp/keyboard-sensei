@@ -220,11 +220,11 @@ void main() {
   float pulse = env * (0.6 + 0.4 * exp(-age * 7.0));
   float shimmer = 1.0 + uFlick * (texture2D(uNoise, vec2(uTimeF * 3.7 + seed * 9.0, 0.7)).b - 0.5) * 0.9;
 
-  float s = 5.0 + w * 0.55;
+  float s = 4.0 + w * 0.32;
   float core = exp(-dot(p, p) / (s * s));
   float streakX = exp(-abs(p.y) / 2.2) * exp(-abs(p.x) / (w * 1.5));
   float streakY = exp(-abs(p.x) / (w * 0.1 + 1.0)) * exp(-max(p.y, 0.0) / (12.0 + uFlame * 0.5)) * step(0.0, p.y);
-  float star = (core * 1.3 + streakX * 0.9 + streakY * 0.6) * uFlare * pulse * shimmer;
+  float star = (core * 0.75 + streakX * 0.5 + streakY * 0.35) * uFlare * pulse * shimmer;
   vec3 rgb = mix(col, vec3(1.0), 0.5 * clamp(core + streakX * 0.5, 0.0, 1.0)) * star;
 
   // Flame tongues rising from the key.
@@ -232,13 +232,14 @@ void main() {
   float across = exp(-pow(p.x / (w * 0.62), 2.0));
   float wisp = 0.45 + 0.85 * texture2D(uNoise, vec2(p.x / 19.0 + seed * 3.0, -p.y / 34.0 + uTimeF * (0.8 + uFlick))).b;
   float flame = smoothstep(h, 0.0, max(p.y, 0.0)) * step(0.0, p.y) * across * wisp;
-  rgb += mix(vec3(1.0, 0.95, 0.8), col, smoothstep(0.0, h * 0.8 + 1.0, p.y)) * flame * 0.85;
+  rgb += mix(vec3(1.0, 0.95, 0.8), col, smoothstep(0.0, h * 0.8 + 1.0, p.y)) * flame * 0.5;
 
   if (uEmissive < 0.5) {
     // The key's tint, lit up from below and spilling up into the notes.
     vec2 q = vec2(p.x / (w * 1.25), p.y / (36.0 + uFlame * 1.4));
-    rgb += col * exp(-dot(q, q) * 1.7) * uTint * pulse * 0.9;
+    rgb += col * exp(-dot(q, q) * 1.7) * uTint * pulse * 0.28;
   }
+  if (uEmissive > 0.5) rgb *= 0.55;
   gl_FragColor = vec4(rgb, 0.0);
 }
 `;
@@ -250,10 +251,10 @@ uniform float uTime;
 uniform float uRise;
 uniform float uSwirl;
 uniform float uSize;
+uniform float uPxRatio;
 attribute vec4 aSpawn;  // x, y, spawn time (s), seed
 attribute vec4 aVel;    // vx, vy, life (s), size factor
 attribute vec3 aColor;
-varying vec2 vUv;
 varying vec3 vColor;
 varying float vAlpha;
 
@@ -262,13 +263,13 @@ varying float vAlpha;
 vec2 curl(vec2 p, float t, float seed) {
   float a = 0.034;
   float b = 0.041;
-  vec2 v = vec2(-b * sin(a * p.x + t * 0.9 + seed * 6.2) * sin(b * p.y - t * 1.4 + seed * 3.1),
-                -a * cos(a * p.x + t * 0.9 + seed * 6.2) * cos(b * p.y - t * 1.4 + seed * 3.1));
-  float a2 = 0.09;
-  float b2 = 0.11;
-  v += 0.45 * vec2(-b2 * sin(a2 * p.x - t * 1.7 + seed * 2.0) * sin(b2 * p.y + t * 2.1),
-                   -a2 * cos(a2 * p.x - t * 1.7 + seed * 2.0) * cos(b2 * p.y + t * 2.1));
-  return v;
+  float u = a * p.x + t * 0.9 + seed * 6.2;
+  float v = b * p.y - t * 1.4 + seed * 3.1;
+  vec2 r = vec2(-b * sin(u) * sin(v), -a * cos(u) * cos(v));
+  float u2 = 0.09 * p.x - t * 1.7 + seed * 2.0;
+  float v2 = 0.11 * p.y + t * 2.1;
+  r += 0.45 * vec2(-0.11 * sin(u2) * sin(v2), -0.09 * cos(u2) * cos(v2));
+  return r;
 }
 
 void main() {
@@ -276,32 +277,32 @@ void main() {
   float life = aVel.z;
   if (age < 0.0 || age > life || life <= 0.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-    vAlpha = 0.0; vUv = vec2(0.0); vColor = vec3(0.0);
+    gl_PointSize = 0.0;
+    vAlpha = 0.0;
+    vColor = vec3(0.0);
     return;
   }
   float t = age / life;
-  float drag = 2.2;
-  float travelled = (1.0 - exp(-drag * age)) / drag;
-  vec2 p = aSpawn.xy + vec2(aVel.x, aVel.y) * travelled + vec2(0.0, uRise * (0.55 + 0.9 * aSpawn.w) * age);
+  float travelled = (1.0 - exp(-2.2 * age)) / 2.2;
+  vec2 p = aSpawn.xy + aVel.xy * travelled + vec2(0.0, uRise * (0.55 + 0.9 * aSpawn.w) * age);
   p += curl(p, uTime, aSpawn.w) * uSwirl * 520.0 * age * (0.4 + t);
   float size = uSize * aVel.w * (1.0 - 0.45 * t);
-  float extent = max(size * 2.6, 3.2);
-  vUv = position.xy * 2.0;
   vColor = aColor;
   float twinkle = 0.7 + 0.3 * sin(uTime * 31.0 + aSpawn.w * 53.0);
   vAlpha = smoothstep(0.0, 0.05, age) * (1.0 - t) * (1.0 - t) * twinkle * clamp(size * 1.1, 0.35, 1.2);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(p + position.xy * extent, 0.0, 1.0);
+  gl_PointSize = max(size * 2.4, 2.6) * uPxRatio;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 0.0, 1.0);
 }
 `;
 
 export const SPARK_FRAGMENT = /* glsl */ `
 uniform float uGain;
-varying vec2 vUv;
 varying vec3 vColor;
 varying float vAlpha;
 void main() {
-  float d = dot(vUv, vUv);
-  if (d > 1.0 || vAlpha <= 0.0) discard;
+  vec2 uv = gl_PointCoord * 2.0 - 1.0;
+  float d = dot(uv, uv);
+  if (d > 1.0) discard;
   float e = exp(-d * 4.5) * vAlpha * uGain;
   gl_FragColor = vec4(mix(vColor, vec3(1.0), 0.3 * e) * e, min(1.0, e));
 }
