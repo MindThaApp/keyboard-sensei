@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">OctaviApp</string>
-    <string name="title_activity_main">OctaviApp</string>
+    <string name="app_name">Midivory</string>
+    <string name="title_activity_main">Midivory</string>
     <string name="package_name">com.midivory.app</string>
     <string name="custom_url_scheme">com.midivory.app</string>
 </resources>

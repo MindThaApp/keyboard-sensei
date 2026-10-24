@@ -99,7 +99,7 @@ describe.skipIf(!enabled)("Batch D import (real Postgres)", () => {
       expect(song.public_eligible).toBe(true);
       expect(song.uploader_id).toBeNull();
       expect(song.hands).toBe("both");
-      expect(song.attribution).toContain("arranged for OctaviApp");
+      expect(song.attribution).toContain("arranged for Midivory");
       expect(song.duration_sec).toBeGreaterThanOrEqual(20);
       expect(song.genre).toBe("other");
     }
