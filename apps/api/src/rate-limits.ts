@@ -36,21 +36,30 @@ export const registerRateLimit = rateLimit({
   message: rateLimitedBody("Too many sign-ups from this network — try again later"),
 });
 
-/** MIDI uploads (and recordings, which upload through the same route) per user. */
+/**
+ * MIDI uploads (and recordings, which upload through the same route) per user. Sheet
+ * music sent for recognition has its own, tighter limit below and is not counted here.
+ */
 export const songUploadRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 60,
   keyGenerator: userOrIpKey,
+  skip: (req) => `${req.baseUrl}${req.path}`.startsWith("/songs/upload/omr"),
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: rateLimitedBody("Too many uploads — try again later"),
 });
 
-/** Sheet music to recognise (beta): each one is up to four minutes of the OMR service's CPU. */
+/**
+ * Sheet music to recognise (beta): each one is up to four minutes of the OMR service's CPU.
+ * Only accepted jobs count; a refused request (unsupported file, service off, over the
+ * limit) costs the service nothing, so it doesn't use up the hour's allowance.
+ */
 export const omrUploadRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 10,
   keyGenerator: userOrIpKey,
+  skipFailedRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: rateLimitedBody("You've sent a lot of sheet music to recognise — try again in an hour"),
