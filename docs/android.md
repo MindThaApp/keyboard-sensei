@@ -128,13 +128,13 @@ minified) signed with the debug key, with:
   `192.168.4.4` (no subdomains, no cleartext).
 
 The CA certificate is not in git. Gradle copies it in when building `home`, from
-the file named by `OCTAVIAPP_HOME_CA` (the copy, `app/src/home/res/raw/`, is
+the file named by `MIDIVORY_HOME_CA` (the copy, `app/src/home/res/raw/`, is
 gitignored). The build fails with a clear message if the variable is unset or
 the file is missing or not PEM. Release/Play builds never need it and are
 byte-for-byte unchanged (system CAs only).
 
 ```sh
-export OCTAVIAPP_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt
+export MIDIVORY_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt
 apps/mobile/scripts/build-home.sh
 # -> apps/mobile/android/app/build/outputs/apk/home/app-home.apk
 ```
