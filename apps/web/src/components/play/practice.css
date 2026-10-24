@@ -422,3 +422,29 @@ html.dark .ks-heatmap__cell:not([data-tone="empty"]) {
     height: 30px;
   }
 }
+
+/* ------------------------------------------------------------ FX look */
+.ks-fx-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+.ks-fx-preset {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--separator, rgba(128, 128, 128, 0.35));
+  border-radius: 12px;
+  background: transparent;
+  color: var(--label, inherit);
+  font: 500 var(--ui-fs-body, 15px) / 20px var(--font-text);
+  cursor: pointer;
+}
+.ks-fx-preset[aria-pressed="true"] {
+  border-color: var(--tint, #0a84ff);
+  background: color-mix(in srgb, var(--tint, #0a84ff) 18%, transparent);
+  font-weight: 600;
+}
+.ks-fx-preset:focus-visible {
+  outline: 2px solid var(--tint, #0a84ff);
+  outline-offset: 2px;
+}
