@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 /**
- * Simple / Advanced (§2). Simple hides controls behind "More options"; it never
- * removes them. Kept on the device so it works offline, and synced to the account
+ * Simple / Advanced. There is no longer a switch in the UI and no screen outside
+ * Play-Along hides features by it: it is a stored, non-hiding preference (it still
+ * seeds onboarding and is reported with feedback). Kept on the device so it works offline, and synced to the account
  * (see ExperienceSync) so a new device picks it up. A choice made on this device that
  * hasn't reached the account yet is "pending" and wins over the account's value.
  */
