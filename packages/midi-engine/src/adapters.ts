@@ -63,7 +63,7 @@ export class MockMidiAdapter extends MidiEventHub implements MidiAdapter {
   disconnect(): void {}
 
   listDevices(): MidiDeviceInfo[] {
-    return [{ id: "mock", name: "Virtual Keyboard", manufacturer: "Keyboard Sensei" }];
+    return [{ id: "mock", name: "Virtual Keyboard", manufacturer: "OctaviApp" }];
   }
 
   triggerNoteOn(note: number, velocity = 100, timestampMs = this.clock()): void {

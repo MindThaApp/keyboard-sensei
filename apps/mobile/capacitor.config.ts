@@ -10,8 +10,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const devApi = process.env.KS_ANDROID_DEV_API === "1";
 
 const config: CapacitorConfig = {
-  appId: "com.keyboardsensei.app",
-  appName: "Keyboard Sensei",
+  appId: "com.octaviapp.app",
+  appName: "OctaviApp",
   // The production build of apps/web. Build it first (`pnpm build:web`).
   webDir: "../web/dist",
   server: {
@@ -28,7 +28,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 600,
       launchAutoHide: true,
-      backgroundColor: "#b4323e",
+      backgroundColor: "#17171a",
       showSpinner: false,
     },
     SystemBars: {

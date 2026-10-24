@@ -58,7 +58,7 @@ export async function httpFetcher(url: string): Promise<Buffer> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(url, { headers: { "user-agent": "KeyboardSensei-catalogue-pipeline" } });
+      const response = await fetch(url, { headers: { "user-agent": "OctaviApp-catalogue-pipeline" } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return Buffer.from(await response.arrayBuffer());
     } catch (error) {

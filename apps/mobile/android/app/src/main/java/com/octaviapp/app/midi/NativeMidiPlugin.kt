@@ -1,4 +1,4 @@
-package com.keyboardsensei.app.midi
+package com.octaviapp.app.midi
 
 import android.Manifest
 import android.annotation.SuppressLint

@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
+import Wordmark from "../brand/Wordmark";
 import { LegalLinks } from "../legal/PublicPageLayout";
 import { useServerConfig } from "../../services/serverConfig";
 import GoogleSignInButton, { googleSignInEnabled } from "./GoogleSignInButton";
@@ -246,8 +247,8 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
         <div className="felt-strip absolute inset-x-0 top-0" />
         <div className="space-y-5">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight">
-              Keyboard <span className="text-felt-600 dark:text-felt-400">Sensei</span>
+            <h1>
+              <Wordmark size="lg" />
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               Learn piano one small step at a time, on a keyboard or on your screen.

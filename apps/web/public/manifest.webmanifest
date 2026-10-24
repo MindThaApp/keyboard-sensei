@@ -1,6 +1,6 @@
 {
-  "name": "Keyboard Sensei",
-  "short_name": "Keyboard Sensei",
+  "name": "OctaviApp",
+  "short_name": "OctaviApp",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

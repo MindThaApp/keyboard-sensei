@@ -1,4 +1,4 @@
-# Restore Keyboard Sensei backups
+# Restore OctaviApp backups
 
 Restore the PostgreSQL custom-format dump while the API is stopped or in maintenance:
 
