@@ -40,8 +40,8 @@ describe("decodeScoreFile", () => {
 
   it("refuses timewise MusicXML, other XML, binary and broken zips", () => {
     expect(() => decodeScoreFile(strToU8(`<score-timewise/>`))).toThrow(/Timewise/);
-    expect(() => decodeScoreFile(strToU8(`<svg/>`))).toThrow("This isn't a MusicXML or MEI score");
-    expect(() => decodeScoreFile(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x80]))).toThrow("This isn't a MusicXML or MEI score");
+    expect(() => decodeScoreFile(strToU8(`<svg/>`))).toThrow("This isn't a MusicXML, MEI, ABC or **kern score");
+    expect(() => decodeScoreFile(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x80]))).toThrow("This isn't a MusicXML, MEI, ABC or **kern score");
     expect(() => decodeScoreFile(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]))).toThrow(/zip/);
   });
 });
