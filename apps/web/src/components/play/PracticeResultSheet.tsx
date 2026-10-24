@@ -32,11 +32,18 @@ export interface FinishedRun {
   loopNote: string | null;
 }
 
+export type SubmitState = "idle" | "saving" | "saved" | "failed" | "skipped" | "retired";
+
+/** How a failed attempt save shows: a 404 means the song was retired mid-session, so it is final (never retried). */
+export function submitStateForError(error: unknown): SubmitState {
+  return (error as { status?: number } | null)?.status === 404 ? "retired" : "failed";
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   finished: FinishedRun | null;
-  submitState: "idle" | "saving" | "saved" | "failed" | "skipped";
+  submitState: SubmitState;
   /** The rung one step harder/easier than the run's settings, or null at the end. */
   harderRung: number | null;
   easierRung: number | null;
@@ -147,9 +154,11 @@ export default function PracticeResultSheet({
             : "Saved to your history"
         : submitState === "failed"
           ? "Couldn't save this run"
-          : submitState === "skipped"
-            ? "Not saved: no notes were played"
-            : null;
+          : submitState === "retired"
+            ? "This song is no longer available, so this result wasn't saved."
+            : submitState === "skipped"
+              ? "Not saved: no notes were played"
+              : null;
 
   return (
     <Sheet open={open} onClose={onClose} title="Your result" detents={["medium", "large"]} className="ks-practice-sheet ks-result">
