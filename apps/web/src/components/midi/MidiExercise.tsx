@@ -3,8 +3,7 @@ import type { MidiExercise as MidiExerciseDef, ScoringResult } from "@keyboard-s
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import MetronomeControls, { loadMetronomeSettings, saveMetronomeSettings, type MetronomeSettings } from "./MetronomeControls";
 import VirtualPiano from "../piano/VirtualPiano";
-import { Advanced, Button, Card, Chip, Slider, Toggle, Toolbar } from "../ui";
-import { useExperienceMode } from "../ui/useExperienceMode";
+import { Button, Card, Chip, Slider, Toggle, Toolbar } from "../ui";
 import { coveredNoteIds, groupByStart } from "./exerciseCoverage";
 import type { FocusModeApi } from "../../hooks/useFocusMode";
 import NotationRenderer from "../notation/NotationRenderer";
@@ -118,7 +117,6 @@ function SubmetricBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function MidiExercise({ exerciseId, title, instructions, lessonId = null, exercise, onCompleted, onRecordingClock, notationKey, nextAction, focus }: Props) {
-  const experience = useExperienceMode();
   // The span this exercise actually uses — drives VirtualPiano's "Fit to piece"
   // button, so the user can widen a too-narrow keyboard in one click.
   const exerciseRange = useMemo(() => {
@@ -238,13 +236,10 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const passed = result !== null && result.score >= PASS_SCORE;
   const capturing = phase === "recording";
   const inFocus = focus?.active ?? false;
-  const advanced = experience === "advanced";
   const running = phase === "counting-in" || capturing || phase === "paused";
 
   const noteGroups = groupByStart(exercise.expected);
   const nextGroup = running ? noteGroups.find((group) => group.notes.some((n) => !covered.has(n.id))) : undefined;
-
-  const speedWord = chosenBpm < 70 ? "slow" : chosenBpm < 110 ? "medium" : "fast";
 
   // The toolbar's buttons per phase. `main` is the one filled action; focus mode keeps only it.
   let main: ReactNode = null;
@@ -382,7 +377,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
         {!inFocus && (
           <div className="flex flex-wrap items-center gap-2">
             {untimed && <Chip>Take your time</Chip>}
-            {!untimed && advanced && (
+            {!untimed && (
               <>
                 <Chip>
                   {exercise.beatsPerBar ?? 4}/{exercise.beatUnit ?? 4}
@@ -435,7 +430,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           </p>
         )}
 
-        {capturing && !untimed && highlightEnabled && advanced && (
+        {capturing && !untimed && highlightEnabled && (
           <div className="flex items-center gap-3 text-xs">
             <span className="tabular-nums">
               <span className="text-slate-500">Live </span>
@@ -471,7 +466,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
               {result.dynamics && <SubmetricBar label="Dynamics" value={result.dynamics.score} />}
             </div>
-            {result.dynamics && advanced && (
+            {result.dynamics && (
               <p className="mt-2 text-xs tabular-nums text-slate-500" aria-label="Dynamics">
                 {result.dynamics.evenness !== null && `Volume spread ±${result.dynamics.velocitySpread} (evenness ${result.dynamics.evenness}%)`}
                 {result.dynamics.evenness !== null && result.dynamics.chordBalance !== null && " · "}
@@ -508,22 +503,19 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           expectedNotes={capturing && !untimed && highlightEnabled ? liveDueMidis : phase !== "scored" ? notes : emptyNotes}
           soundingNotes={listenNotes}
           feedbackByNote={feedback}
-          showControls={advanced}
           showHint={inFocus ? false : undefined}
         />
 
         {/* Speed, metronome and highlighting sit behind a disclosure: they are adjustments,
             not the task, and on a first visit they crowded the prompt and pushed the
-            keyboard below the fold. Simple mode keeps only speed and the click. */}
-        {!inFocus && (!untimed || advanced) && (
+            keyboard below the fold. */}
+        {!inFocus && (
           <details className="group rounded-lg border border-slate-200 text-xs dark:border-slate-700">
             <summary className="min-h-11 cursor-pointer select-none px-3 py-3 text-slate-700 dark:text-slate-200">
-              {advanced ? "Practice settings" : "More options"}
+              Practice settings
               {!untimed && (
                 <span className="ml-2 text-slate-500">
-                  {advanced
-                    ? `${Math.round(chosenBpm)} BPM · metronome ${metronomeOn ? "on" : "off"} · highlighting ${highlightEnabled ? "on" : "off"}`
-                    : `Speed: ${Math.round(chosenBpm)} (${speedWord})`}
+                  {`${Math.round(chosenBpm)} BPM · metronome ${metronomeOn ? "on" : "off"} · highlighting ${highlightEnabled ? "on" : "off"}`}
                 </span>
               )}
             </summary>
@@ -531,13 +523,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               {!untimed && (
                 <div className="space-y-1">
                   <p className="text-slate-700 dark:text-slate-200">
-                    {advanced ? (
-                      <>
-                        Tempo <span className="text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
-                      </>
-                    ) : (
-                      "Speed"
-                    )}
+                    Tempo <span className="text-slate-500">(written: {exercise.tempoBpm} BPM)</span>
                   </p>
                   <Slider
                     min={sliderMinBpm}
@@ -546,15 +532,13 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                     value={chosenBpm}
                     disabled={tempoLocked}
                     onChange={(value) => setTempoBpm(value)}
-                    aria-label={advanced ? "Practice tempo in beats per minute" : "Speed"}
-                    formatValue={(value) =>
-                      advanced ? `${Math.round(value)} BPM (${Math.round((value / writtenBpm) * 100)}% of written tempo)` : `Speed: ${Math.round(value)} (${speedWord})`
-                    }
+                    aria-label="Practice tempo in beats per minute"
+                    formatValue={(value) => `${Math.round(value)} BPM (${Math.round((value / writtenBpm) * 100)}% of written tempo)`}
                   />
                 </div>
               )}
               {!untimed && <Toggle label="Metronome while playing" checked={metronomeOn} onChange={setMetronomeOn} />}
-              {advanced && !untimed && (
+              {!untimed && (
                 <Toggle
                   label="Highlight notes while playing"
                   checked={highlightEnabled}
@@ -564,7 +548,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                   }}
                 />
               )}
-              <Advanced>
+              <>
                 {notation && sheetSizeControl}
                 {!untimed && (
                   <MetronomeControls
@@ -575,7 +559,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
                     }}
                   />
                 )}
-              </Advanced>
+              </>
             </div>
           </details>
         )}

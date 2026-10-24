@@ -14,7 +14,6 @@ import { stageLayout } from "../play/stageLayout";
 import { usePlayAlongRun, type RunSettings } from "../play/usePlayAlongRun";
 import { drawWaterfall, pianoRangeFor } from "../play/waterfall";
 import { notePalette, notePaletteCssVars, stageToneFor } from "../play/notePalette";
-import { useExperienceMode } from "../ui/useExperienceMode";
 import { useReducedMotion } from "../../utils/motion";
 import { StarRating } from "../progress/ProgressBits";
 import { formatDuration } from "../../utils/songLibrary";
@@ -179,7 +178,6 @@ function TierStage({
 
   const { subscribe, devices, deviceRange } = useMidiContext();
   const { scheme } = useAppearance();
-  const experience = useExperienceMode();
   const reducedMotion = useReducedMotion();
   const { device } = useDeviceClass();
   const focus = useFocusMode();
@@ -438,7 +436,7 @@ function TierStage({
       <section aria-label="Challenge stage" style={notePaletteCssVars(palette) as CSSProperties} className={focused ? "fixed inset-0 z-40 flex flex-col gap-2 bg-bg p-3" : "space-y-2"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           {running ? (
-            <PlayAlongHud detailed={experience === "advanced"} waitMode={mode === "practice"} tempoPct={100} lookaheadS={LOOKAHEAD_S} level="full" hands="both" paused={paused} loopLabel={mode === "listen" ? "Listening" : null} />
+            <PlayAlongHud detailed waitMode={mode === "practice"} tempoPct={100} lookaheadS={LOOKAHEAD_S} level="full" hands="both" paused={paused} loopLabel={mode === "listen" ? "Listening" : null} />
           ) : (
             <MidiStatusBar variant="chip" />
           )}

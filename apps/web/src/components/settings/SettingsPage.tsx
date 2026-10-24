@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useAuth } from "../../contexts/AuthContext";
-import { useExperience } from "../../contexts/ExperienceContext";
 import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
@@ -23,46 +22,18 @@ import CrashReportingSection from "./CrashReportingSection";
 import DeleteAccountSection from "./DeleteAccountSection";
 import AppearanceSection from "./AppearanceSection";
 import { SettingsRow } from "./SettingsRow";
-import { Advanced, Button, ListGroup, ListRow, SegmentedControl, Toggle } from "../ui";
+import { Button, ListGroup, ListRow, SegmentedControl, Toggle } from "../ui";
 
 /** A theory-card in lesson 1 — used as the fixed sample text for "test my selected voice." */
 const TEST_NARRATION_LESSON_ID = "lesson-01";
 const TEST_NARRATION_SECTION_INDEX = 0;
 
 function GeneralSection() {
-  const { experience, setExperience } = useExperience();
   return (
     <div className="space-y-6">
-      <ListGroup
-        header="Experience"
-        footer="Simple keeps each screen to the essentials. Advanced shows every control. Nothing is removed, only tucked away."
-        aria-label="Experience"
-      >
-        <SettingsRow title="Interface">
-          <SegmentedControl
-            aria-label="Simple or Advanced"
-            options={[
-              { value: "simple", label: "Simple" },
-              { value: "advanced", label: "Advanced" },
-            ]}
-            value={experience}
-            onChange={setExperience}
-          />
-        </SettingsRow>
-      </ListGroup>
       <DailyGoalSection />
       <CrashReportingSection />
     </div>
-  );
-}
-
-/** Simple mode tucks a section away; this row says so and offers the way back. */
-function MoreOptionsRow({ what }: { what: string }) {
-  const { setExperience } = useExperience();
-  return (
-    <ListGroup aria-label="More options">
-      <ListRow title="More options" subtitle={`${what} is part of the Advanced interface.`} onClick={() => setExperience("advanced")} accessory="chevron" />
-    </ListGroup>
   );
 }
 
@@ -507,9 +478,7 @@ export default function SettingsPage() {
       {activeTab === "midi" && (
         <>
           <MidiSection />
-          <Advanced fallback={<MoreOptionsRow what="Sound timing" />}>
-            <AudioLatencySection />
-          </Advanced>
+          <AudioLatencySection />
         </>
       )}
       {activeTab === "narration" && <NarrationSection />}
