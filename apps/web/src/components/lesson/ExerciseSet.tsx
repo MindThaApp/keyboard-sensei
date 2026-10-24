@@ -55,7 +55,7 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
               {passedCount} of {sections.length} done
             </p>
           </div>
-          <ol className="flex gap-2" role="tablist" aria-label="Steps">
+          <ol className="flex gap-2" aria-label="Steps">
             {sections.map((item, index) => {
               const best = bests[item.exerciseId];
               const passed = (best ?? 0) >= PASS_SCORE;
@@ -64,8 +64,7 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
                 <li key={item.exerciseId} className="flex-1">
                   <button
                     type="button"
-                    role="tab"
-                    aria-selected={active}
+                    aria-current={active ? "step" : undefined}
                     aria-label={`Step ${index + 1}: ${item.title}${passed ? ", passed" : ""}`}
                     title={item.title}
                     onClick={() => setSelected(index)}
