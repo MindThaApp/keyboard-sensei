@@ -7,9 +7,9 @@ import { practiceGymDrills, type PracticeGymDrill } from "../../data/practiceGym
 import { pathLabel } from "../../utils/paths";
 import { drillLink, lessonExerciseLink, songPracticeLink } from "../../utils/practiceLinks";
 import { warmupFor } from "../../utils/warmup";
-import { Advanced, Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, ProgressRing, Skeleton } from "../ui";
+import { Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, ProgressRing, Skeleton } from "../ui";
 import { StarRating } from "../progress/ProgressBits";
-import DailyChallengeRow, { rowTier, useChallengeToday } from "../challenge/DailyChallengeRow";
+import DailyChallengeRow, { useChallengeToday } from "../challenge/DailyChallengeRow";
 
 const HANDS_LABEL = { both: "both hands", right: "right hand", left: "left hand" } as const;
 const LEVEL_LABEL = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
@@ -121,17 +121,9 @@ function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) 
   );
 }
 
-/** Beginners (level 3 or below) get a note-reading nudge once a week, on Wednesdays. */
-const showNoteReading = (today: TodayResponse): boolean =>
-  today.level.level <= 3 && new Date(`${today.today}T00:00:00Z`).getUTCDay() === 3;
-
 function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGymDrill | null }) {
   const { review, song } = today;
-  // A new learner sees the ring and one "Up next" card, not an empty list.
-  const noteReading = showNoteReading(today);
   const challenge = useChallengeToday();
-  const hasChallenge = challenge !== null && rowTier(challenge) !== null;
-  if (!song && !review && !warmup && !noteReading && !hasChallenge) return null;
   return (
     <ListGroup header="Also today" aria-label="Also today">
       {song && (
@@ -177,18 +169,25 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           accessory="chevron"
         />
       )}
-      {noteReading && (
-        <ListRow
-          as={Link}
-          to="/practice/notes"
-          icon="♯"
-          iconColor="rgb(255 45 85)"
-          title="Note reading"
-          subtitle="Name notes on the staff · 2 min"
-          accessory="chevron"
-        />
-      )}
+      <ListRow
+        as={Link}
+        to="/practice/notes"
+        icon="♯"
+        iconColor="rgb(255 45 85)"
+        title="Note reading"
+        subtitle="Name notes on the staff · 2 min"
+        accessory="chevron"
+      />
       <DailyChallengeRow today={challenge} />
+      <ListRow
+        as={Link}
+        to="/import"
+        icon="+"
+        iconColor="var(--tint)"
+        title="Add a song"
+        subtitle="Import a MIDI file, a score, a link or a photo of sheet music"
+        accessory="chevron"
+      />
     </ListGroup>
   );
 }
@@ -275,7 +274,7 @@ function TodayContent({ today, wide }: { today: TodayResponse; wide: boolean }) 
       </div>
       <AlsoToday today={today} warmup={warmup} />
       {today.recentAchievements.length > 0 && (
-        <Advanced>
+        <>
           <section aria-labelledby="recent-achievements" className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <h2 id="recent-achievements" className="text-headline text-label">Recent achievements</h2>
@@ -290,7 +289,7 @@ function TodayContent({ today, wide }: { today: TodayResponse; wide: boolean }) 
               ))}
             </ul>
           </section>
-        </Advanced>
+        </>
       )}
     </div>
   );

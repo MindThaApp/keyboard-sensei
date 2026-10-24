@@ -15,7 +15,7 @@ import {
 import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useServerConfig } from "../../services/serverConfig";
-import { Advanced, Button, Chip, EmptyState, ErrorState, Skeleton } from "../ui";
+import { Button, Chip, EmptyState, ErrorState, Skeleton } from "../ui";
 import { WorkFilterBar } from "../library/SongFilterBar";
 import { ShelfCard, TierChip, WorkCard, WorkRow } from "../library/WorkRow";
 import {
@@ -235,15 +235,18 @@ export default function SongBrowserPage() {
     <div className={device === "phone" ? "space-y-5" : "space-y-6"}>
       <div className="flex flex-wrap items-end gap-3">
         <h1 className="text-large-title text-label">Songs</h1>
-        <Advanced>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Link to="/import" className="ks-btn ks-btn--filled ks-btn--md">
+            <span className="ks-btn__label">Add a song</span>
+          </Link>
           <Link
             to="/settings?tab=library&from=play"
             state={{ returnTo: `/practice${params.toString() ? `?${params.toString()}` : ""}` }}
-            className="ml-auto min-h-[44px] content-center text-subhead text-label-2a underline"
+            className="min-h-[44px] content-center px-2 text-subhead text-label-2a underline"
           >
-            Manage library →
+            Manage library
           </Link>
-        </Advanced>
+        </div>
       </div>
 
       <WorkFilterBar filters={filters} facets={facets} onChange={updateFilters} />

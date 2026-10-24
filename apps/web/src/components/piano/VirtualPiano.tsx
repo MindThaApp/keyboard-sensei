@@ -5,7 +5,6 @@ import { isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
 import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
-import { useExperienceMode } from "../ui/useExperienceMode";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useMediaQuery } from "../../utils/motion";
 import "./keybed.css";
@@ -55,7 +54,7 @@ export interface VirtualPianoProps {
   /** Upper bound for the white keys' height. Key height otherwise scales with key width
    *  (4:1), which made a fit-to-width 14-key keyboard ~290px tall. */
   maxWhiteKeyHeightPx?: number;
-  /** The key-size / instrument / auto-fit row. Defaults to on in Advanced mode only; pass
+  /** The key-size / instrument / auto-fit row. Defaults to on (except in the flat style); pass
    *  false when a parent renders `KeyboardSizingControls` itself (Play-Along puts them in
    *  its settings panel). */
   showControls?: boolean;
@@ -210,7 +209,6 @@ function VirtualPiano({
   handByNote,
 }: VirtualPianoProps) {
   const flat = variant === "flat";
-  const experience = useExperienceMode();
   const { device, orientation } = useDeviceClass();
   const phonePortrait = device === "phone" && orientation === "portrait" && !flat && !sizingProp;
   const finePointer = useMediaQuery("(pointer: fine)");
@@ -264,7 +262,7 @@ function VirtualPiano({
     persistenceKey: sizingProp ? null : deviceName,
     onDeviceRangeChange: sizingProp ? undefined : setDeviceRange,
     keepTightRangeVisible: true,
-    simpleFit: experience === "simple" && !sizingProp && !flat,
+    simpleFit: !sizingProp && !flat,
     // On an upright phone the whole exercise range fits when keys stay finger-sized
     // (>= 24px); otherwise the keys stay 24px and the window follows the notes. With a
     // MIDI keyboard connected nobody taps the screen, so a smaller fit is fine.
@@ -456,7 +454,7 @@ function VirtualPiano({
   function labelFor(note: number): string | null {
     if (!showLabels || whiteWidth < LABEL_MIN_KEY_PX) return null;
     const isC = note % 12 === 0;
-    if (isC || (experience === "simple" && whiteWidth >= ALL_LABELS_MIN_KEY_PX)) return midiNoteToName(note);
+    if (isC || whiteWidth >= ALL_LABELS_MIN_KEY_PX) return midiNoteToName(note);
     return null;
   }
 
@@ -538,7 +536,7 @@ function VirtualPiano({
           )}
         </div>
       </div>
-      {(showControls ?? (!flat && experience === "advanced")) && (
+      {(showControls ?? !flat) && (
         <div className="mt-1">
           <KeyboardSizingControls sizing={sizing} />
         </div>

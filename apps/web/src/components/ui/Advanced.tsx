@@ -12,7 +12,7 @@ export interface AdvancedProps {
   mode?: ExperienceMode;
 }
 
-/** Renders its children only in Advanced mode. */
+/** Renders its children only in Advanced mode. Shell pages no longer use it; kept for the Play-Along screen. */
 export function Advanced({ children, fallback = null, mode }: AdvancedProps) {
   const preference = useExperienceMode();
   return <>{(mode ?? preference) === "advanced" ? children : fallback}</>;
