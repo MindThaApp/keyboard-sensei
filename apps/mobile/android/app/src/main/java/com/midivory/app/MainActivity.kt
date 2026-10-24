@@ -1,8 +1,8 @@
-package com.octaviapp.app
+package com.midivory.app
 
 import android.os.Bundle
 import com.getcapacitor.BridgeActivity
-import com.octaviapp.app.midi.NativeMidiPlugin
+import com.midivory.app.midi.NativeMidiPlugin
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

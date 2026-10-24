@@ -1,4 +1,4 @@
-package com.octaviapp.app.midi
+package com.midivory.app.midi
 
 import android.Manifest
 import android.annotation.SuppressLint
