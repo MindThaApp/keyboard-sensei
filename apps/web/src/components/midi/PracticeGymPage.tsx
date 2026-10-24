@@ -21,7 +21,7 @@ const GENRES: { value: SongGenre | "all"; label: string }[] = [
 
 function DifficultyDots({ level }: { level: number }) {
   return (
-    <span aria-label={`Difficulty ${level} of 5`} className="inline-flex gap-0.5">
+    <span role="img" aria-label={`Difficulty ${level} of 5`} className="inline-flex gap-0.5">
       {[1, 2, 3, 4, 5].map((dot) => (
         <span key={dot} className={`h-1.5 w-1.5 rounded-full ${dot <= level ? "bg-felt-500" : "bg-slate-200 dark:bg-slate-700"}`} />
       ))}
@@ -106,7 +106,7 @@ export default function PracticeGymPage() {
       </div>
 
       <div hidden={focused}>
-        <ListGroup header="Drills" aria-label="Drills">
+        <ListGroup header="Drills" headingLevel={2} aria-label="Drills">
           {practiceGymDrills.map((drill) => (
             <ListRow
               key={drill.id}
