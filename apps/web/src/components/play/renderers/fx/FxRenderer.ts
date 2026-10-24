@@ -5,7 +5,7 @@ import { ClassicRenderer, judgementMark, type KeyboardGeometry } from "../../wat
 import { NOTES_STYLE_FALLBACK_EVENT, type NotesStyleFallback, type WaterfallFrame, type WaterfallRenderer } from "../types";
 import { Bloom } from "../neon3d/bloom";
 import { clearMarks, createFlatLayer, createMarkLayer, MARK_KIND, pushMark, type FlatLayer, type MarkLayer } from "../neon3d/blockMaterial";
-import { BLOCK_INSET_PX, MIN_BLOCK_HEIGHT_PX, firstVisibleIndex, isSortedByStart, parseColor, type Rgb } from "../neon3d/layout";
+import { firstVisibleIndex, isSortedByStart, parseColor, type Rgb } from "../neon3d/layout";
 import { QualityGovernor, type QualityTier } from "../neon3d/qualityGovernor";
 import { activeFxParams, getFxState, subscribeFx } from "./fxStore";
 import {
@@ -26,6 +26,7 @@ import {
   type LineLayer,
   type NoteLayer,
 } from "./fxLayers";
+import { barHeight, barWidth, nextStartOnSameKey } from "./fxBars";
 import { SmokePool, SparkPool } from "./fxParticles";
 import { FX_TIERS, tierBloom, tierCounts } from "./fxTiers";
 
@@ -130,11 +131,15 @@ export class FxRenderer implements WaterfallRenderer {
   private keyGeometry: KeyboardGeometry | null = null;
   private readonly keyX = new Float32Array(128);
   private readonly keyW = new Float32Array(128);
+  /** The key's own left edge (bars sit inside it). */
+  private readonly keyLeft = new Float32Array(128);
 
   private song: readonly PlayAlongNote[] | null = null;
   private songSorted = false;
   private longestNoteS = 0;
   private hitAtMs = new Float64Array(0);
+  /** Start of the next note on each note's key, so touching notes stay separate bars. */
+  private nextOnKey: Float64Array = new Float64Array(0);
 
   // Notes sounding this frame.
   private activeCount = 0;
@@ -605,8 +610,10 @@ export class FxRenderer implements WaterfallRenderer {
     for (let midi = geometry.lowestNote; midi <= geometry.highestNote; midi++) {
       const key = geometry.xFor(midi);
       if (!key) continue;
-      this.keyX[midi] = key.x + BLOCK_INSET_PX;
-      this.keyW[midi] = key.width - BLOCK_INSET_PX * 2;
+      const width = barWidth(key.width);
+      this.keyLeft[midi] = key.x;
+      this.keyX[midi] = key.x + (key.width - width) / 2;
+      this.keyW[midi] = width;
     }
   }
 
@@ -639,7 +646,7 @@ export class FxRenderer implements WaterfallRenderer {
       this.lanes[0] = this.lanes[1] = this.lanes[2] = this.lanes[3] = p.laneAlpha;
       for (let note = geometry.lowestNote; note <= geometry.highestNote; note++) {
         if (note % 12 !== 0 || this.keyW[note] === 0) continue;
-        this.putFlat(flats, (this.keyX[note] ?? 0) - BLOCK_INSET_PX, 0, 1.5, heightPx, this.lanes);
+        this.putFlat(flats, this.keyLeft[note] ?? 0, 0, 1.5, heightPx, this.lanes);
       }
     }
     if (frame.bars) {
@@ -666,6 +673,7 @@ export class FxRenderer implements WaterfallRenderer {
     this.longestNoteS = longest;
     if (this.hitAtMs.length !== notes.length) this.hitAtMs = new Float64Array(notes.length);
     this.hitAtMs.fill(-Infinity);
+    this.nextOnKey = nextStartOnSameKey(notes);
   }
 
   private writeNotes(frame: WaterfallFrame, nowMs: number): void {
@@ -706,7 +714,7 @@ export class FxRenderer implements WaterfallRenderer {
       r[n * 4] = this.keyX[note.midi]!;
       r[n * 4 + 1] = timeToStart * pxPerSecond;
       r[n * 4 + 2] = width;
-      r[n * 4 + 3] = Math.max(MIN_BLOCK_HEIGHT_PX, note.durationS * pxPerSecond);
+      r[n * 4 + 3] = barHeight(note.startS, note.durationS, this.nextOnKey[i] ?? Infinity, pxPerSecond);
       const c = layer.color.array as Float32Array;
       if (!heightMode) {
         if (rainbow) noteColor(this.params, note, 0, 0, c, n * 3);
