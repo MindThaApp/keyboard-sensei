@@ -1,4 +1,4 @@
-package com.octaviapp.app.midi
+package com.midivory.app.midi
 
 /**
  * Frames a raw MIDI byte stream (one per input port) into complete channel

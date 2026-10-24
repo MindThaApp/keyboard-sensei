@@ -357,7 +357,7 @@ What to create in [Google Cloud Console](https://console.cloud.google.com/):
      as origins.)
    - No redirect URIs are needed (the button uses the popup flow).
 4. **Android client** (Create client → Android):
-   - Package name: `com.octaviapp.app`.
+   - Package name: `com.midivory.app`.
    - SHA-1 certificate fingerprint: of the key that signs the app *as installed*.
      With Play App Signing, copy the "App signing key certificate" SHA-1 from Play
      Console → Test and release → App integrity. Create a second Android client
