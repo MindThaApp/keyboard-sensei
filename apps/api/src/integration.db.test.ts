@@ -402,6 +402,68 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("retired songs", () => {
+    it("404 for non-admins on every by-id route, stay open to admins, and keep history readable", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "ks-retired-"));
+      const midi = join(dir, "retired.mid");
+      const notation = join(dir, "retired.musicxml");
+      await writeFile(midi, midiBytes());
+      await writeFile(notation, "<score-partwise/>");
+      const user = await createUser();
+      const uploader = await createUser();
+      const admin = await createUserWithPassword("admin");
+      const base = { artist: "Old Composer", genre: "classical", difficulty: 1, duration_sec: 4, note_count: 8, content_rights: "public-domain", file_path: midi, notation_path: notation, retired_at: new Date() };
+      const shared = await m.prisma.song.create({ data: { ...base, title: "Retired shared song", file_licence: "public-domain" } });
+      const own = await m.prisma.song.create({ data: { ...base, title: "Retired own upload", uploader_id: uploader.id, content_rights: "user-upload" } });
+      const attempt = { score: 80, accuracy: 90, tempo_pct: 100, lookahead_s: 3, wait_mode: false };
+      const get = async (path: string, token: string) => (await fetch(`${baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } })).status;
+
+      type Route = [string, (id: string, token: string) => Promise<number>];
+      const routes: Route[] = [
+        ["GET /songs/:id/file", (id, t) => get(`/songs/${id}/file`, t)],
+        ["GET /songs/:id/file?download=1", (id, t) => get(`/songs/${id}/file?download=1`, t)],
+        ["GET /songs/:id/file?download=1&format=musicxml", (id, t) => get(`/songs/${id}/file?download=1&format=musicxml`, t)],
+        ["GET /songs/:id/notation", (id, t) => get(`/songs/${id}/notation`, t)],
+        ["POST /songs/:id/attempts", async (id, t) => (await api("POST", `/songs/${id}/attempts`, { token: t, body: attempt })).status],
+      ];
+      for (const [name, call] of routes) {
+        // Non-admins, including the uploader of their own retired upload: not found.
+        expect([name, "user/shared", await call(shared.id, user.token)]).toEqual([name, "user/shared", 404]);
+        expect([name, "user/own-by-other", await call(own.id, user.token)]).toEqual([name, "user/own-by-other", 404]);
+        expect([name, "uploader/own", await call(own.id, uploader.token)]).toEqual([name, "uploader/own", 404]);
+      }
+      // Admins keep access (download of a format the song lacks is a 404 for a different reason).
+      expect(await routes[0]![1](shared.id, admin.token)).toBe(200);
+      expect(await routes[1]![1](shared.id, admin.token)).toBe(200);
+      expect(await routes[2]![1](shared.id, admin.token)).toBe(404);
+      expect(await routes[3]![1](shared.id, admin.token)).toBe(200);
+      expect(await routes[4]![1](shared.id, admin.token)).toBe(201);
+      expect(await routes[0]![1](own.id, admin.token)).toBe(200);
+      expect(await routes[3]![1](own.id, admin.token)).toBe(200);
+
+      // Un-retired, the same non-admin routes work again.
+      await m.prisma.song.update({ where: { id: shared.id }, data: { retired_at: null } });
+      expect(await routes[0]![1](shared.id, user.token)).toBe(200);
+      expect(await routes[3]![1](shared.id, user.token)).toBe(200);
+      await m.prisma.song.update({ where: { id: shared.id }, data: { retired_at: new Date() } });
+
+      // History and progress read the song row directly, so a retired song keeps its title.
+      await m.prisma.playAlongAttempt.create({ data: { user_id: user.id, song_id: shared.id, score: 80, accuracy: 0.9, tempo_pct: 100, lookahead_s: 3, wait_mode: false } });
+      const history = await api("GET", "/songs/attempts/me", { token: user.token });
+      expect(history.status).toBe(200);
+      expect(history.body.recent.map((row: { title: string }) => row.title)).toEqual(["Retired shared song"]);
+      const progression = await api("GET", "/users/me/progression", { token: user.token });
+      expect(progression.status).toBe(200);
+      expect(progression.body.songTitles[shared.id]).toBe("Retired shared song");
+      const list = await api("GET", "/songs", { token: user.token });
+      expect(list.body.songs.map((s: { id: string }) => s.id)).not.toContain(shared.id);
+
+      await m.prisma.playAlongAttempt.deleteMany({ where: { song_id: { in: [shared.id, own.id] } } });
+      await m.prisma.song.deleteMany({ where: { id: { in: [shared.id, own.id] } } });
+      await rm(dir, { recursive: true, force: true });
+    });
+  });
+
   describe("song export (GET /songs/:id/file?download=1&format=...)", () => {
     const get = async (path: string, token?: string) => {
       const res = await fetch(`${baseUrl}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
