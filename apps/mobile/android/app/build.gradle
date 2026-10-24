@@ -10,10 +10,10 @@ def releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH")
 def hasReleaseSigning = releaseKeystore && file(releaseKeystore).exists()
 
 android {
-    namespace = "com.keyboardsensei.app"
+    namespace = "com.octaviapp.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.keyboardsensei.app"
+        applicationId "com.octaviapp.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Play rejects a versionCode it has seen before; CI passes the run number.

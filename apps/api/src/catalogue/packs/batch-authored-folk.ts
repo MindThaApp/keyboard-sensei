@@ -52,7 +52,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Gyeonggi Arirang", kind: "title" }, { alias: "아리랑", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The folk song (Gyeonggi Arirang) as transcribed in John Chambers' ABC collection, checked note for note against the Wikipedia score (moved from F, which writes it in 9/8). Both strains, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The folk song (Gyeonggi Arirang) as transcribed in John Chambers' ABC collection, checked note for note against the Wikipedia score (moved from F, which writes it in 9/8). Both strains, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: `${CHAMBERS}Korea/Arirang_G.abc`,
       score: arirang,
     },
@@ -65,7 +65,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Sul mare luccica", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The Neapolitan boat song (Teodoro Cottrau, 1849) as printed in The Everyday Song Book (1927, no. 144), in John Chambers' ABC transcription, checked note for note against his accordion-book transcription (Italy/SantaLucia.abc) and ingeb.org. Verse and refrain with the first ending, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The Neapolitan boat song (Teodoro Cottrau, 1849) as printed in The Everyday Song Book (1927, no. 144), in John Chambers' ABC transcription, checked note for note against his accordion-book transcription (Italy/SantaLucia.abc) and ingeb.org. Verse and refrain with the first ending, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: "https://trillian.mit.edu/~jc/music/book/EverydaySongBook/144_Santa_Lucia.abc",
       score: santaLucia,
     },
@@ -78,7 +78,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Skye Boat Song", kind: "title" }, { alias: "Over the Sea to Skye", kind: "nickname" }],
     primary: {
       kind: "authored",
-      basis: "The air (words by Sir Harold Boulton, 1884, to a Gaelic rowing tune) as transcribed on The Session, tune 3690 by dveith, and in John Chambers' ABC collection, checked against the Wikipedia score and ingeb.org. Twelve bars, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The air (words by Sir Harold Boulton, 1884, to a Gaelic rowing tune) as transcribed on The Session, tune 3690 by dveith, and in John Chambers' ABC collection, checked against the Wikipedia score and ingeb.org. Twelve bars, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: "https://thesession.org/tunes/3690#setting3690",
       score: skyeBoatSong,
     },
@@ -91,7 +91,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "By the Light of the Moon", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The French folk song as transcribed on ingeb.org (Lieder: Au clair de la lune), checked note for note against the Wikimedia Commons MIDI \"Ly au clair de la lune accords melodie paroles\" (in C). Sixteen bars, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The French folk song as transcribed on ingeb.org (Lieder: Au clair de la lune), checked note for note against the Wikimedia Commons MIDI \"Ly au clair de la lune accords melodie paroles\" (in C). Sixteen bars, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: "https://ingeb.org/songs/auclaird.html",
       score: auClairDeLaLune,
     },
@@ -104,7 +104,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Sur le pont d’Avignon", kind: "title" }, { alias: "On the Bridge of Avignon", kind: "translation" }],
     primary: {
       kind: "authored",
-      basis: "The French round as transcribed in John Chambers' ABC collection (moved from F), checked note for note against ingeb.org (Lieder: Sur le pont d'Avignon) and the Wikimedia Commons MIDI \"Sur le pont d'Avignon\". The first strain, the \"Les beaux messieurs\" strain and the first strain again, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The French round as transcribed in John Chambers' ABC collection (moved from F), checked note for note against ingeb.org (Lieder: Sur le pont d'Avignon) and the Wikimedia Commons MIDI \"Sur le pont d'Avignon\". The first strain, the \"Les beaux messieurs\" strain and the first strain again, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: `${CHAMBERS}song/Sur_le_Pont_DAvignon_F.abc`,
       score: surLePontDavignon,
     },
@@ -117,7 +117,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Clementine", kind: "nickname" }, { alias: "In a Cavern, in a Canyon", kind: "nickname" }],
     primary: {
       kind: "authored",
-      basis: "The American folk ballad (published 1884) as set in the MIDI \"O My Darling Clementine\" by Rabanus Flavus on Wikimedia Commons (CC0), checked note for note against the MIDI sequence \"Clementine\" by Rainer Lewalter. Two verses, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The American folk ballad (published 1884) as set in the MIDI \"O My Darling Clementine\" by Rabanus Flavus on Wikimedia Commons (CC0), checked note for note against the MIDI sequence \"Clementine\" by Rainer Lewalter. Two verses, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: "https://commons.wikimedia.org/wiki/File:O_My_Darling_Clementine.mid",
       score: ohMyDarlingClementine,
     },
@@ -130,7 +130,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Old Macdonald", kind: "nickname" }, { alias: "E-I-E-I-O", kind: "nickname" }],
     primary: {
       kind: "authored",
-      basis: "The children's song as set in the MIDI \"Old MacDonald Had a Farm\" by Nachtbold on Wikimedia Commons (CC0), checked note for note against the MIDI setting by Rabanus Flavus (CC0, in A). One verse, with a left hand of simple chords written for Keyboard Sensei. Harmony and bass are original to this project.",
+      basis: "The children's song as set in the MIDI \"Old MacDonald Had a Farm\" by Nachtbold on Wikimedia Commons (CC0), checked note for note against the MIDI setting by Rabanus Flavus (CC0, in A). One verse, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
       sourceUrl: "https://commons.wikimedia.org/wiki/File:Old_MacDonald_Had_a_Farm.mid",
       score: oldMacdonaldHadAFarm,
     },

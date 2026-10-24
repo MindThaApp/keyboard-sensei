@@ -1,4 +1,4 @@
-package com.keyboardsensei.app.midi
+package com.octaviapp.app.midi
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

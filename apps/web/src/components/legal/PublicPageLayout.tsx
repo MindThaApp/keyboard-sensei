@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import Wordmark from "../brand/Wordmark";
 
 /** Placeholder until the public domain is chosen; one place to change it. */
 export const CONTACT_EMAIL = "privacy@YOURDOMAIN";
@@ -33,8 +34,8 @@ export default function PublicPageLayout({ title, children, wide = false }: { ti
     <div className="min-h-screen">
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className={`mx-auto flex ${wide ? "max-w-4xl" : "max-w-3xl"} items-center px-4 py-3`}>
-          <Link to="/" className="font-display text-lg font-semibold tracking-tight">
-            Keyboard <span className="text-felt-600 dark:text-felt-400">Sensei</span>
+          <Link to="/" aria-label="OctaviApp home">
+            <Wordmark />
           </Link>
         </div>
       </header>

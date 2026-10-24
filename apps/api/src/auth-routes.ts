@@ -93,11 +93,11 @@ async function sendVerificationEmail(user: Pick<User, "id" | "email" | "display_
   const token = await issueToken(user.id, "email_verification", EMAIL_VERIFICATION_TTL_MS);
   void sendMailInBackground({
     to: user.email,
-    subject: "Confirm your Keyboard Sensei email",
+    subject: "Confirm your OctaviApp email",
     text: [
       `Hi ${user.display_name},`,
       "",
-      "Confirm your email address to finish setting up your Keyboard Sensei account:",
+      "Confirm your email address to finish setting up your OctaviApp account:",
       `${appUrl()}/verify-email?token=${token}`,
       "",
       "The link works once and expires in 48 hours. If you didn't sign up, you can ignore this email.",
@@ -177,11 +177,11 @@ authRouter.post("/auth/forgot-password", emailRequestRateLimit, async (req, res,
       const token = await issueToken(user.id, "password_reset", PASSWORD_RESET_TTL_MS);
       await sendMailInBackground({
         to: user.email,
-        subject: "Reset your Keyboard Sensei password",
+        subject: "Reset your OctaviApp password",
         text: [
           `Hi ${user.display_name},`,
           "",
-          "Someone (hopefully you) asked to reset the password for this Keyboard Sensei account. Choose a new one here:",
+          "Someone (hopefully you) asked to reset the password for this OctaviApp account. Choose a new one here:",
           `${appUrl()}/reset-password?token=${token}`,
           "",
           "The link works once and expires in 30 minutes. If you didn't ask for this, ignore this email: your password stays the same.",

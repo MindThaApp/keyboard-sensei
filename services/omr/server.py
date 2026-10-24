@@ -5,7 +5,7 @@
                       4xx/5xx -> {"error": {"code", "message"}}
     GET  /health      200 {"ok": true, "busy": bool}
 
-homr runs as a child process, one file at a time. Only the Keyboard Sensei API calls this,
+homr runs as a child process, one file at a time. Only the OctaviApp API calls this,
 over a Docker network with no route out; the API owns the job queue, the users and the
 storage. Nothing is kept between requests. Error messages are written for the person who
 uploaded the file: the API passes them on.
