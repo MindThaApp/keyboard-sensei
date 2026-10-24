@@ -1,12 +1,13 @@
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: keyboard_sensei
       POSTGRES_PASSWORD: keyboard_sensei
       POSTGRES_DB: keyboard_sensei
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - keyboard-sensei-postgres:/var/lib/postgresql/data
     healthcheck:
