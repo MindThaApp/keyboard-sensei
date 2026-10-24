@@ -128,7 +128,7 @@
 }
 .ks-keybed[data-key-lights="on"] .ks-key-white {
   background-image: linear-gradient(180deg, rgb(0 0 0 / 0.3) 0, rgb(0 0 0 / 0) 30%),
-    linear-gradient(180deg, #a6a4b2 0%, #c3c1cc 22%, #cdcbd6 86%, #b0aebb 100%);
+    linear-gradient(180deg, #8e8c9b 0%, #aeacb9 22%, #b8b6c3 86%, #9c9aa8 100%);
 }
 .ks-keybed[data-key-lights="on"] .ks-key {
   transition:
