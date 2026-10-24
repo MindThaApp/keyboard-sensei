@@ -98,15 +98,17 @@ export const songCollection = (song: { file_path: string; uploader_id: string | 
 /**
  * Who sees a song: the uploader and admins see uploads and archive imports (private to
  * the user who added them); everyone sees the shared catalogue; admins see everything.
+ * A retired song (retired_at set) is hidden from everyone but admins, matching the list
+ * (listableSongWhere); play history reads the song row directly, so titles there survive.
  * A song you can't see is indistinguishable from a missing one (404), so ids can't be probed.
  */
 export const canSeeSong = (
-  song: EligibilityFields,
+  song: EligibilityFields & { retired_at: Date | null },
   userId: string,
   admin: boolean,
-): boolean => admin || song.uploader_id === userId || isPubliclyEligible(song);
+): boolean => admin || (song.retired_at === null && (song.uploader_id === userId || isPubliclyEligible(song)));
 
-const songVisibleTo = async (song: EligibilityFields, userId: string): Promise<boolean> =>
+const songVisibleTo = async (song: EligibilityFields & { retired_at: Date | null }, userId: string): Promise<boolean> =>
   canSeeSong(song, userId, false) || (await isAdminUser(userId));
 
 export const songListItem = (song: {
@@ -349,7 +351,7 @@ songsRouter.post("/songs/:id/attempts", async (req, res, next) => {
     const input = attemptSchema.parse(req.body);
     const song = await prisma.song.findUnique({
       where: { id: songId },
-      select: { id: true, uploader_id: true, public_eligible: true, ...eligibilityInclude },
+      select: { id: true, uploader_id: true, public_eligible: true, retired_at: true, ...eligibilityInclude },
     });
     // Same visibility rule as GET /songs/:id/file: another user's private upload is
     // indistinguishable from a missing song, so its id can't be probed or polluted.
