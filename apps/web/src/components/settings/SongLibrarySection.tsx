@@ -71,7 +71,7 @@ function RecordingBadge() {
 
 const ARCHIVE_PAGE_SIZE = 30;
 
-function BrowseArchiveDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
+export function BrowseArchiveDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ArchiveEntryResult[] | null>(null);
   const [offset, setOffset] = useState(0);
@@ -206,7 +206,7 @@ function BrowseArchiveDialog({ onDone, onCancel }: { onDone: (song: Song) => voi
   );
 }
 
-function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
+export function ImportFromUrlDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<UrlPreview | null>(null);
   const [title, setTitle] = useState("");
@@ -358,7 +358,7 @@ function ScoreImportSummary({ song, report, onDone }: { song: Song; report: Scor
 
 const MIDI_NAME = /\.midi?$/i;
 
-function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
+export function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCancel: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
