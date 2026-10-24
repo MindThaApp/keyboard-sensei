@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { submitFeedback, submitFeedbackWithScreenshot, type FeedbackType } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { useExperienceMode } from "../../contexts/ExperienceContext";
 import { monitoring } from "../../monitoring";
 import { Button } from "../ui/Button";
 import { SegmentedControl } from "../ui/SegmentedControl";
@@ -15,6 +16,7 @@ const TYPES: { value: FeedbackType; label: string }[] = [
 ];
 
 const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface FeedbackWidgetProps {
   /** Controlled open state. Omit both open/onOpenChange to let the widget manage it. */
@@ -31,7 +33,8 @@ interface FeedbackWidgetProps {
  * explains that instead of failing.
  */
 export default function FeedbackWidget({ open: controlledOpen, onOpenChange, showLauncher = false }: FeedbackWidgetProps = {}) {
-  const { authenticated } = useAuth();
+  const { authenticated, user } = useAuth();
+  const experienceMode = useExperienceMode();
   const location = useLocation();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
@@ -43,6 +46,8 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
   const [message, setMessage] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [contactEmail, setContactEmail] = useState("");
+  const [includeAccountEmail, setIncludeAccountEmail] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +56,8 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
     setState("idle");
     setError(null);
     removeScreenshot();
+    setContactEmail("");
+    setIncludeAccountEmail(false);
   };
 
   const removeScreenshot = () => {
@@ -85,7 +92,16 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
         ? await submitFeedbackWithScreenshot(type, text, location.pathname, screenshot)
         : await submitFeedback(type, text, location.pathname);
       // Saved on our server; also hand it to the error monitor (a no-op when it is off).
-      void monitoring.reportFeedback({ message: text, category: type, feedbackId: id, page: location.pathname, screenshot });
+      // Fire and forget: the API result alone decides what the user sees.
+      try {
+        const typed = contactEmail.trim();
+        const email = EMAIL_SHAPE.test(typed) ? typed : includeAccountEmail ? user?.email : undefined;
+        void monitoring
+          .reportFeedback({ message: text, category: type, feedbackId: id, page: location.pathname, experienceMode, email, screenshot })
+          .catch(() => undefined);
+      } catch {
+        // Ignored on purpose; see above.
+      }
       setState("sent");
       setMessage("");
       removeScreenshot();
@@ -138,6 +154,26 @@ export default function FeedbackWidget({ open: controlledOpen, onOpenChange, sho
                     onChange={(e) => pickScreenshot(e.target.files?.[0])}
                     className="mt-1 block w-full text-xs"
                   />
+                </label>
+              )}
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                aria-label="Email for a reply (optional)"
+                placeholder="Email for a reply (optional)"
+                autoComplete="off"
+                className="ks-feedback__text"
+                style={{ minHeight: 0 }}
+              />
+              {user?.email && (
+                <label className="ks-feedback__note">
+                  <input
+                    type="checkbox"
+                    checked={includeAccountEmail}
+                    onChange={(e) => setIncludeAccountEmail(e.target.checked)}
+                  />{" "}
+                  Include my account email so you can reply
                 </label>
               )}
               {error && (

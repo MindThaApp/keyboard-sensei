@@ -1,5 +1,6 @@
 import { scrubBreadcrumb, scrubEvent } from "@keyboard-sensei/shared-types";
 import type { CrashConsent } from "./consent";
+import { downscaleScreenshot } from "./screenshot";
 
 /**
  * Sentry wiring for the web app and the Android app, written against a small slice of
@@ -25,7 +26,14 @@ export interface SentryLike {
   close(timeout?: number): Promise<boolean>;
   captureException(error: unknown, hint?: Record<string, unknown>): string;
   captureFeedback(
-    params: { message: string; source?: string; url?: string; associatedEventId?: string; tags?: Record<string, string> },
+    params: {
+      message: string;
+      email?: string;
+      source?: string;
+      url?: string;
+      associatedEventId?: string;
+      tags?: Record<string, string>;
+    },
     hint?: { attachments?: { filename: string; data: Uint8Array; contentType?: string }[] },
   ): string;
   lastEventId(): string | undefined;
@@ -44,6 +52,11 @@ export interface FeedbackReport {
   category: string;
   feedbackId: string;
   page: string;
+  /** "simple" or "advanced". */
+  experienceMode: string;
+  /** A contact address the user typed or explicitly chose to include. Never filled in automatically. */
+  email?: string;
+  /** Only set when the user attached a screenshot. */
   screenshot?: Blob | null;
 }
 
@@ -61,6 +74,18 @@ export interface Monitoring {
 }
 
 const extensionFor = (type: string): string => (type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg");
+
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object";
+
+function contactEmailOf(event: Record<string, unknown>): string | undefined {
+  const feedback = isRecord(event.contexts) ? event.contexts.feedback : undefined;
+  return isRecord(feedback) && typeof feedback.contact_email === "string" ? feedback.contact_email : undefined;
+}
+
+function restoreContactEmail(event: Record<string, unknown>, email: string): void {
+  const feedback = isRecord(event.contexts) ? event.contexts.feedback : undefined;
+  if (isRecord(feedback)) feedback.contact_email = email;
+}
 
 export function createMonitoring(config: MonitoringConfig, loader: SdkLoader, now: () => number = Date.now): Monitoring {
   let active: SentryLike | null = null;
@@ -100,7 +125,10 @@ export function createMonitoring(config: MonitoringConfig, loader: SdkLoader, no
     });
     // Feedback events skip beforeSend; this hook is where they are redacted (in place).
     sdk.getClient()?.on("beforeSendFeedback", (event) => {
+      // The contact address is the one email the user chose to send, so it survives redaction.
+      const contactEmail = contactEmailOf(event);
       const clean = scrubEvent(event);
+      if (contactEmail) restoreContactEmail(clean, contactEmail);
       for (const key of Object.keys(event)) delete event[key];
       Object.assign(event, clean);
     });
@@ -147,22 +175,31 @@ export function createMonitoring(config: MonitoringConfig, loader: SdkLoader, no
         const sdk = active;
         const recentError = lastErrorAt > 0 && now() - lastErrorAt < RECENT_ERROR_MS;
         const associatedEventId = recentError ? sdk.lastEventId() : undefined;
-        const attachments = report.screenshot
+        const screenshot = report.screenshot ? await downscaleScreenshot(report.screenshot) : null;
+        const attachments = screenshot
           ? [
               {
-                filename: `screenshot.${extensionFor(report.screenshot.type)}`,
-                data: new Uint8Array(await report.screenshot.arrayBuffer()),
-                contentType: report.screenshot.type || undefined,
+                filename: `screenshot.${extensionFor(screenshot.type)}`,
+                data: new Uint8Array(await screenshot.arrayBuffer()),
+                contentType: screenshot.type || undefined,
               },
             ]
           : undefined;
         sdk.captureFeedback(
           {
             message: report.message,
+            ...(report.email ? { email: report.email } : {}),
             source: "in-app form",
             url: report.page,
             associatedEventId,
-            tags: { category: report.category, feedback_id: report.feedbackId },
+            tags: {
+              feedback_kind: report.category,
+              feedback_id: report.feedbackId,
+              route: report.page,
+              experience_mode: report.experienceMode,
+              platform: config.native ? "android" : "web",
+              app_version: config.release,
+            },
           },
           attachments ? { attachments } : undefined,
         );

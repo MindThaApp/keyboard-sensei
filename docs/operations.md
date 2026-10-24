@@ -452,9 +452,20 @@ How it fits together:
   from the central error handler are reported; 4xx are not. Events are flushed on
   shutdown.
 - **Feedback.** The existing feedback form still saves to our database. After a
-  successful save it also sends one Sentry feedback event (message, category,
-  our feedback id as a tag, `associatedEventId` when an error happened in the last
-  5 minutes, the screenshot only if the user attached one).
+  successful save it also sends one Sentry feedback event through our own form
+  (Sentry's floating widget is not used). The event carries the message and tags
+  `feedback_kind`, `feedback_id` (our row id), `route`, `experience_mode`,
+  `platform` (`web` or `android`) and `app_version` (release, including the git
+  sha), plus `associatedEventId` when an error happened in the last 5 minutes.
+  A contact email is sent only when the user typed one or ticked "Include my
+  account email"; it is never added automatically and is the one address the
+  redactor lets through (emails in the message text are still redacted). The
+  screenshot is sent only if the user attached one, downscaled to at most 1280px
+  as a JPEG (quality 0.75). A Sentry failure never affects the save or what the
+  user sees. Find it in Sentry under **User Feedback** (or search
+  `issue.category:feedback`). Suggested, **not configured yet**: an alert rule
+  (Alerts, new alert, Issues, filter on `issue.category:feedback`, action: email)
+  so new feedback reaches an inbox.
 - **Source maps.** With `SENTRY_AUTH_TOKEN` set the web build is made with
   `sourcemap: "hidden"`, uploaded by `@sentry/vite-plugin` and then deleted from
   `dist`, so no map is ever served. Without the token no maps are produced and the
