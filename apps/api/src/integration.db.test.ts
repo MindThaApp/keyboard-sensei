@@ -1624,6 +1624,34 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(today.body.readyForYou.map((song: { songId: string }) => song.songId)).toEqual(["essentials-ode-to-joy-beginner"]);
       expect(today.body.song).toMatchObject({ songId: "essentials-ode-to-joy-beginner", hands: "right", level: "full" });
     });
+
+    it("never recommends or unlocks an Essentials song the song list hides (draft Work)", async () => {
+      const user = await createUser();
+      await m.prisma.work.create({ data: { id: "test-draft-ode", title: "Ode", genre: "classical", pd_status: "pd-worldwide", curation_status: "draft" } });
+      await makeSong("essentials-ode-to-joy-beginner", { title: "Ode to Joy (Beginner)", arrangement_group: "ode-to-joy", arrangement_level: "beginner" });
+      await m.prisma.song.update({ where: { id: "essentials-ode-to-joy-beginner" }, data: { work_id: "test-draft-ode" } });
+      try {
+        // Played once before it was hidden: history must not bring it back as a recommendation.
+        await playWith(user.id, "essentials-ode-to-joy-beginner", 50, {});
+        let unlocked: { id: string }[] = [];
+        for (const exerciseId of exerciseIdsOf("lesson-05")) {
+          const res = await api("POST", `/exercises/${exerciseId}/attempts`, { token: user.token, body: { performedNotes: perfectRun(exerciseId) } });
+          unlocked = unlocked.concat(res.body.rewards.unlockedSongs);
+        }
+        expect(unlocked).toEqual([]);
+        const today = await api("GET", "/users/me/today", { token: user.token });
+        expect(today.body.readyForYou).toEqual([]);
+        expect(today.body.song?.songId).not.toBe("essentials-ode-to-joy-beginner");
+        for (const path of ["/songs/stars/me", "/users/me/progression"]) {
+          expect((await api("GET", path, { token: user.token })).body.readyForYou, path).toEqual([]);
+        }
+        expect((await api("GET", "/songs/essentials-ode-to-joy-beginner/file", { token: user.token })).status).toBe(404);
+      } finally {
+        await m.prisma.playAlongAttempt.deleteMany({ where: { user_id: user.id } });
+        await m.prisma.song.update({ where: { id: "essentials-ode-to-joy-beginner" }, data: { work_id: null } });
+        await m.prisma.work.delete({ where: { id: "test-draft-ode" } });
+      }
+    });
   });
 
   describe("catalogue backfill", () => {

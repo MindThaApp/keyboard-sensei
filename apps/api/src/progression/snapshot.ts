@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { Lesson } from "@keyboard-sensei/shared-types";
 import { validateLesson } from "@keyboard-sensei/lesson-engine";
+import { sharedSongWhere } from "../catalogue/eligibility.js";
 import { songCollection, type SongCollection } from "../songs.js";
 import { dayKey } from "./days.js";
 import { lessonStars, playAlongExtras, playAlongStars, type PlayAlongExtras, type PracticeLevel } from "./stars.js";
@@ -157,7 +158,11 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
       db.practiceDay.findMany({ where: { user_id: userId }, orderBy: { day: "asc" } }),
       db.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }),
       db.userAchievement.findMany({ where: { user_id: userId } }),
-      db.song.findMany({ where: { id: { startsWith: "essentials-" }, retired_at: null, uploader_id: null }, select: SONG_SELECT }),
+      // Only what the song list would show this user, so nothing recommended 404s on open.
+      db.song.findMany({
+        where: { ...sharedSongWhere(), id: { startsWith: "essentials-" }, retired_at: null },
+        select: SONG_SELECT,
+      }),
       db.challengeAttempt.findMany({
         where: { user_id: userId, finished_at: { not: null } },
         orderBy: { finished_at: "asc" },
