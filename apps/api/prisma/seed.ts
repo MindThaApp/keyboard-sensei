@@ -157,7 +157,7 @@ async function main(){
   const password_hash=await bcrypt.hash("demo-password",12);
   const demo=await prisma.user.upsert({where:{email:"demo@keyboardsensei.local"},create:{email:"demo@keyboardsensei.local",display_name:"Demo User",password_hash},update:{display_name:"Demo User",password_hash}});
   const admin_hash=await bcrypt.hash(adminPassword??"admin-sensei-dev",12);
-  const admin=await prisma.user.upsert({where:{email:"admin@keyboardsensei.local"},create:{email:"admin@keyboardsensei.local",display_name:"OctaviApp Admin",password_hash:admin_hash,role:"admin"},update:{display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"}});
+  const admin=await prisma.user.upsert({where:{email:"admin@keyboardsensei.local"},create:{email:"admin@keyboardsensei.local",display_name:"Midivory Admin",password_hash:admin_hash,role:"admin"},update:{display_name:"Sensei Admin",password_hash:admin_hash,role:"admin"}});
   // The seeded accounts can't receive email (.local addresses), so they count as
   // verified; otherwise REQUIRE_EMAIL_VERIFICATION would lock them out.
   await prisma.user.updateMany({where:{id:{in:[demo.id,admin.id]},email_verified_at:null},data:{email_verified_at:new Date()}});

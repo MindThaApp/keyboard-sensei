@@ -74,7 +74,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "Les anges dans nos campagnes", kind: "translation" }, { alias: "Gloria in excelsis Deo", kind: "title" }],
     primary: {
       kind: "authored",
-      basis: "The tune in its French form (\"Les anges dans nos campagnes\", a noel of the Languedoc) read from a public-domain songbook page of the 19th century, with the pitches checked against an independent MIDI transcription and, for the Gloria, the melody of a LilyPond score. Melody only, with a left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The tune in its French form (\"Les anges dans nos campagnes\", a noel of the Languedoc) read from a public-domain songbook page of the 19th century, with the pitches checked against an independent MIDI transcription and, for the Gloria, the melody of a LilyPond score. Melody only, with a left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://commons.wikimedia.org/wiki/File:Les_Anges_dans_nos_campagnes_1.jpg",
       score: angelsWeHaveHeardOnHigh,
     },
@@ -86,7 +86,7 @@ const PIECES: PackPiece[] = [
     aliases: [{ alias: "The Queen of Sheba", kind: "title" }, { alias: "Solomon, Sinfonia", kind: "title" }, { alias: "HWV 67", kind: "catalogue" }],
     primary: {
       kind: "authored",
-      basis: "The theme of the Sinfonia from Solomon (1748) as set in Colin Hume's ABC tune collection (X:48) and in The Session (tune 15342, setting 28604), which agree pitch for pitch in all 32 bars. A left hand of simple chords written for OctaviApp. Harmony and bass are original to this project.",
+      basis: "The theme of the Sinfonia from Solomon (1748) as set in Colin Hume's ABC tune collection (X:48) and in The Session (tune 15342, setting 28604), which agree pitch for pitch in all 32 bars. A left hand of simple chords written for Midivory. Harmony and bass are original to this project.",
       sourceUrl: "https://colinhume.com/ABC.txt",
       score: arrivalOfTheQueenOfSheba,
     },

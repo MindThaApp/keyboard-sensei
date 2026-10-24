@@ -250,6 +250,9 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
             <h1>
               <Wordmark size="lg" />
             </h1>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Piano MIDI Player
+            </p>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               Learn piano one small step at a time, on a keyboard or on your screen.
             </p>

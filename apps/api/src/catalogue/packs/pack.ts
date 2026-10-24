@@ -198,7 +198,7 @@ export function songIdOf(piece: PackPiece): string {
 export function attributionFor(piece: PackPiece, copyrightYear: number | null): string {
   const { primary } = piece;
   if (isAuthoredPrimary(primary)) {
-    return `${piece.title} (${piece.composer}), arranged for OctaviApp. ${primary.basis} Public Domain.`;
+    return `${piece.title} (${piece.composer}), arranged for Midivory. ${primary.basis} Public Domain.`;
   }
   if (isPianoMidiDe(primary)) {
     const year = copyrightYear ? ` Copyright © ${copyrightYear} by ${PIANO_MIDI_DE_AUTHOR}.` : "";

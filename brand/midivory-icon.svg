@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="512" height="512">
-  <!-- OctaviApp "Ring": twelve keys in a circle (an octave), one lit red, a glass hub.
+  <!-- Midivory "Ring": twelve keys in a circle (an octave), one lit red, a glass hub.
        #background and #foreground are separate so the same file feeds the Android adaptive
        icon, the maskable PWA icon and the favicons. The mark stays inside the 66 unit safe zone
        when #foreground is scaled to 0.9. -->

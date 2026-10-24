@@ -1,6 +1,7 @@
 {
-  "name": "OctaviApp",
-  "short_name": "OctaviApp",
+  "name": "Midivory",
+  "short_name": "Midivory",
+  "description": "Midivory: Piano MIDI Player. Learn piano with short lessons and play-along songs, with your MIDI keyboard or the on-screen piano.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
