@@ -11,11 +11,21 @@ import { env } from "../config.js";
 export interface EligibilityFields {
   uploader_id: string | null;
   public_eligible: boolean;
+  /** The song's Work, if it has one; load it with `eligibilityInclude`. */
+  work: { curation_status: string } | null;
 }
 
-/** May this song be shown to everyone on this deployment? Uploads never are. */
+/** What a single-song query must load for isPubliclyEligible to see the Work's status. */
+export const eligibilityInclude = { work: { select: { curation_status: true } } } as const;
+
+/**
+ * May this song be shown to everyone on this deployment? Uploads never are. The
+ * per-song form of sharedSongWhere: keep the two in step.
+ */
 export const isPubliclyEligible = (song: EligibilityFields): boolean =>
-  !song.uploader_id && (!env.PUBLIC_CATALOGUE || song.public_eligible === true);
+  !song.uploader_id &&
+  (!env.PUBLIC_CATALOGUE || song.public_eligible === true) &&
+  !UNPUBLISHED_WORK_STATUSES.includes(song.work?.curation_status ?? "");
 
 /** The same rule as a query, for list endpoints. */
 export const sharedSongWhere = (): Prisma.SongWhereInput => ({
