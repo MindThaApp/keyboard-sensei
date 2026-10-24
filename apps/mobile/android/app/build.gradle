@@ -110,17 +110,17 @@ gradle.taskGraph.whenReady { graph ->
 }
 
 // The home build bundles the home server's CA certificate, which is not in git.
-// Its path comes from OCTAVIAPP_HOME_CA. Only the home build requires it; the
+// Its path comes from MIDIVORY_HOME_CA (OCTAVIAPP_HOME_CA still works as a fallback). Only the home build requires it; the
 // copy is gitignored (src/home/res/raw/home_ca.crt).
 def homeCaDest = file('src/home/res/raw/home_ca.crt')
 tasks.register('copyHomeCa') {
     outputs.file(homeCaDest)
     doLast {
-        def src = System.getenv("OCTAVIAPP_HOME_CA")
-        if (!src) throw new GradleException("OCTAVIAPP_HOME_CA is not set. The home build needs the home CA certificate (PEM): OCTAVIAPP_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt")
+        def src = System.getenv("MIDIVORY_HOME_CA") ?: System.getenv("OCTAVIAPP_HOME_CA")
+        if (!src) throw new GradleException("MIDIVORY_HOME_CA is not set. The home build needs the home CA certificate (PEM): MIDIVORY_HOME_CA=/path/to/keyboard-sensei-lan-ca.crt")
         def f = new File(src)
-        if (!f.isFile()) throw new GradleException("OCTAVIAPP_HOME_CA points to a missing file: ${src}")
-        if (!f.text.contains("BEGIN CERTIFICATE")) throw new GradleException("OCTAVIAPP_HOME_CA is not a PEM certificate: ${src}")
+        if (!f.isFile()) throw new GradleException("MIDIVORY_HOME_CA points to a missing file: ${src}")
+        if (!f.text.contains("BEGIN CERTIFICATE")) throw new GradleException("MIDIVORY_HOME_CA is not a PEM certificate: ${src}")
         homeCaDest.parentFile.mkdirs()
         homeCaDest.bytes = f.bytes
     }

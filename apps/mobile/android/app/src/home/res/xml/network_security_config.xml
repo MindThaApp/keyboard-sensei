@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Home build: HTTPS only, system CAs, plus the home server's internal CA, trusted
      for 192.168.4.4 and nothing else. res/raw/home_ca.crt is copied in at build time
-     from OCTAVIAPP_HOME_CA (gradle task copyHomeCa) and is not in git. -->
+     from MIDIVORY_HOME_CA (gradle task copyHomeCa) and is not in git. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
