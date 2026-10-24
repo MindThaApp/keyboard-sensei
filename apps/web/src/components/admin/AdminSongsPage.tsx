@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { adminUpdateSong, deleteSong, getSongs, type Song, type SongGenre } from "../../services/api";
 import AdminNav from "./AdminNav";
+import SongDownloadButtons from "../settings/SongDownloadButtons";
 
 const GENRES: SongGenre[] = ["classical", "pop", "film", "game", "jazz", "other"];
 
@@ -105,6 +106,7 @@ export default function AdminSongsPage() {
                   <p className="truncate text-sm font-medium">{song.title}</p>
                   <p className="truncate text-xs text-slate-500">{song.artist} · {song.genre} · d{song.difficulty} · {song.content_rights}</p>
                 </div>
+                <SongDownloadButtons song={song} />
                 <button className="secondary-button text-xs" onClick={() => setEditing(song.id)}>Edit</button>
                 <button
                   className="rounded px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/30"
