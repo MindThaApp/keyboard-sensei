@@ -3,7 +3,7 @@ import { Button, Card, Chip, ErrorState, SegmentedControl, Sheet } from "../ui";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useFocusMode } from "../../hooks/useFocusMode";
 import { useMediaQuery } from "../../utils/motion";
-import { registerAudioContext } from "../../utils/audioUnlock";
+import { getAudioContext } from "../../audio/audioEngine";
 import { playClick } from "../../utils/clickTimbres";
 import NotationRenderer from "../notation/NotationRenderer";
 import VirtualPiano from "../piano/VirtualPiano";
@@ -87,14 +87,11 @@ interface Feedback {
   correct: boolean;
 }
 
-/** One soft tick for a right answer. */
-let tickContext: AudioContext | null = null;
+/** One soft tick for a right answer, on the app's one shared AudioContext. */
 function softClick(): void {
   try {
-    tickContext ??= new AudioContext();
-    registerAudioContext(tickContext);
-    if (tickContext.state === "suspended") void tickContext.resume();
-    playClick(tickContext, tickContext.currentTime, false, 0.18, "wood");
+    const ctx = getAudioContext();
+    playClick(ctx, ctx.currentTime, false, 0.18, "wood");
   } catch {
     // No audio available; the green key is the feedback.
   }
