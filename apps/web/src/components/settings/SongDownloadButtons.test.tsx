@@ -45,3 +45,23 @@ describe("SongDownloadButtons", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("not downloaded");
   });
 });
+
+describe("SongDownloadButtons credit", () => {
+  const all = { midi: true, musicxml: false, mei: false };
+  it("shows the credit next to the buttons for a Creative Commons song", () => {
+    render(
+      <SongDownloadButtons
+        song={{ ...song(all), download_credit: { required: true, summary: "by Bach, licence cc-by-sa-4.0", text: "Prelude. Licence: cc-by-sa-4.0", licence: "cc-by-sa-4.0", licence_url: null } }}
+      />,
+    );
+    expect(screen.getByTestId("song-download-credit").textContent).toBe("by Bach, licence cc-by-sa-4.0");
+  });
+  it("shows Public domain, and nothing when there is no credit", () => {
+    const { rerender } = render(
+      <SongDownloadButtons song={{ ...song(all), download_credit: { required: false, summary: "Public domain", text: "Public domain", licence: "public-domain", licence_url: null } }} />,
+    );
+    expect(screen.getByTestId("song-download-credit").textContent).toBe("Public domain");
+    rerender(<SongDownloadButtons song={{ ...song(all), download_credit: null }} />);
+    expect(screen.queryByTestId("song-download-credit")).toBeNull();
+  });
+});

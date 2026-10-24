@@ -57,3 +57,49 @@ export const licenceUrl = (fileLicence: string | null): string | null => {
   const port = match[3] ? `${match[3]}/` : "";
   return `https://creativecommons.org/licenses/${match[1]}/${match[2]}/${port}`;
 };
+
+/** What a song's credit line is built from (the columns /credits reads). */
+export interface CreditSource {
+  title: string;
+  artist: string;
+  file_licence: string | null;
+  attribution: string | null;
+}
+
+export interface SongCredit {
+  /** True for Creative Commons licences: the credit must travel with the file. */
+  required: boolean;
+  /** Short form for the UI: "by Artist, licence cc-by-sa-4.0" or "Public domain". */
+  summary: string;
+  /** The full credit line: the stored attribution (or "Title by Artist") plus the licence and its URL. */
+  text: string;
+  /** The stored attribution exactly as /credits lists it. */
+  attribution: string | null;
+  licence: string;
+  licence_url: string | null;
+}
+
+/**
+ * The credit for a song: the single formatter behind GET /credits and the download endpoints,
+ * so the licence page, the download buttons and the Copyright notice inside a downloaded MIDI
+ * file always say the same thing. Null when the song has no recorded licence.
+ */
+export function songCredit(song: CreditSource): SongCredit | null {
+  const licence = song.file_licence;
+  if (!licence) return null;
+  const url = licenceUrl(licence);
+  if (!isCreditedLicence(licence)) {
+    return licence === "public-domain"
+      ? { required: false, summary: "Public domain", text: "Public domain", attribution: song.attribution, licence, licence_url: null }
+      : null;
+  }
+  const base = song.attribution?.trim() || `${song.title} by ${song.artist}.`;
+  return {
+    required: true,
+    summary: `by ${song.artist}, licence ${licence}`,
+    text: `${base} Licence: ${licence}${url ? `, ${url}` : ""}`,
+    attribution: song.attribution,
+    licence,
+    licence_url: url,
+  };
+}

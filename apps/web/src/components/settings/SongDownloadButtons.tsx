@@ -8,7 +8,7 @@ const FORMATS: SongExportFormat[] = ["midi", "musicxml", "mei"];
  * Download actions for a song. Shows only what the server said this viewer may download
  * (`song.downloads`); the download route re-checks, so a stale list can only produce an error.
  */
-export default function SongDownloadButtons({ song }: { song: Pick<Song, "id" | "title" | "downloads"> }) {
+export default function SongDownloadButtons({ song }: { song: Pick<Song, "id" | "title" | "downloads" | "download_credit"> }) {
   const [busy, setBusy] = useState<SongExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const allowed = FORMATS.filter((format) => song.downloads?.[format]);
@@ -26,8 +26,9 @@ export default function SongDownloadButtons({ song }: { song: Pick<Song, "id" | 
     }
   };
 
+  const credit = song.download_credit;
   return (
-    <span className="flex items-center gap-1" data-testid="song-downloads">
+    <span className="flex flex-wrap items-center gap-1" data-testid="song-downloads">
       {allowed.map((format) => (
         <button
           key={format}
@@ -39,6 +40,15 @@ export default function SongDownloadButtons({ song }: { song: Pick<Song, "id" | 
           {busy === format ? "Downloading…" : LABELS[format]}
         </button>
       ))}
+      {credit && (
+        <span
+          className="text-xs text-slate-500 dark:text-slate-400"
+          data-testid="song-download-credit"
+          title={credit.required ? `${credit.text} (embedded in the MIDI download)` : undefined}
+        >
+          {credit.summary}
+        </span>
+      )}
       {error && <span role="alert" className="text-xs text-rose-600 dark:text-rose-400">{error}</span>}
     </span>
   );

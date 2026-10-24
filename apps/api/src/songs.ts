@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import express, { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { eligibilityInclude, isPubliclyEligible, listableSongWhere, type EligibilityFields } from "./catalogue/eligibility.js";
+import { eligibilityInclude, isPubliclyEligible, listableSongWhere, songCredit, type EligibilityFields } from "./catalogue/eligibility.js";
 import { requireAdmin } from "./auth.js";
 import { slidingWindowLimit } from "./rate-limits.js";
 import { extractSongMetadata, InvalidMidiError, type SongMetadata } from "./midi-metadata.js";
@@ -15,7 +15,8 @@ import { rewardPlayAlongAttempt, type Rewards } from "./progression/rewards.js";
 import { classifyMidiQuality } from "./midi-quality.js";
 import { storedSignals } from "./catalogue/backfill.js";
 import { importScore, InvalidScoreError, type ImportedScore } from "./scores/import-score.js";
-import { availableDownloads, contentDispositionFor, exportFileFor, mayDownloadSong, EXPORT_FORMATS } from "./song-export.js";
+import { embedCopyright } from "./midi-credit.js";
+import { availableDownloads, contentDispositionFor, downloadCredit, exportFileFor, mayDownloadSong, EXPORT_FORMATS } from "./song-export.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -158,6 +159,8 @@ export const songListItem = (song: {
   quality_tier: song.tier_override ?? song.quality_tier,
   // What this viewer may download (GET /songs/:id/file?download=1&format=...); see song-export.ts.
   downloads: availableDownloads(song, userId, admin),
+  // The credit that travels with a CC download (same text as /credits); null when nothing to show.
+  download_credit: downloadCredit(song, userId, admin),
 });
 
 type NotationFormat = "mei" | "musicxml";
@@ -287,7 +290,12 @@ songsRouter.get("/songs/:id/file", async (req, res, next) => {
       target = found;
     }
     try {
-      const bytes = await readFile(target.file);
+      let bytes: Buffer = await readFile(target.file);
+      if (query?.format === "midi") {
+        // Attribution travels with the file: a Creative Commons song gets its credit as the MIDI's Copyright Notice.
+        const credit = songCredit(song);
+        if (credit?.required) bytes = embedCopyright(bytes, credit.text);
+      }
       res.type(target.contentType);
       if (query) {
         res.setHeader("Content-Disposition", contentDispositionFor(song.title, target.extension!));
