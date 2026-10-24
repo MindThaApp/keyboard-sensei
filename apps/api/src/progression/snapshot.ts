@@ -136,6 +136,25 @@ const SONG_SELECT = {
   retired_at: true,
 } as const;
 
+/** A play-along attempt read whole (to_jsonb), as loadSnapshot and loadSongPlayAlong read them. */
+const playAlongRow = ({ row }: { row: Record<string, unknown> }): PlayAlongRow => ({
+  id: String(row.id),
+  songId: String(row.song_id),
+  createdAt: asDate(row.created_at),
+  score: asNumber(row.score),
+  accuracy: asNumber(row.accuracy),
+  tempoPct: asNumber(row.tempo_pct),
+  extras: playAlongExtras(row),
+});
+
+/** One song's play-along attempts for a user, without loading the whole snapshot. */
+export async function loadSongPlayAlong(db: Pick<PrismaClient, "$queryRaw">, userId: string, songId: string): Promise<PlayAlongRow[]> {
+  const rows = await db.$queryRaw<{ row: Record<string, unknown> }[]>`
+    SELECT to_jsonb(p) AS row FROM "PlayAlongAttempt" p
+    WHERE p.user_id = ${userId} AND p.song_id = ${songId} ORDER BY p.created_at ASC`;
+  return rows.map(playAlongRow);
+}
+
 export async function loadSnapshot(db: Db, userId: string, now: Date = new Date()): Promise<Snapshot> {
   const user = await db.user.findUniqueOrThrow({
     where: { id: userId },
@@ -170,15 +189,7 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
       }),
     ]);
 
-  const playAlong: PlayAlongRow[] = playAlongRaw.map(({ row }) => ({
-    id: String(row.id),
-    songId: String(row.song_id),
-    createdAt: asDate(row.created_at),
-    score: asNumber(row.score),
-    accuracy: asNumber(row.accuracy),
-    tempoPct: asNumber(row.tempo_pct),
-    extras: playAlongExtras(row),
-  }));
+  const playAlong = playAlongRaw.map(playAlongRow);
 
   const playedSongIds = [...new Set(playAlong.map((attempt) => attempt.songId))];
   const playedSongs = playedSongIds.length
