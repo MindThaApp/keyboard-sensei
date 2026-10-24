@@ -1,5 +1,7 @@
 # Midivory
 
+Piano MIDI Player.
+
 Full-stack piano learning app. pnpm monorepo: `apps/web` (React/Vite/TypeScript/Tailwind/VexFlow/Zustand), `apps/api` (Express 5/Prisma/PostgreSQL/JWT/Zod), plus shared `packages/*` for domain types, MIDI capture/scoring, note naming, and lesson validation.
 
 ## What it does
