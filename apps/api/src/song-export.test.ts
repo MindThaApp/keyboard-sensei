@@ -3,6 +3,7 @@ import {
   asciiFilename,
   availableDownloads,
   contentDispositionFor,
+  downloadCredit,
   exportFileFor,
   isRedistributable,
   mayDownloadSong,
@@ -19,6 +20,8 @@ const base: ExportSong = {
   file_path: "/data/x.mid",
   notation_path: null,
   score_path: null,
+  artist: "Composer",
+  attribution: null,
 };
 const upload: ExportSong = { ...base, uploader_id: "owner", source_kind: "upload", file_licence: "unknown" };
 const scoreImport: ExportSong = { ...upload, notation_path: "/data/score-1.mei", score_path: "/data/score-1.mxl" };
@@ -152,5 +155,22 @@ describe("contentDispositionFor", () => {
   });
   it("uses the fallback name for an empty title", () => {
     expect(contentDispositionFor("", "mxl")).toBe(`attachment; filename="song.mxl"; filename*=UTF-8''song.mxl`);
+  });
+});
+
+describe("downloadCredit", () => {
+  const cc: ExportSong = { ...libraryFree, artist: "Bach", attribution: "Prelude (Bach), typeset by Ann." };
+  it("builds the credit from the catalogue for CC songs", () => {
+    const credit = downloadCredit(cc, "u", false)!;
+    expect(credit).toMatchObject({ required: true, summary: "by Bach, licence cc-by-sa-2.5", licence: "cc-by-sa-2.5" });
+    expect(credit.text).toBe("Prelude (Bach), typeset by Ann. Licence: cc-by-sa-2.5, https://creativecommons.org/licenses/by-sa/2.5/");
+  });
+  it("falls back to title and artist without a stored attribution", () => {
+    expect(downloadCredit({ ...cc, attribution: null }, "u", false)!.text).toMatch(/^Song by Bach\. Licence: cc-by-sa-2\.5/);
+  });
+  it("says Public domain without requiring a credit, and nothing for unlicensed or undownloadable songs", () => {
+    expect(downloadCredit({ ...libraryFree, file_licence: "public-domain" }, "u", false)).toMatchObject({ required: false, summary: "Public domain" });
+    expect(downloadCredit({ ...upload }, "owner", false)).toBeNull();
+    expect(downloadCredit({ ...cc, public_eligible: false }, "u", false)).toBeNull();
   });
 });

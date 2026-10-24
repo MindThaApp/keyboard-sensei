@@ -1,5 +1,6 @@
 import path from "node:path";
 import { licenceFamily } from "./catalogue/backfill.js";
+import { songCredit, type SongCredit } from "./catalogue/eligibility.js";
 
 /**
  * Song export (GET /songs/:id/file?download=1&format=midi|musicxml|mei).
@@ -26,6 +27,8 @@ export interface ExportSong {
   file_path: string;
   notation_path: string | null;
   score_path: string | null;
+  artist: string;
+  attribution: string | null;
 }
 
 const REDISTRIBUTABLE_FAMILIES = new Set(["public-domain", "cc-by", "cc-by-sa"]);
@@ -122,3 +125,11 @@ export function contentDispositionFor(title: string, extension: string): string 
   const name = sanitiseFilename(title);
   return `attachment; filename="${asciiFilename(name)}.${extension}"; filename*=UTF-8''${encodeRfc5987(`${name}.${extension}`)}`;
 }
+
+/**
+ * The credit to show next to the download buttons (same formatter as /credits), or null when the
+ * viewer cannot download anything or the song carries no licence to name. Uploads of your own
+ * carry no credit unless the catalogue recorded a licence.
+ */
+export const downloadCredit = (song: ExportSong, userId: string, admin: boolean): SongCredit | null =>
+  mayDownloadSong(song, userId, admin) ? songCredit(song) : null;

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
-import { isCreditedLicence, licenceUrl, sharedSongWhere } from "./eligibility.js";
+import { isCreditedLicence, songCredit, sharedSongWhere } from "./eligibility.js";
 
 /** Public credits: no sign-in needed, so the licence page and store listing can link to it. */
 export const creditsRouter: Router = Router();
@@ -35,8 +35,9 @@ creditsRouter.get("/credits", async (_req, res, next) => {
           artist: row.artist,
           level: row.arrangement_level,
           licence: row.file_licence,
-          licence_url: licenceUrl(row.file_licence),
+          licence_url: songCredit(row)?.licence_url ?? null,
           attribution: row.attribution,
+          credit: songCredit(row)?.text ?? null,
           source_url: row.source_url,
         })),
     });
