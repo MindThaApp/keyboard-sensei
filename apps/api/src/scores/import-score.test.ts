@@ -194,7 +194,7 @@ describe("importScore", () => {
   });
 
   it("refuses what isn't a score", async () => {
-    await expect(importScore(new TextEncoder().encode("<html><body>hi</body></html>"))).rejects.toThrow("This isn't a MusicXML or MEI score");
+    await expect(importScore(new TextEncoder().encode("<html><body>hi</body></html>"))).rejects.toThrow("This isn't a MusicXML, MEI, ABC or **kern score");
     await expect(importScore(new TextEncoder().encode("<score-partwise><part-list></score-partwise>"))).rejects.toThrow(/well-formed/);
     await expect(importScore(new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6]))).rejects.toThrow();
   });

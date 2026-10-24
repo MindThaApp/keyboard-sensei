@@ -4,6 +4,11 @@ declare module "verovio/wasm" {
   export default createVerovioModule;
 }
 
+declare module "verovio/wasm-hum" {
+  const createVerovioModule: () => Promise<unknown>;
+  export default createVerovioModule;
+}
+
 declare module "verovio/esm" {
   export interface TimemapEntry {
     /** Milliseconds from the start, tempo applied. */
