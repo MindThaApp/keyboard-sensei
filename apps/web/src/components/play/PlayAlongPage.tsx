@@ -47,7 +47,7 @@ import {
   simpleOpening,
   type LadderState,
 } from "./practiceSession";
-import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, type Settings } from "./practiceSettings";
+import { defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, type Settings } from "./practiceSettings";
 import "./practice.css";
 
 /** A loop starts out this long when switched on with no preset. */
@@ -152,7 +152,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   // starts a beginner gently and one rung up after a pass, and Advanced mode keeps the
   // settings carried over from the last song.
   const [initial] = useState(() => {
-    const saved = loadSettings(experience);
+    const saved = loadSettings(device);
     const opened = preset.level ?? sources.openedLevel;
     // Just the tune has no left hand: a left-hand preset gets the easiest level that has one.
     const level: PracticeLevel = opened === "melody" && preset.hands === "left" ? "easy" : opened;
@@ -563,7 +563,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   };
 
   const resetSettings = () => {
-    const defaults = experience === "simple" ? defaultSettingsFor("simple") : DEFAULT_SETTINGS;
+    const defaults = defaultSettingsFor(device);
     setSettings((s) => ({ ...defaults, notesStyle: s.notesStyle }));
     rememberWaitChoice(defaults.waitMode);
     setLoopOn(false);
