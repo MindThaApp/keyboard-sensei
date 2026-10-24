@@ -15,6 +15,7 @@ import { rewardPlayAlongAttempt, type Rewards } from "./progression/rewards.js";
 import { classifyMidiQuality } from "./midi-quality.js";
 import { storedSignals } from "./catalogue/backfill.js";
 import { importScore, InvalidScoreError, type ImportedScore } from "./scores/import-score.js";
+import { availableDownloads, contentDispositionFor, exportFileFor, mayDownloadSong, EXPORT_FORMATS } from "./song-export.js";
 
 export { extractSongMetadata, InvalidMidiError, type SongMetadata };
 
@@ -125,7 +126,12 @@ export const songListItem = (song: {
   work_id: string | null;
   quality_tier: string;
   tier_override: string | null;
-}, userId: string) => ({
+  // For `downloads`; every full Song row has them.
+  score_path: string | null;
+  public_eligible: boolean;
+  file_licence: string | null;
+  source_kind: string | null;
+}, userId: string, admin = false) => ({
   id: song.id,
   title: song.title,
   artist: song.artist,
@@ -150,6 +156,8 @@ export const songListItem = (song: {
   // best tier first. An admin's override wins over the measured tier.
   work_id: song.work_id,
   quality_tier: song.tier_override ?? song.quality_tier,
+  // What this viewer may download (GET /songs/:id/file?download=1&format=...); see song-export.ts.
+  downloads: availableDownloads(song, userId, admin),
 });
 
 type NotationFormat = "mei" | "musicxml";
@@ -189,7 +197,7 @@ songsRouter.get("/songs", async (req, res, next) => {
     });
     // canSeeSong repeats the query's rule as the guard used by the single-song routes.
     const visible = rows.filter((row) => canSeeSong(row, userId, admin));
-    res.json({ songs: visible.map((row) => songListItem(row, userId)) });
+    res.json({ songs: visible.map((row) => songListItem(row, userId, admin)) });
   } catch (e) {
     next(e);
   }
@@ -248,17 +256,45 @@ songsRouter.get("/songs/attempts/me", async (req, res, next) => {
   }
 });
 
+const exportQuerySchema = z.object({
+  download: z.literal("1"),
+  format: z.enum(EXPORT_FORMATS as [string, ...string[]]).default("midi"),
+});
+
 songsRouter.get("/songs/:id/file", async (req, res, next) => {
   try {
     const userId = uid(req);
     const song = await prisma.song.findUnique({ where: { id: z.string().parse(req.params.id) }, include: eligibilityInclude });
-    if (!song || !(await songVisibleTo(song, userId))) {
+    const admin = song ? await isAdminUser(userId) : false;
+    if (!song || !canSeeSong(song, userId, admin)) {
       res.status(404).json({ error: { code: "not_found", message: "Song not found" } });
       return;
     }
+    // ?download=1[&format=midi|musicxml|mei]: an attachment instead of the in-app player's MIDI.
+    const exporting = req.query.download !== undefined;
+    const query = exporting ? exportQuerySchema.parse(req.query) : null;
+    let target = { file: song.file_path, contentType: "audio/midi" } as { file: string; contentType: string; extension?: string };
+    if (query) {
+      if (!mayDownloadSong(song, userId, admin)) {
+        res.status(403).json({ error: { code: "download_not_allowed", message: "This song can be played here but not downloaded" } });
+        return;
+      }
+      const found = exportFileFor(song, query.format as (typeof EXPORT_FORMATS)[number]);
+      if (!found) {
+        res.status(404).json({ error: { code: "format_unavailable", message: `This song has no ${query.format} file` } });
+        return;
+      }
+      target = found;
+    }
     try {
-      const bytes = await readFile(song.file_path);
-      res.type("audio/midi").send(bytes);
+      const bytes = await readFile(target.file);
+      res.type(target.contentType);
+      if (query) {
+        res.setHeader("Content-Disposition", contentDispositionFor(song.title, target.extension!));
+        res.setHeader("Cache-Control", "private, no-store");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      }
+      res.send(bytes);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         res.status(404).json({ error: { code: "not_found", message: "Song file not found on disk" } });
@@ -557,7 +593,7 @@ songsRouter.patch("/admin/songs/:id", requireAdmin, async (req, res, next) => {
   try {
     const input = adminSongPatchSchema.parse(req.body);
     const song = await prisma.song.update({ where: { id: z.string().parse(req.params.id) }, data: input });
-    res.json(songListItem(song, uid(req)));
+    res.json(songListItem(song, uid(req), true));
   } catch (e) {
     next(e);
   }
