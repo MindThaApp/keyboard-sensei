@@ -125,7 +125,7 @@ export function WorkRow({ work, stars, bests }: { work: WorkSummary } & Progress
 
   return (
     <li className="ks-row" data-testid="work-row">
-      <Link to={`/play/${version.id}`} className="ks-row__main items-start" aria-label={`${work.title}${subtitle ? `, ${subtitle}` : ""}`}>
+      <Link to={`/play/${version.id}`} className="ks-row__main items-start">
         <span className="ks-row__text">
           <span className="ks-row__title font-medium">{work.title}</span>
           <span className="ks-row__subtitle truncate">
