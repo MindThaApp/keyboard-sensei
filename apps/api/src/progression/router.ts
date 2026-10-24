@@ -29,7 +29,7 @@ progressionRouter.get("/users/me/summary", async (req, res, next) => {
 progressionRouter.get("/users/me/today", async (req, res, next) => {
   try {
     const snapshot = await loadSnapshot(prisma, uid(req));
-    const ready = readyForYou(snapshot, snapshot.songs);
+    const ready = readyForYou(snapshot);
     const review = pickReview(snapshot.exerciseAttempts, liveExerciseIds(snapshot.lessons), snapshot.timezone, snapshot.today);
 
     let reviewView = null;
@@ -96,7 +96,7 @@ progressionRouter.get("/users/me/progression", async (req, res, next) => {
       lessonStars: Object.fromEntries(lessonStars),
       songStars: Object.fromEntries(songStars),
       songTitles,
-      readyForYou: readyForYou(snapshot, snapshot.songs),
+      readyForYou: readyForYou(snapshot),
       practiceMinutes: Math.round(stats.practiceMinutes),
       calendar: snapshot.practiceDays
         .filter((day) => day.day >= firstCalendarDay)
@@ -116,7 +116,7 @@ progressionRouter.get("/songs/stars/me", async (req, res, next) => {
     res.json({
       stars: Object.fromEntries(songStarsById(snapshot.playAlong)),
       // Songs the course has unlocked so far, for the library's "Ready for you" shelf.
-      readyForYou: readyForYou(snapshot, snapshot.songs),
+      readyForYou: readyForYou(snapshot),
     });
   } catch (e) {
     next(e);

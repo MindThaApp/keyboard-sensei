@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { CATEGORY_LABEL, achievementStats, newlyEarned, type AchievementCategory } from "./achievements.js";
+import { sharedSongWhere } from "../catalogue/eligibility.js";
 import { CURRICULUM_SONGS, curriculumSongId } from "./curriculum-songs.js";
 import { dayKey } from "./days.js";
 import { levelInfo, type LevelInfo } from "./levels.js";
@@ -180,7 +181,7 @@ async function songsUnlockedBy(db: Db, completedLessonIds: string[], snapshot: S
   const links = CURRICULUM_SONGS.filter((link) => completedLessonIds.includes(link.lessonId));
   if (links.length === 0) return [];
   const songs = await db.song.findMany({
-    where: { id: { in: links.map((link) => curriculumSongId(link.slug)) }, retired_at: null },
+    where: { ...sharedSongWhere(), id: { in: links.map((link) => curriculumSongId(link.slug)) }, retired_at: null },
     select: { id: true, title: true },
   });
   return links.flatMap((link) => {
