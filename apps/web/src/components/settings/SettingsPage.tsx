@@ -499,6 +499,7 @@ export default function SettingsPage() {
         onChange={selectTab}
         block
       />
+      <h2 className="sr-only">{SETTINGS_TABS.find((tab) => tab.value === activeTab)?.label}</h2>
       {activeTab === "general" && <GeneralSection />}
       {activeTab === "account" && <AccountSection />}
       {activeTab === "appearance" && <AppearanceSection />}
