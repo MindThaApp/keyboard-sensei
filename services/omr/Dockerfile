@@ -30,6 +30,7 @@ ENV PATH=/opt/homr/bin:$PATH \
     OMP_NUM_THREADS=2
 WORKDIR /srv
 COPY server.py test_server.py ./
+COPY ortpatch ./ortpatch
 USER omr
 EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=5s CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"]

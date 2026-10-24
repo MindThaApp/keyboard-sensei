@@ -241,7 +241,16 @@ printed music into a private song. Off unless `OMR_SERVICE_URL` is set.
   uploader, for an hour; nothing is written until the user reviews the engraving and saves it
   (`content_rights = "user-score-scan"`, private like any upload). A restart drops queued and
   unsaved jobs.
-- **Cost:** about 13 s a page and 1.7 GB peak on 2 cores (measured on 2 vCPU).
+- **Cost:** 1.7 to 1.9 GB peak. Per page with the 2-CPU limit: about 18.5 s on the arm64 Mac VM (2 vCPU), about
+  11.5 s on an amd64 Ryzen 9 9900X (2 and 4 CPUs measured alike, 2-page Bach prelude), and an **estimate** of
+  25 to 40 s on the server's Intel N150 (no measurement; the N150's single-thread speed is roughly a third to
+  half of a 9900X's in public benchmarks). The 240 s limit therefore holds for 6 pages with margin on the
+  Ryzen and probably on the N150, but measure there before enabling.
+- **Threads:** homr creates its ONNX Runtime sessions with default options, so they size their pools to the
+  host's cores; under a container CPU quota that was 8 times slower (157 s vs 22 s for the 2-page prelude on
+  amd64). `services/omr/ortpatch/sitecustomize.py` (loaded only in the homr process, homr stays unmodified)
+  sets intra-op threads to the cgroup CPU limit, one inter-op thread and no spinning. Overrides:
+  `OMR_ORT_THREADS`, `OMR_ORT_SPIN=1`, `OMR_ORT_PATCH=0` (off). Disabling spinning made no measurable difference.
 - **Turn on:** `docker compose --env-file .env.deploy -f docker-compose.deploy.yml --profile omr up -d --build`
   with `OMR_SERVICE_URL=http://omr:8090` in `.env.deploy`. Locally:
   `docker compose --profile omr up -d omr` and `OMR_SERVICE_URL=http://localhost:8090` in `apps/api/.env`.
