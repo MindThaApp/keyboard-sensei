@@ -28,6 +28,7 @@ MAX_IMAGE_PIXELS = 50_000_000
 MIN_IMAGE_SIDE = 800
 
 HOMR_BIN = os.environ.get("HOMR_BIN", "homr")
+ORT_PATCH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ortpatch")
 PORT = int(os.environ.get("PORT", "8090"))
 # homr needs 10-20 s a page on two cores; six pages with headroom.
 TIMEOUT_S = int(os.environ.get("OMR_TIMEOUT_S", "240"))
@@ -85,6 +86,13 @@ def pdf_page_count(path):
         pdf.close()
 
 
+def homr_env():
+    """homr's environment: our sitecustomize (ortpatch/) sizes its ONNX Runtime thread pools."""
+    env = dict(os.environ, OMR_ORT_PATCH=os.environ.get("OMR_ORT_PATCH", "1"))
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [ORT_PATCH_DIR, env.get("PYTHONPATH")]))
+    return env
+
+
 def run_homr(input_path, timeout_s):
     """Runs homr in its own process group, killing the whole group at the deadline."""
     process = subprocess.Popen(
@@ -93,6 +101,7 @@ def run_homr(input_path, timeout_s):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        env=homr_env(),
     )
     try:
         output, _ = process.communicate(timeout=timeout_s)
