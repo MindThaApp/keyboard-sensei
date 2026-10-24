@@ -147,6 +147,9 @@ export class FxRenderer implements WaterfallRenderer {
   private lastBurstMs = -Infinity;
   private vsyncMs = 1000 / 60;
   private visibleNotes = 0;
+  private lastFrame: WaterfallFrame | null = null;
+  private repaintQueued = false;
+  private readonly compositeOptions = { intensity: 0, floorUv: 0.05, reflection: 0 };
   private cpuMs = 0;
 
   mount(hostCanvas: HTMLCanvasElement): void {
@@ -208,6 +211,7 @@ export class FxRenderer implements WaterfallRenderer {
     this.emissiveScene.add(this.notes.emissiveMesh, this.line.emissiveMesh, this.keys.emissiveMesh, this.sparks.emissiveMesh, this.marks.emissiveMesh);
     this.unsubscribe = subscribeFx(() => {
       this.lookDirty = true;
+      this.repaintIfIdle();
     });
     this.readDebugFlag();
     this.applyTier(this.tier);
@@ -235,6 +239,7 @@ export class FxRenderer implements WaterfallRenderer {
     }
     const renderer = this.renderer;
     if (!renderer || this.contextLost || this.disposed || this.cssWidth <= 0 || this.cssHeight <= 0) return;
+    this.lastFrame = frame;
     const startMs = performance.now();
     const nowMs = frame.nowMs ?? startMs;
     const interval = this.lastDrawMs > 0 ? startMs - this.lastDrawMs : 0;
@@ -270,7 +275,10 @@ export class FxRenderer implements WaterfallRenderer {
       renderer.setRenderTarget(null);
     }
     renderer.render(this.scene, this.camera);
-    if (bloom?.enabled) bloom.composite(renderer, { intensity: this.bloomIntensity, floorUv: 0.05, reflection: 0 });
+    if (bloom?.enabled) {
+      this.compositeOptions.intensity = this.bloomIntensity;
+      bloom.composite(renderer, this.compositeOptions);
+    }
 
     this.measure(startMs, interval, playing);
   }
@@ -319,6 +327,7 @@ export class FxRenderer implements WaterfallRenderer {
       this.fallback.reset();
       return;
     }
+    this.lastFrame = null;
     this.hitAtMs.fill(-Infinity);
     this.sparks?.clear();
     this.smoke?.clear();
@@ -336,6 +345,7 @@ export class FxRenderer implements WaterfallRenderer {
   }
 
   private releaseWebGL(): void {
+    this.lastFrame = null;
     this.hostWatcher?.disconnect();
     this.hostWatcher = null;
     this.unsubscribe?.();
@@ -404,6 +414,17 @@ export class FxRenderer implements WaterfallRenderer {
     if (!gl) return "";
     const info = gl.getExtension("WEBGL_debug_renderer_info");
     return String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  }
+
+  /** A look changed while no frames are coming (paused, or sheet open): show it on the last frame. */
+  private repaintIfIdle(): void {
+    if (this.repaintQueued || !this.lastFrame || performance.now() - this.lastDrawMs < 100) return;
+    this.repaintQueued = true;
+    requestAnimationFrame(() => {
+      this.repaintQueued = false;
+      const frame = this.lastFrame;
+      if (frame && !this.disposed && !this.fallback) this.draw(frame);
+    });
   }
 
   private readDebugFlag(): void {
