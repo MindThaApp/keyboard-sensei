@@ -73,6 +73,8 @@ export interface VirtualPianoProps {
 const ALL_LABELS_MIN_KEY_PX = 28;
 /** Below this a label would not fit on the key at all. */
 const LABEL_MIN_KEY_PX = 20;
+/** How long a key sounds when a screen reader activates it. */
+const ACTIVATE_NOTE_MS = 400;
 
 type KeyTint = "right" | "left" | "ok" | "bad" | "none";
 
@@ -91,16 +93,25 @@ interface KeyProps {
   onDown: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
   onEnter: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
   onLeave: (note: number, e: ReactPointerEvent<HTMLButtonElement>) => void;
+  /** A click with no pointer behind it: a screen reader's activate action. */
+  onActivate: (note: number) => void;
 }
 
 /** One key. Memoised on primitives so a press re-renders only the keys that changed. */
 const PianoKey = memo(function PianoKey({
-  note, black, x, width, height, down, tint, expected, label, middleC, glyph, onDown, onEnter, onLeave,
+  note, black, x, width, height, down, tint, expected, label, middleC, glyph, onDown, onEnter, onLeave, onActivate,
 }: KeyProps) {
   const name = midiNoteToName(note);
   return (
+    // Out of the tab order: 88 tab stops would bury the controls after the keyboard,
+    // and the computer keyboard already plays notes. Screen readers still reach each
+    // key by name and can play it.
     <button
       type="button"
+      tabIndex={-1}
+      onClick={(e) => {
+        if (e.detail === 0) onActivate(note);
+      }}
       aria-label={name}
       aria-pressed={down}
       data-down={down}
@@ -356,6 +367,12 @@ function VirtualPiano({
     press(note);
   }
 
+  function handleActivate(note: number) {
+    if (disabled) return;
+    press(note);
+    window.setTimeout(() => release(note), ACTIVATE_NOTE_MS);
+  }
+
   function handlePointerLeave(note: number, e: ReactPointerEvent<HTMLButtonElement>) {
     const active = activePointersRef.current;
     if (active.get(e.pointerId) !== note) return;
@@ -464,6 +481,7 @@ function VirtualPiano({
         onDown={handlePointerDown}
         onEnter={handlePointerEnter}
         onLeave={handlePointerLeave}
+        onActivate={handleActivate}
       />
     );
   }
