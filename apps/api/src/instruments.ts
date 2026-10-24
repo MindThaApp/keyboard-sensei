@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express, { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
+import { slidingWindowLimit } from "./rate-limits.js";
 import { fetchUrlSafely, SsrfBlockedError } from "./ssrf-safe-fetch.js";
 
 export const INSTRUMENT_LIBRARY_DIR = path.resolve(
@@ -30,16 +31,9 @@ const importSchema = instrumentQuerySchema.extend({ url: z.string().trim().url()
 
 const FETCH_RATE_LIMIT = 10;
 const FETCH_RATE_WINDOW_MS = 60 * 60 * 1000;
-const recentFetchByUser = new Map<string, number[]>();
+const recentFetchByUser = slidingWindowLimit(FETCH_RATE_LIMIT, FETCH_RATE_WINDOW_MS);
 
-export const isInstrumentFetchRateLimited = (userId: string): boolean => {
-  const now = Date.now();
-  const timestamps = (recentFetchByUser.get(userId) ?? []).filter((t) => now - t < FETCH_RATE_WINDOW_MS);
-  if (timestamps.length >= FETCH_RATE_LIMIT) return true;
-  timestamps.push(now);
-  recentFetchByUser.set(userId, timestamps);
-  return false;
-};
+export const isInstrumentFetchRateLimited = (userId: string): boolean => !recentFetchByUser.allow(userId);
 
 type PackLayout =
   | { type: "single"; file: string; contentType: string }
