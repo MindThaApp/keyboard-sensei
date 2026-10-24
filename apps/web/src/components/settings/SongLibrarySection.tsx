@@ -399,12 +399,12 @@ function UploadDialog({ onDone, onCancel }: { onDone: (song: Song) => void; onCa
     <section aria-label="Upload song file" className="card space-y-3 p-4">
       <h2 className="text-sm font-semibold">Upload your own song file</h2>
       <p className="text-xs text-slate-500">
-        MIDI (.mid), MusicXML (.musicxml, .xml, .mxl) or MEI (.mei). A score is engraved as sheet music and played with its repeats.
+        MIDI (.mid), MusicXML (.musicxml, .xml, .mxl), MEI (.mei), ABC (.abc) or Humdrum **kern (.krn). A score is engraved as sheet music and played with its repeats. An ABC or kern file holds one tune or movement, and ABC must be a single voice.
       </p>
       <input
         type="file"
         aria-label="MIDI or score file"
-        accept=".mid,.midi,audio/midi,.musicxml,.xml,.mxl,.mei,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml"
+        accept=".mid,.midi,audio/midi,.musicxml,.xml,.mxl,.mei,.abc,.krn,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml"
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
         className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-felt-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-felt-700 dark:text-slate-300 dark:file:bg-felt-900/40 dark:file:text-felt-300"
       />
