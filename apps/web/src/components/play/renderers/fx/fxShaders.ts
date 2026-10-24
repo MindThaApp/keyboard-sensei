@@ -198,11 +198,16 @@ void main() {
   float slow = texture2D(uNoise, vec2(vP.x / 90.0, uTimeF * 0.6)).r;
   float fast = texture2D(uNoise, vec2(uTimeF * 2.6, 0.3)).g;
   float flick = 1.0 + uFlick * ((fast - 0.5) * 1.0 + (slow - 0.5) * 0.9);
-  float core = exp(-y / 1.5) * 0.85 + exp(-y / 7.0) * 0.22;
-  float h = uFlame * 0.4 * (0.35 + slow * 0.9);
+  // A thin bright line with a wavering haze of the look's colour above it.
+  float wave = (texture2D(uNoise, vec2(vP.x / 60.0, uTimeF * 0.35)).g - 0.5) * 3.0;
+  float yl = max(y - wave * 0.5, 0.0);
+  float core = exp(-yl / 1.3) * 0.9 + exp(-yl / 6.0) * 0.25;
+  float haze = exp(-y / (14.0 + 10.0 * slow)) * 0.16;
+  // Never 0: smoothstep with equal edges is undefined (stripes on some GPUs).
+  float h = max(uFlame * 0.4 * (0.35 + slow * 0.9), 0.01);
   float tongue = smoothstep(h, 0.0, y) * texture2D(uNoise, vec2(vP.x / 8.0, -y / 26.0 + uTimeF * 1.1)).b;
   vec3 hot = mix(uAccent, vec3(1.0), 0.55);
-  vec3 rgb = (hot * core + mix(uAccent, hot, 0.3) * tongue * 0.75) * uBright * flick;
+  vec3 rgb = (hot * core + uAccent * haze + mix(uAccent, hot, 0.3) * tongue * 0.75) * uBright * flick;
   if (uEmissive > 0.5) rgb *= 0.8;
   gl_FragColor = vec4(rgb, 0.0);
 }
@@ -218,8 +223,8 @@ varying vec2 vP;
 varying vec4 vKey;
 varying vec4 vColor;
 void main() {
-  float halfW = max(aKey.y * 1.9, 26.0);
-  float height = uFlame * 1.7 + 46.0;
+  float halfW = max(aKey.y * 4.5, 70.0);
+  float height = uFlame * 2.6 + 90.0;
   vP = vec2(position.x * 2.0 * halfW, (position.y + 0.5) * height);
   vKey = aKey;
   vColor = aColor;
@@ -249,19 +254,28 @@ void main() {
   float pulse = env * (0.6 + 0.4 * exp(-age * 7.0));
   float shimmer = 1.0 + uFlick * (texture2D(uNoise, vec2(uTimeF * 3.7 + seed * 9.0, 0.7)).b - 0.5) * 0.9;
 
-  float s = 4.0 + w * 0.32;
+  // Starburst where the note meets the key: a white-hot core in a soft halo, a long
+  // thin horizontal streak, a vertical ray and two faint diagonals.
+  float r = length(p);
+  float s = 3.0 + w * 0.26;
   float core = exp(-dot(p, p) / (s * s));
-  float streakX = exp(-abs(p.y) / 2.2) * exp(-abs(p.x) / (w * 1.5));
-  float streakY = exp(-abs(p.x) / (w * 0.1 + 1.0)) * exp(-max(p.y, 0.0) / (12.0 + uFlame * 0.5)) * step(0.0, p.y);
-  float star = (core * 0.75 + streakX * 0.5 + streakY * 0.35) * uFlare * pulse * shimmer;
-  vec3 rgb = mix(col, vec3(1.0), 0.5 * clamp(core + streakX * 0.5, 0.0, 1.0)) * star;
+  float halo = exp(-r / (w * 1.15 + 4.0)) * 0.28;
+  float streakX = exp(-abs(p.y) / 1.5) * exp(-abs(p.x) / (w * 3.0 + 10.0));
+  float streakY = exp(-abs(p.x) / (1.1 + w * 0.05)) * exp(-max(p.y, 0.0) / (16.0 + uFlame * 0.9));
+  vec2 d = vec2(p.x + p.y, p.y - p.x) * 0.7071;
+  float rays = (exp(-abs(d.x) / 1.3) + exp(-abs(d.y) / 1.3)) * exp(-r / (w * 1.1 + 6.0)) * 0.45;
+  float star = (core * 1.25 + halo + streakX * 0.85 + streakY * 0.6 + rays) * uFlare * pulse * shimmer;
+  vec3 rgb = mix(col, vec3(1.0), 0.6 * clamp(core * 1.4 + streakX * 0.6 + rays * 0.4, 0.0, 1.0)) * star;
 
-  // Flame tongues rising from the key.
-  float h = uFlame * pulse * (0.45 + 0.95 * texture2D(uNoise, vec2(p.x / 15.0 + seed * 5.0, uTimeF * (0.4 + uFlick * 1.3))).a);
-  float across = exp(-pow(p.x / (w * 0.62), 2.0));
-  float wisp = 0.45 + 0.85 * texture2D(uNoise, vec2(p.x / 19.0 + seed * 3.0, -p.y / 34.0 + uTimeF * (0.8 + uFlick))).b;
-  float flame = smoothstep(h, 0.0, max(p.y, 0.0)) * step(0.0, p.y) * across * wisp;
-  rgb += mix(vec3(1.0, 0.95, 0.8), col, smoothstep(0.0, h * 0.8 + 1.0, p.y)) * flame * 0.5;
+  // Flame tongues: separate licks of flame that rise, flicker and narrow as they go.
+  float lick = texture2D(uNoise, vec2(p.x / 9.0 + seed * 5.0, uTimeF * (0.5 + uFlick * 1.4))).a;
+  float h = max(uFlame * pulse * (0.35 + 1.25 * lick * lick), 0.01);
+  float across = exp(-pow(p.x / (w * 0.75), 2.0));
+  float tongues = smoothstep(0.32, 0.8, texture2D(uNoise, vec2(p.x / 6.5 + seed * 3.0, -p.y / 30.0 + uTimeF * (0.9 + uFlick * 1.2))).b);
+  float rise = max(p.y, 0.0);
+  float flame = smoothstep(h, h * 0.2, rise) * step(0.0, p.y) * across * (0.35 + 0.95 * tongues);
+  vec3 flameRgb = mix(vec3(1.0, 0.96, 0.85), col, smoothstep(0.0, h * 0.6 + 1.0, rise));
+  rgb += flameRgb * flame * 0.85;
 
   if (uEmissive < 0.5) {
     // The key's tint, lit up from below and spilling up into the notes.
@@ -312,14 +326,14 @@ void main() {
     return;
   }
   float t = age / life;
-  float travelled = (1.0 - exp(-2.2 * age)) / 2.2;
+  float travelled = (1.0 - exp(-1.3 * age)) / 1.3;
   vec2 p = aSpawn.xy + aVel.xy * travelled + vec2(0.0, uRise * (0.55 + 0.9 * aSpawn.w) * age);
   p += curl(p, uTime, aSpawn.w) * uSwirl * 520.0 * age * (0.4 + t);
   float size = uSize * aVel.w * (1.0 - 0.45 * t);
   vColor = aColor;
   float twinkle = 0.7 + 0.3 * sin(uTime * 31.0 + aSpawn.w * 53.0);
   vAlpha = smoothstep(0.0, 0.05, age) * (1.0 - t) * (1.0 - t) * twinkle * clamp(size * 1.1, 0.35, 1.2);
-  gl_PointSize = max(size * 2.4, 2.6) * uPxRatio;
+  gl_PointSize = max(size * 3.0, 3.0) * uPxRatio;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 0.0, 1.0);
 }
 `;
@@ -332,8 +346,8 @@ void main() {
   vec2 uv = gl_PointCoord * 2.0 - 1.0;
   float d = dot(uv, uv);
   if (d > 1.0) discard;
-  float e = exp(-d * 4.5) * vAlpha * uGain;
-  gl_FragColor = vec4(mix(vColor, vec3(1.0), 0.3 * e) * e, min(1.0, e));
+  float e = exp(-d * 3.2) * vAlpha * uGain;
+  gl_FragColor = vec4(mix(vColor, vec3(1.0), 0.35 * min(e, 1.0)) * e, min(1.0, e));
 }
 `;
 
@@ -365,7 +379,7 @@ void main() {
   vUv = position.xy * 2.0;
   vColor = aColor;
   vTex = vec3(aSpawn.w, age, aInfo.w);
-  vAlpha = smoothstep(0.0, 0.18, t) * pow(1.0 - t, 1.4);
+  vAlpha = smoothstep(0.0, 0.3, t) * pow(1.0 - t, 1.4);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p + position.xy * size * 2.0, 0.0, 1.0);
 }
 `;
@@ -389,8 +403,13 @@ void main() {
   float sn = sin(ang);
   vec2 uv = mat2(cs, -sn, sn, cs) * vUv * 0.55 + vTex.x * 4.0 + vec2(0.0, -vTex.y * 0.09);
   float n = texture2D(uNoise, uv).r * 0.6 + texture2D(uNoise, uv * 2.3 + vTex.y * 0.04).g * 0.4;
-  float a = fall * smoothstep(0.22, 0.85, n) * vAlpha * uDensity;
+  // Curling wisps: thin bright ridges in the noise, over a softer body.
+  float wisp = 1.0 - abs(texture2D(uNoise, uv * 1.6 + vec2(0.0, -vTex.y * 0.05) + 0.21).b - 0.5) * 3.0;
+  float a = fall * (smoothstep(0.3, 0.9, n) * 0.45 + smoothstep(0.45, 1.0, wisp) * 0.55) * vAlpha * uDensity;
+  // Smoke is drawn over (not added to) what is behind it, so where puffs pile up it
+  // thickens towards its own colour instead of burning out to white.
+  a = min(a, 0.5);
   vec3 col = mix(uSmoke, vColor, vTex.z);
-  gl_FragColor = vec4(col * a, 0.0);
+  gl_FragColor = vec4(col * a, a);
 }
 `;

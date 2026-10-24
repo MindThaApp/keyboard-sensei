@@ -53,6 +53,10 @@ const SMOKE_LIFE_S = 3.2;
 /** Notes sounding at once that fill the spark and smoke pools. */
 const FILL_NOTES = 22;
 const MAX_EMIT_PER_FRAME = 90;
+/** Sparks in the cloud a note throws up when it lands, at the look's full spark count. */
+const BURST_SPARKS = 90;
+/** Most burst sparks per frame (a ten-note chord at full count). */
+const MAX_BURST_PER_FRAME = 700;
 const DEBUG_KEY = "ks-fx-debug";
 
 const HIT_RGB: Rgb = [0.95, 0.96, 1];
@@ -142,6 +146,8 @@ export class FxRenderer implements WaterfallRenderer {
   private hitAtMs = new Float64Array(0);
   /** Start of the next note on each note's key, so touching notes stay separate bars. */
   private nextOnKey: Float64Array = new Float64Array(0);
+  /** Notes whose landing burst has been thrown, this time through the song. */
+  private burstDone = new Uint8Array(0);
 
   // Notes sounding this frame.
   private activeCount = 0;
@@ -253,6 +259,8 @@ export class FxRenderer implements WaterfallRenderer {
     const interval = this.lastDrawMs > 0 ? startMs - this.lastDrawMs : 0;
     const playing = frame.songTimeS !== this.lastSongTimeS && !Number.isNaN(this.lastSongTimeS);
     this.lastDrawMs = startMs;
+    // Song time went back (a loop came round, or a seek): every note may land again.
+    if (frame.songTimeS < this.lastSongTimeS - 0.25) this.burstDone.fill(0);
     this.lastSongTimeS = frame.songTimeS;
     this.geometry = frame.geometry;
     const timeS = (nowMs - this.epochMs) / 1000;
@@ -337,6 +345,7 @@ export class FxRenderer implements WaterfallRenderer {
     }
     this.lastFrame = null;
     this.hitAtMs.fill(-Infinity);
+    this.burstDone.fill(0);
     this.keyLights.begin();
     this.keyLights.commit();
     this.sparks?.clear();
@@ -569,7 +578,7 @@ export class FxRenderer implements WaterfallRenderer {
     line.uniforms.uBright.value = p.lineBrightness;
     line.uniforms.uFlame.value = p.flameHeight;
     line.uniforms.uFlick.value = p.flameFlicker;
-    line.uniforms.uSize.value.y = Math.max(6, p.flameHeight * 0.5 + 8);
+    line.uniforms.uSize.value.y = Math.max(40, p.flameHeight + 34);
     keys.uniforms.uFlame.value = p.flameHeight;
     keys.uniforms.uFlare.value = p.flare;
     keys.uniforms.uTint.value = p.keyTint;
@@ -580,7 +589,7 @@ export class FxRenderer implements WaterfallRenderer {
     if (counts.smoke !== this.smoke.size) this.smoke.setCapacity(counts.smoke);
     const smoke = this.smoke.uniforms;
     smoke.uSwirl.value = p.smokeSwirl;
-    smoke.uDensity.value = Math.min(1.4, p.smokeDensity * 2.6);
+    smoke.uDensity.value = Math.min(1.2, 0.2 + p.smokeDensity * 1.6);
     const [r, g, b] = parseHex(p.smokeColor);
     smoke.uSmoke.value.set(r, g, b);
     this.pitchKey = "";
@@ -682,6 +691,7 @@ export class FxRenderer implements WaterfallRenderer {
     if (this.hitAtMs.length !== notes.length) this.hitAtMs = new Float64Array(notes.length);
     this.hitAtMs.fill(-Infinity);
     this.nextOnKey = nextStartOnSameKey(notes);
+    this.burstDone = new Uint8Array(notes.length);
   }
 
   private writeNotes(frame: WaterfallFrame, nowMs: number): void {
@@ -783,8 +793,12 @@ export class FxRenderer implements WaterfallRenderer {
     const rainbow = p.colorMode === "rainbow";
     const sparkLife = p.sparkLife;
     const sparkRate = sparks.size > 0 ? sparks.size / (sparkLife * FILL_NOTES) : 0;
-    const smokeRate = smoke.size > 0 ? smoke.size / (SMOKE_LIFE_S * 3) : 0;
+    // The pool turns over once per smoke lifetime, shared by every sounding key: a
+    // faster rate would recycle puffs while young and pile them up at the line.
+    const smokeRate = smoke.size > 0 ? smoke.size / (SMOKE_LIFE_S * Math.max(2, count)) : 0;
     let emitted = 0;
+    let burst = 0;
+    const burstSize = Math.round(BURST_SPARKS * (sparks.size / Math.max(1, p.sparkCount)) * Math.min(1.5, p.sparkCount / 3000));
     const lights = this.keyLights;
     lights.begin();
     if (dt > 0) {
@@ -827,6 +841,20 @@ export class FxRenderer implements WaterfallRenderer {
       kColor[a * 4 + 3] = age;
       lights.light(note.midi, r, g, b);
 
+      // The note lands: a cloud of sparks, once per note.
+      const index = this.activeIndex[a]!;
+      if (dt > 0 && this.burstDone[index] === 0) {
+        this.burstDone[index] = 1;
+        if (age < 0.25 && burstSize > 0 && burst < MAX_BURST_PER_FRAME) {
+          const hot = heightMode ? 3 : -1;
+          const br = hot >= 0 ? this.hotSpark[hot]! : r;
+          const bg = hot >= 0 ? this.hotSpark[hot + 1]! : g;
+          const bb = hot >= 0 ? this.hotSpark[hot + 2]! : b;
+          sparks.burst(x + w / 2, w, timeS, sparkLife, burstSize, br, bg, bb);
+          burst += burstSize;
+        }
+      }
+
       if (dt <= 0 || emitted >= MAX_EMIT_PER_FRAME) continue;
       const onset = 1 + 1.5 * Math.exp(-age * 9);
       const nSparks = Math.floor(sparkRate * onset * dt + Math.random());
@@ -838,8 +866,8 @@ export class FxRenderer implements WaterfallRenderer {
         sparks.emit(x + w / 2, w, timeS, sparkLife, sr, sg, sb);
       }
       emitted += nSparks;
-      const nSmoke = Math.floor(smokeRate * dt * (1 + onset * 0.3) + Math.random());
-      for (let k = 0; k < nSmoke; k++) smoke.emit(x + w / 2, timeS, SMOKE_LIFE_S, 70 + w * 1.2, 22 + p.smokeSwirl * 10, p.smokeTint, r, g, b);
+      const nSmoke = Math.floor(smokeRate * dt * onset + Math.random());
+      for (let k = 0; k < nSmoke; k++) smoke.emit(x + w / 2, timeS, SMOKE_LIFE_S, 80 + w * 1.5, 28 + p.smokeSwirl * 16, p.smokeTint, r, g, b);
     }
     if (dt > 0) {
       sparks.endBatch();
