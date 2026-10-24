@@ -308,9 +308,12 @@ function VirtualPiano({
     const keys: (HTMLElement | undefined)[] = [];
     for (const key of keybed.querySelectorAll<HTMLElement>("[data-note]")) keys[Number(key.dataset.note)] = key;
     const shown = new Uint32Array(128);
+    const colour = new Uint32Array(128);
     const apply = ({ active, lit }: KeyLightState) => {
-      if (active) keybed.dataset.keyLights = "on";
-      else delete keybed.dataset.keyLights;
+      if (active !== (keybed.dataset.keyLights === "on")) {
+        if (active) keybed.dataset.keyLights = "on";
+        else delete keybed.dataset.keyLights;
+      }
       for (let note = 0; note < 128; note++) {
         const packed = lit[note] ?? 0;
         if (packed === shown[note]) continue;
@@ -319,7 +322,10 @@ function VirtualPiano({
         if (!key) continue;
         if (packed) {
           // The colour stays set after the light goes off, so the key fades out in it.
-          key.style.setProperty("--key-light", keyLightRgb(packed));
+          if (colour[note] !== packed) {
+            colour[note] = packed;
+            key.style.setProperty("--key-light", keyLightRgb(packed));
+          }
           key.dataset.lit = "true";
         } else {
           delete key.dataset.lit;

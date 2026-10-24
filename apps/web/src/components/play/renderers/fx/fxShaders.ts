@@ -223,8 +223,8 @@ varying vec2 vP;
 varying vec4 vKey;
 varying vec4 vColor;
 void main() {
-  float halfW = max(aKey.y * 4.5, 70.0);
-  float height = uFlame * 2.6 + 90.0;
+  float halfW = max(aKey.y * 3.4, 56.0);
+  float height = uFlame * 2.2 + 72.0;
   vP = vec2(position.x * 2.0 * halfW, (position.y + 0.5) * height);
   vKey = aKey;
   vColor = aColor;
@@ -333,7 +333,7 @@ void main() {
   vColor = aColor;
   float twinkle = 0.7 + 0.3 * sin(uTime * 31.0 + aSpawn.w * 53.0);
   vAlpha = smoothstep(0.0, 0.05, age) * (1.0 - t) * (1.0 - t) * twinkle * clamp(size * 1.1, 0.35, 1.2);
-  gl_PointSize = max(size * 3.0, 3.0) * uPxRatio;
+  gl_PointSize = max(size * 2.5, 2.6) * uPxRatio;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 0.0, 1.0);
 }
 `;

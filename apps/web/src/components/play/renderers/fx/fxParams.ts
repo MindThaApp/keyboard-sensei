@@ -267,38 +267,38 @@ function single(hex: string, extra: Partial<FxParams>): FxParams {
 export const FX_PRESET_PARAMS: Record<Exclude<FxPresetId, "custom">, FxParams> = {
   ember: fromStops(["#FFD25A", "#FF9A4A", "#FF5C6E"], {
     body: "glass", cornerRadius: 0.6, rim: 0.5, noiseAmt: 0.3, noiseSpeed: 0.5,
-    sparkCount: 3500, sparkSize: 1.5, sparkRise: 60, sparkLife: 0.9, sparkSwirl: 0.6,
+    sparkCount: 3000, sparkSize: 1.5, sparkRise: 60, sparkLife: 0.9, sparkSwirl: 0.6,
     smokeDensity: 0.08, smokeColor: "#A0583A", smokeTint: 0.5, flare: 1, keyTint: 0.6, flameHeight: 36, flameFlicker: 0.7,
     glow: 0.95, noteGlow: 0.6, lineBrightness: 0.75,
   }),
   spectrum: {
     ...BASE, ...hexHsl("#8A4BFF"), colorMode: "byPitch", pitchSpan: 300, saturation: 1, lightness: 0.6, stops: ["#FFE066", "#FF7A3C", "#E8336B", "#8A4BFF"],
     body: "glass", cornerRadius: 0.6, rim: 0.55, noiseAmt: 0.35, noiseSpeed: 0.5,
-    sparkCount: 4000, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.7,
+    sparkCount: 3500, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.7,
     smokeDensity: 0.12, smokeSwirl: 0.6, smokeTint: 0.85, flare: 0.9, keyTint: 0.6, flameHeight: 28, flameFlicker: 0.6,
     glow: 1.05, noteGlow: 0.7, lineBrightness: 0.6,
   },
   gold: single("#FFC83D", {
     body: "glass", cornerRadius: 0.6, rim: 0.45, noiseAmt: 0.3, noiseSpeed: 0.45,
-    sparkCount: 3000, sparkSize: 1.4, sparkRise: 45, sparkLife: 1, sparkSwirl: 0.6,
+    sparkCount: 2500, sparkSize: 1.4, sparkRise: 45, sparkLife: 1, sparkSwirl: 0.6,
     smokeDensity: 0.06, smokeColor: "#8A6A30", smokeTint: 0.5, flare: 0.85, keyTint: 0.6, flameHeight: 38, flameFlicker: 0.75,
     glow: 0.9, noteGlow: 0.55, lineBrightness: 0.7,
   }),
   frost: single("#DDF3FF", {
     body: "glass", cornerRadius: 0.55, rim: 0.65, noiseAmt: 0.45, noiseSpeed: 0.4,
-    sparkCount: 3500, sparkSize: 1.2, sparkRise: 45, sparkLife: 1.1, sparkSwirl: 0.75,
+    sparkCount: 3000, sparkSize: 1.2, sparkRise: 45, sparkLife: 1.1, sparkSwirl: 0.75,
     smokeDensity: 0.3, smokeSwirl: 0.65, smokeColor: "#8FA6BF", smokeTint: 0.25, flare: 1, keyTint: 0.7, flameHeight: 18,
     glow: 0.95, noteGlow: 0.5, lineBrightness: 0.7,
   }),
   crimson: single("#FF2A2A", {
     body: "glass", cornerRadius: 0.55, rim: 0.8, noiseAmt: 0.8, noiseSpeed: 0.45, lightness: 0.52,
-    sparkCount: 4000, sparkSize: 1.3, sparkRise: 50, sparkLife: 1, sparkSwirl: 0.75,
+    sparkCount: 3500, sparkSize: 1.3, sparkRise: 50, sparkLife: 1, sparkSwirl: 0.75,
     smokeDensity: 0.18, smokeSwirl: 0.6, smokeColor: "#9A1C1C", smokeTint: 0.7, flare: 0.8, keyTint: 0.9, flameHeight: 30, flameFlicker: 0.8,
     glow: 1.05, noteGlow: 0.7, lineBrightness: 0.85,
   }),
   glassBlue: single("#4A6BFF", {
     body: "glass", cornerRadius: 0.55, rim: 0.65, noiseAmt: 0.65, noiseSpeed: 0.55,
-    sparkCount: 3500, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.85,
+    sparkCount: 3000, sparkSize: 1.4, sparkRise: 55, sparkLife: 1, sparkSwirl: 0.85,
     smokeDensity: 0.25, smokeColor: "#6F86C8", smokeTint: 0.45, flare: 1, keyTint: 0.85, flameHeight: 22,
     glow: 1.05, noteGlow: 0.7, lineBrightness: 0.75,
   }),
@@ -315,7 +315,7 @@ export const FX_PRESET_PARAMS: Record<Exclude<FxPresetId, "custom">, FxParams> =
 export const FX_CUSTOM_START: FxParams = single("#FF2A2A", {
   body: "glass", cornerRadius: 0.55, rim: 0.75, noiseAmt: 0.75, noiseSpeed: 0.45, lightness: 0.55,
   glow: 1.05, noteGlow: 0.65, lineBrightness: 0.85, flameHeight: 34, flameFlicker: 0.85, flare: 0.85,
-  sparkCount: 4000, sparkSize: 1.4, sparkRise: 55, sparkSwirl: 0.75, sparkLife: 1,
+  sparkCount: 3500, sparkSize: 1.4, sparkRise: 55, sparkSwirl: 0.75, sparkLife: 1,
   smokeDensity: 0.3, smokeSwirl: 0.6, smokeColor: "#B02020", smokeTint: 0.7, keyTint: 0.85,
 });
 

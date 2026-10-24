@@ -60,7 +60,7 @@ describe("presets", () => {
       expect(params.cornerRadius, id).toBeGreaterThanOrEqual(0.5);
       expect(params.rim, id).toBeGreaterThanOrEqual(0.45);
       expect(params.glow, id).toBeGreaterThanOrEqual(0.9);
-      expect(params.sparkCount, id).toBeGreaterThanOrEqual(3000);
+      expect(params.sparkCount, id).toBeGreaterThanOrEqual(2500);
     }
   });
 
