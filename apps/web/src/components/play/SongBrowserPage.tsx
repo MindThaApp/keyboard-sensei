@@ -346,7 +346,7 @@ function SongListItem({ song, stars, bests }: { song: Song; stars: Record<string
   const best = bests[song.id]?.score;
   return (
     <li className="ks-row" data-testid="more-song-row">
-      <Link to={`/play/${song.id}`} className="ks-row__main items-start" aria-label={`${song.title}, ${song.artist}`}>
+      <Link to={`/play/${song.id}`} className="ks-row__main items-start">
         <span className="ks-row__text">
           <span className="ks-row__title font-medium">{song.title}</span>
           <span className="ks-row__subtitle truncate">{song.artist}</span>
@@ -360,7 +360,13 @@ function SongListItem({ song, stars, bests }: { song: Song; stars: Record<string
           <span aria-hidden="true" className="text-callout leading-none text-warning">
             {"★".repeat(stars[song.id]?.best ?? 0)}
           </span>
-          {best !== undefined && <span className="text-footnote tabular-nums text-label-2a">{Math.round(best)}</span>}
+          {(stars[song.id]?.best ?? 0) > 0 && <span className="sr-only">{stars[song.id]?.best} of 3 stars</span>}
+          {best !== undefined && (
+            <span className="text-footnote tabular-nums text-label-2a">
+              <span className="sr-only">Your best score </span>
+              {Math.round(best)}
+            </span>
+          )}
         </span>
       </Link>
     </li>
