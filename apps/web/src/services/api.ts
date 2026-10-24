@@ -195,6 +195,16 @@ export interface Song {
   quality_tier?: "verified" | "good" | "unrated" | "low";
   /** What this viewer may download of the song (server-decided; the download route re-checks). Absent from older servers. */
   downloads?: Record<SongExportFormat, boolean>;
+  /** The credit that travels with a Creative Commons download (same text as /credits); null/absent when none. */
+  download_credit?: SongDownloadCredit | null;
+}
+export interface SongDownloadCredit {
+  required: boolean;
+  /** "by Artist, licence cc-by-sa-4.0" or "Public domain". */
+  summary: string;
+  text: string;
+  licence: string;
+  licence_url: string | null;
 }
 export type SongExportFormat = "midi" | "musicxml" | "mei";
 export interface ArchiveEntryResult {
