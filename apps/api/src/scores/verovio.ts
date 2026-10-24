@@ -1,5 +1,7 @@
 import createVerovioModule from "verovio/wasm";
+import createVerovioHumdrumModule from "verovio/wasm-hum";
 import { enableLogToBuffer, VerovioToolkit } from "verovio/esm";
+import { addGesturalAccidentals } from "./gestural-accidentals.js";
 import { InvalidScoreError, type ScoreFormat } from "./score-file.js";
 
 /**
@@ -9,17 +11,24 @@ import { InvalidScoreError, type ScoreFormat } from "./score-file.js";
  * (a malformed file can do that), the instance is dropped and the next call starts fresh.
  */
 let toolkitPromise: Promise<VerovioToolkit> | null = null;
+/** The standard build has no Humdrum reader; the "hum" build is a second, separate WASM module, loaded only for **kern. */
+let humdrumToolkitPromise: Promise<VerovioToolkit> | null = null;
 
-const toolkit = (): Promise<VerovioToolkit> => {
-  const pending =
-    toolkitPromise ??
-    createVerovioModule().then((module) => {
-      // Warnings about the file go to getLog(), not the server's stdout.
-      enableLogToBuffer(true, module);
-      return new VerovioToolkit(module);
-    });
-  toolkitPromise = pending;
-  return pending;
+const create = (createModule: () => Promise<unknown>): Promise<VerovioToolkit> =>
+  createModule().then((module) => {
+    // Warnings about the file go to getLog(), not the server's stdout.
+    enableLogToBuffer(true, module);
+    return new VerovioToolkit(module);
+  });
+
+const toolkit = (format: ScoreFormat): Promise<VerovioToolkit> => {
+  if (format === "humdrum") return (humdrumToolkitPromise ??= create(createVerovioHumdrumModule));
+  return (toolkitPromise ??= create(createVerovioModule));
+};
+
+const dropToolkit = (format: ScoreFormat) => {
+  if (format === "humdrum") humdrumToolkitPromise = null;
+  else toolkitPromise = null;
 };
 
 export interface ConvertedScore {
@@ -52,7 +61,11 @@ const measuresInTimemap = (tk: VerovioToolkit): { id: string; qstamp: number }[]
  * web app's timemap, which it builds from the same MEI, are the ids in this MIDI's score.
  */
 export async function convertScore(text: string, format: ScoreFormat): Promise<ConvertedScore> {
-  const tk = await toolkit();
+  // Verovio's ABC reader keeps the last key signature across loads in a module: a tune in
+  // C or Am read after one in D plays with its sharps (K:C never clears them). So ABC gets
+  // a module of its own for each import, which is dropped afterwards.
+  const own = format === "abc";
+  const tk = own ? await create(createVerovioModule) : await toolkit(format);
   try {
     tk.setOptions({ inputFrom: format, expandNever: true });
     if (!tk.loadData(text)) throw new InvalidScoreError(`The score couldn't be read${logSuffix(tk)}`);
@@ -60,7 +73,7 @@ export async function convertScore(text: string, format: ScoreFormat): Promise<C
     const printedIds = printed.slice(0, -1).map((measure) => measure.id);
     if (printedIds.length === 0) throw new InvalidScoreError("The score has no measures");
     const printedLengthsQ = printedIds.map((_, index) => printed[index + 1].qstamp - printed[index].qstamp);
-    const mei = tk.getMEI({});
+    const mei = addGesturalAccidentals(tk.getMEI({}), format, text);
 
     tk.setOptions({ inputFrom: "mei", expandNever: false });
     if (!tk.loadData(mei)) throw new InvalidScoreError(`The score couldn't be read${logSuffix(tk)}`);
@@ -73,8 +86,10 @@ export async function convertScore(text: string, format: ScoreFormat): Promise<C
   } catch (error) {
     if (error instanceof InvalidScoreError) throw error;
     // A WASM abort leaves the module unusable: start a new one next time.
-    toolkitPromise = null;
+    if (!own) dropToolkit(format);
     throw new InvalidScoreError("The score couldn't be read");
+  } finally {
+    if (own) tk.destroy();
   }
 }
 
