@@ -29,6 +29,7 @@ import type { NextFunction, Request, Response } from "express";
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const SCORE_FIXTURE = join(import.meta.dirname, "scores/fixtures/liliuokalani-aloha-oe.mxl");
+const SCORE_FIXTURES = join(import.meta.dirname, "scores/fixtures");
 const OMR_FIXTURE = join(import.meta.dirname, "omr/fixtures/bach-minuet-bwv-anh120.homr.musicxml");
 const enabled = Boolean(TEST_DATABASE_URL);
 
@@ -663,6 +664,91 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(((await notScore.json()) as { error: { code: string } }).error.code).toBe("invalid_score");
       expect((await upload(user.token, new Uint8Array(0))).status).toBe(400);
       expect((await upload(user.token, new Uint8Array(m.songs.SCORE_UPLOAD_LIMIT_BYTES + 1))).status).toBe(413);
+      expect(await m.prisma.song.count({ where: { uploader_id: user.id } })).toBe(0);
+    });
+  });
+
+  describe("score import: ABC and **kern", () => {
+    const upload = (token: string, bytes: Uint8Array<ArrayBuffer>, query = "") =>
+      fetch(`${baseUrl}/songs/upload/score${query}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream" },
+        body: bytes,
+      });
+    const read = (name: string) => new Uint8Array(readFileSync(join(SCORE_FIXTURES, name)));
+
+    it("turns a two-spine **kern piano piece into a both-hands private song, keeping the .krn", async () => {
+      const owner = await createUser();
+      const stranger = await createUser();
+      const original = read("kern-ode-to-joy-piano.krn");
+      const res = await upload(owner.token, original);
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown> & { id: string; import_report: { playedStaves: number[]; warnings: string[] } };
+      expect(body).toMatchObject({ title: "Ode to Joy (two-hand setting)", artist: "Ludwig van Beethoven", mine: true, notation_path: "available", notation_format: "mei" });
+      expect(body.import_report).toMatchObject({ playedStaves: [0, 1], warnings: [] });
+
+      const row = await m.prisma.song.findUniqueOrThrow({ where: { id: body.id } });
+      expect(row).toMatchObject({ uploader_id: owner.id, content_rights: "user-score-upload", source_kind: "upload", public_eligible: false, hands: "both", note_count: 57 });
+      expect(row.score_path).toMatch(/\.krn$/);
+      expect(readFileSync(row.score_path!)).toEqual(Buffer.from(original));
+      expect(row.source_ref).toBe(createHash("sha256").update(original).digest("hex"));
+
+      const notation = await fetch(`${baseUrl}/songs/${body.id}/notation`, { headers: { authorization: `Bearer ${owner.token}` } });
+      expect(notation.headers.get("content-type")).toContain("application/mei+xml");
+      expect(await notation.text()).toContain("<mei");
+      // The MIDI the player gets: the notes of the independent (music21) reading, on two tracks.
+      const file = await fetch(`${baseUrl}/songs/${body.id}/file`, { headers: { authorization: `Bearer ${owner.token}` } });
+      const midi = new Midi(new Uint8Array(await file.arrayBuffer()));
+      const expected = (JSON.parse(readFileSync(join(SCORE_FIXTURES, "kern-ode-to-joy-piano.krn.expected.json"), "utf8")) as { notes: { staff: number; midi: number }[] }).notes;
+      for (const staff of [0, 1]) {
+        expect(midi.tracks[staff].notes.map((note) => note.midi).sort()).toEqual(expected.filter((note) => note.staff === staff).map((note) => note.midi).sort());
+      }
+      expect(((await api("GET", "/songs", { token: stranger.token })).body.songs as { id: string }[]).map((song) => song.id)).not.toContain(body.id);
+      expect((await api("GET", `/songs/${body.id}/notation`, { token: stranger.token })).status).toBe(404);
+
+      expect((await api("DELETE", `/songs/${body.id}`, { token: owner.token })).status).toBe(200);
+      for (const path of [row.file_path, row.notation_path!, row.score_path!]) expect(existsSync(path), path).toBe(false);
+    });
+
+    it("turns a one-voice ABC tune into a private song with no hands, keeping the .abc", async () => {
+      const owner = await createUser();
+      const original = read("abc-ode-to-joy-melody.abc");
+      const res = await upload(owner.token, original, "?genre=classical");
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown> & { id: string; import_report: { playedStaves: number[] } };
+      expect(body).toMatchObject({ title: "Ode to Joy", artist: "Ludwig van Beethoven", genre: "classical", notation_format: "mei" });
+      expect(body.import_report.playedStaves).toEqual([0]);
+      const row = await m.prisma.song.findUniqueOrThrow({ where: { id: body.id } });
+      expect(row).toMatchObject({ hands: null, note_count: 30, public_eligible: false });
+      expect(row.score_path).toMatch(/\.abc$/);
+      expect(readFileSync(row.score_path!)).toEqual(Buffer.from(original));
+      const file = await fetch(`${baseUrl}/songs/${body.id}/file`, { headers: { authorization: `Bearer ${owner.token}` } });
+      const midi = new Midi(new Uint8Array(await file.arrayBuffer()));
+      expect(midi.tracks.flatMap((track) => track.notes.map((note) => note.midi)).slice(0, 8)).toEqual([66, 66, 67, 69, 69, 67, 66, 64]);
+    });
+
+    it("refuses what its sniffing or Verovio would get wrong, saving nothing, and keeps the size cap", async () => {
+      const user = await createUser();
+      const refused: [string, Uint8Array<ArrayBuffer>, RegExp][] = [
+        ["two voices", read("abc-ode-to-joy-two-voices.abc"), /2 voices/],
+        ["two tunes", read("abc-two-tunes.abc"), /2 tunes/],
+        ["two movements", read("kern-two-movements.krn"), /2 movements/],
+        ["ABC with no key line", new TextEncoder().encode("X:1\nT:t\nC D E F|]\n"), /no K:/],
+        ["kern with no kern spine", new TextEncoder().encode("**dynam\n=1\nf\n*-\n"), /no \*\*kern/],
+        ["ABC-looking binary", new Uint8Array([0x58, 0x3a, 0x31, 0x0a, 0x4b, 0x3a, 0x43, 0x0a, 0x00, 0xff]), /isn't a MusicXML, MEI, ABC or \*\*kern score/],
+      ];
+      for (const [label, bytes, message] of refused) {
+        const res = await upload(user.token, bytes);
+        expect(res.status, label).toBe(422);
+        const error = ((await res.json()) as { error: { code: string; message: string } }).error;
+        expect(error.code, label).toBe("invalid_score");
+        expect(error.message, label).toMatch(message);
+      }
+      // The same 5 MB cap as MusicXML.
+      const abcHead = new TextEncoder().encode("X:1\nK:C\n");
+      const oversized = new Uint8Array(m.songs.SCORE_UPLOAD_LIMIT_BYTES + 1).fill(0x20);
+      oversized.set(abcHead);
+      expect((await upload(user.token, oversized)).status).toBe(413);
       expect(await m.prisma.song.count({ where: { uploader_id: user.id } })).toBe(0);
     });
   });
