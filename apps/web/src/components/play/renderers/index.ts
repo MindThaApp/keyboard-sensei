@@ -21,6 +21,7 @@ export const NOTES_STYLES: readonly NotesStyleOption[] = [
   { value: "classic", label: "Classic", load: async () => new ClassicRenderer() },
   { value: "neon2d", label: "Neon 2D", load: async () => (await import("./neon2d/Neon2DRenderer")).create() },
   { value: "neon3d", label: "Neon 3D", load: async () => (await import("./neon3d/Neon3DRenderer")).create() },
+  { value: "fx", label: "FX", load: async () => (await import("./fx/FxRenderer")).create() },
 ];
 
 export function isNotesStyle(value: unknown): value is NotesStyle {

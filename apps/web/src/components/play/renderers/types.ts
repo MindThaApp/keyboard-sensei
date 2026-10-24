@@ -50,7 +50,7 @@ export interface WaterfallRenderer {
   dispose(): void;
 }
 
-export type NotesStyle = "classic" | "neon2d" | "neon3d";
+export type NotesStyle = "classic" | "neon2d" | "neon3d" | "fx";
 
 /**
  * Dispatched on `window` when a style cannot run as chosen and hands over to another one

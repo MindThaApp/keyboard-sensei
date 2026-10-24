@@ -28,10 +28,10 @@ const neverPrecacheExtensions = new Set([
 /**
 /**
  * Chunks only some users ever load, fetched when needed and never downloaded up front
- * by the service worker: an optional notes style and its `three` dependency (~550 KB),
+ * by the service worker: the optional 3D notes styles and their `three` dependency (~550 KB),
  * and the Verovio engraver worker (~7 MB of WASM, only for score-imported songs).
  */
-const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/, /^verovio-[\w-]+\.js$/];
+const neverPrecacheChunks = [/^Neon3DRenderer-[\w-]+\.js$/, /^FxRenderer-[\w-]+\.js$/, /^three-[\w-]+\.js$/, /^verovio-[\w-]+\.js$/];
 
 type StaticShellFile = {
   url: string;
@@ -161,6 +161,17 @@ export default defineConfig({
   define: { __APP_RELEASE__: JSON.stringify(release) },
   build: {
     sourcemap: uploadSourceMaps ? "hidden" : false,
+    rollupOptions: {
+      output: {
+        // `three` is shared by the optional 3D styles; one chunk of its own, so the service worker can skip it.
+        manualChunks: (id: string) => {
+          if (id.includes("/node_modules/three/")) return "three";
+          // What Neon 3D and FX share (bloom, block shaders, the quality governor).
+          if (id.includes("/renderers/neon3d/") && !id.includes("Neon3DRenderer") && !id.includes(".test.")) return "three-shared";
+          return undefined;
+        },
+      },
+    },
   },
   worker: {
     format: "es",
