@@ -54,9 +54,9 @@ const SMOKE_LIFE_S = 3.2;
 const FILL_NOTES = 22;
 const MAX_EMIT_PER_FRAME = 90;
 /** Sparks in the cloud a note throws up when it lands, at the look's full spark count. */
-const BURST_SPARKS = 90;
-/** Most burst sparks per frame (a ten-note chord at full count). */
-const MAX_BURST_PER_FRAME = 700;
+const BURST_SPARKS = 70;
+/** Most burst sparks per frame: a big chord's clouds go out over a few frames, not one. */
+const MAX_BURST_PER_FRAME = 140;
 const DEBUG_KEY = "ks-fx-debug";
 
 const HIT_RGB: Rgb = [0.95, 0.96, 1];
@@ -221,7 +221,7 @@ export class FxRenderer implements WaterfallRenderer {
     this.marks = createMarkLayer(this.time);
     this.bloom = new Bloom(renderer);
     this.scene.add(this.flats.mesh, this.smoke.mesh, this.notes.colorMesh, this.line.mesh, this.keys.mesh, this.sparks.mesh, this.marks.mesh);
-    this.emissiveScene.add(this.notes.emissiveMesh, this.line.emissiveMesh, this.keys.emissiveMesh, this.sparks.emissiveMesh, this.marks.emissiveMesh);
+    this.emissiveScene.add(this.notes.emissiveMesh, this.line.emissiveMesh, this.keys.emissiveMesh, this.marks.emissiveMesh);
     this.unsubscribe = subscribeFx(() => {
       this.lookDirty = true;
       this.repaintIfIdle();
@@ -843,9 +843,9 @@ export class FxRenderer implements WaterfallRenderer {
 
       // The note lands: a cloud of sparks, once per note.
       const index = this.activeIndex[a]!;
-      if (dt > 0 && this.burstDone[index] === 0) {
+      if (dt > 0 && this.burstDone[index] === 0 && (burst === 0 || burst + burstSize <= MAX_BURST_PER_FRAME)) {
         this.burstDone[index] = 1;
-        if (age < 0.25 && burstSize > 0 && burst < MAX_BURST_PER_FRAME) {
+        if (age < 0.25 && burstSize > 0) {
           const hot = heightMode ? 3 : -1;
           const br = hot >= 0 ? this.hotSpark[hot]! : r;
           const bg = hot >= 0 ? this.hotSpark[hot + 1]! : g;

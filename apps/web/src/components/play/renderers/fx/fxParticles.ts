@@ -45,13 +45,12 @@ const rnd = Math.random;
 export class SparkPool {
   readonly geometry = new THREE.BufferGeometry();
   readonly mesh: THREE.Points;
-  readonly emissiveMesh: THREE.Points;
   readonly uniforms = { uRise: { value: 50 }, uSwirl: { value: 0.5 }, uSize: { value: 1.5 }, uPxRatio: { value: 1 } };
   private readonly spawn = plain(MAX_SPARKS, 4);
   private readonly velocity = plain(MAX_SPARKS, 4);
   private readonly color = plain(MAX_SPARKS, 3);
   private readonly attributes = [this.spawn, this.velocity, this.color];
-  private readonly materials: THREE.ShaderMaterial[];
+  private readonly material: THREE.ShaderMaterial;
   private capacity = 0;
   private cursor = 0;
   private batchStart = 0;
@@ -66,22 +65,20 @@ export class SparkPool {
     this.geometry.setAttribute("aVel", this.velocity);
     this.geometry.setAttribute("aColor", this.color);
     this.geometry.setDrawRange(0, 0);
-    const make = (gain: number) =>
-      new THREE.ShaderMaterial({
-        vertexShader: SPARK_VERTEX,
-        fragmentShader: SPARK_FRAGMENT,
-        uniforms: { uTime: time, ...this.uniforms, uGain: { value: gain } },
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-        premultipliedAlpha: true,
-        blending: THREE.AdditiveBlending,
-      });
-    this.materials = [make(1.35), make(0.2)];
-    this.mesh = new THREE.Points(this.geometry, this.materials[0]);
-    this.emissiveMesh = new THREE.Points(this.geometry, this.materials[1]);
+    // Drawn once, not also into the bloom: thousands of points blurred together only
+    // burn out into a blob, and a second pass doubles the vertex work.
+    this.material = new THREE.ShaderMaterial({
+      vertexShader: SPARK_VERTEX,
+      fragmentShader: SPARK_FRAGMENT,
+      uniforms: { uTime: time, ...this.uniforms, uGain: { value: 1.6 } },
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      premultipliedAlpha: true,
+      blending: THREE.AdditiveBlending,
+    });
+    this.mesh = new THREE.Points(this.geometry, this.material);
     this.mesh.frustumCulled = false;
-    this.emissiveMesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
   }
 
@@ -102,7 +99,6 @@ export class SparkPool {
     this.velocity.needsUpdate = true;
     this.geometry.setDrawRange(0, this.capacity);
     this.mesh.visible = this.capacity > 0;
-    this.emissiveMesh.visible = this.capacity > 0;
   }
 
   setLook(rise: number, swirl: number, size: number): void {
@@ -172,7 +168,7 @@ export class SparkPool {
       spawn[o] = centre + (rnd() - 0.5) * keyWidth * 0.7;
       spawn[o + 1] = rnd() * 5;
       spawn[o + 2] = timeS + rnd() * 0.06;
-      spawn[o + 3] = (seed + (rnd() - 0.5) * 0.05 + 1) % 1;
+      spawn[o + 3] = seed + (rnd() - 0.5) * 0.05;
       const spread = 0.55 + rnd() * 0.9;
       velocity[o] = vx * spread + (rnd() - 0.5) * 50;
       velocity[o + 1] = vy * spread + (rnd() - 0.5) * 40;
@@ -191,7 +187,7 @@ export class SparkPool {
 
   dispose(): void {
     this.geometry.dispose();
-    for (const material of this.materials) material.dispose();
+    this.material.dispose();
   }
 }
 
