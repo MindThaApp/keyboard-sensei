@@ -6,7 +6,6 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { MemoryRouter, useInRouterContext } from "react-router-dom";
 import "./ui.css";
 import { useAppearance } from "../../contexts/AppearanceContext";
-import { Advanced } from "./Advanced";
 import { Button } from "./Button";
 import { Card } from "./Card";
 import { Badge, Chip } from "./Chip";
@@ -74,7 +73,7 @@ function Sections({ density }: { density: Density }) {
   const [speed, setSpeed] = useState(70);
   const [bars, setBars] = useState(4);
   const [wait, setWait] = useState(true);
-  const [advancedOn, setAdvancedOn] = useState(false);
+  const [namesOn, setNamesOn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sheet, setSheet] = useState<"medium" | "large" | null>(null);
 
@@ -169,19 +168,16 @@ function Sections({ density }: { density: Density }) {
       </Section>
 
       <Section title="Inset grouped list">
-        <ListGroup header="Settings" footer="Hidden in Simple mode.">
+        <ListGroup header="Settings" footer="Rows group related controls.">
           <ListRow icon={"⌨"} iconColor="var(--success)" title="Keyboard" accessory="Not connected" onClick={() => undefined} />
           <ListRow icon={"♪"} iconColor="#ff9500" title="Sound" subtitle="Grand piano" accessory="chevron" onClick={() => undefined} />
           <ListRow
             icon={"◑"}
             iconColor="#8e8e93"
-            title="Show advanced controls"
-            accessory={<Toggle hideLabel label="Show advanced controls" checked={advancedOn} onChange={setAdvancedOn} />}
+            title="Show note names"
+            accessory={<Toggle hideLabel label="Show note names" checked={namesOn} onChange={setNamesOn} />}
           />
         </ListGroup>
-        <Advanced mode={advancedOn ? "advanced" : "simple"} fallback={<Chip>More options are hidden</Chip>}>
-          <Chip tone="tint">Advanced controls shown</Chip>
-        </Advanced>
       </Section>
 
       <Section title="Sheet, toast">

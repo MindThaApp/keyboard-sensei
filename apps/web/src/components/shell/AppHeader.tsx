@@ -10,11 +10,11 @@ import "./shell.css";
 
 const icon = (path: string): ReactNode => (
   <svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24">
-    <path d={path} />
+    <path d={path} fillRule="evenodd" />
   </svg>
 );
 
-/** The four destinations. Settings and Admin live behind the account menu. */
+/** The top-level destinations, as flat tabs. Settings sits in the account cluster. */
 export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/",
@@ -34,10 +34,26 @@ export const NAV_ITEMS: TabBarItem[] = [
   },
   {
     to: "/practice",
-    label: "Practice",
+    label: "Library",
+    end: true,
     matches: ["/play"],
     icon: icon(
-      "M15.3 2.3a1 1 0 0 1 .7 1v10.2a2.5 2.5 0 1 1-2-2.45V6.2l-6 1.5v7.8A2.5 2.5 0 1 1 6 13.05V5a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .54.27Z",
+      "M3 4a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm0 4.5a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1ZM3 13a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm11-1.4 4 2.4-4 2.4v-4.8ZM3 17.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Z",
+    ),
+  },
+  {
+    to: "/practice/gym",
+    label: "Practice",
+    matches: ["/practice/record", "/practice/notes"],
+    icon: icon(
+      "M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z",
+    ),
+  },
+  {
+    to: "/import",
+    label: "Import",
+    icon: icon(
+      "M10 2.5a1 1 0 0 1 .7.3l3.5 3.5a1 1 0 1 1-1.4 1.4L11 5.9V12a1 1 0 1 1-2 0V5.9L7.2 7.7a1 1 0 0 1-1.4-1.4l3.5-3.5a1 1 0 0 1 .7-.3ZM3 12a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1Z",
     ),
   },
   {
@@ -99,6 +115,39 @@ function GoalChip({ compact = false }: { compact?: boolean }) {
         )}
       </span>
     </Link>
+  );
+}
+
+const SETTINGS_ICON =
+  "M8.3 2h3.4l.5 2 1.6.9 2-.6 1.7 3-1.5 1.4v1.8l1.5 1.4-1.7 3-2-.6-1.6.9-.5 2H8.3l-.5-2-1.6-.9-2 .6-1.7-3 1.5-1.4V8.7L2.5 7.3l1.7-3 2 .6 1.6-.9.5-2ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z";
+const FEEDBACK_ICON =
+  "M4 3h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3.5V14H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z";
+
+/** A round 44px icon button in the account cluster: feedback and settings stay one tap away. */
+function ClusterButton({ label, path, to, onClick }: { label: string; path: string; to?: string; onClick?: () => void }) {
+  const glyph = (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22" aria-hidden="true">
+      <path d={path} fillRule="evenodd" />
+    </svg>
+  );
+  return to ? (
+    <Link to={to} aria-label={label} title={label} className="ks-cluster-button">
+      {glyph}
+    </Link>
+  ) : (
+    <button type="button" aria-label={label} title={label} className="ks-cluster-button" onClick={onClick}>
+      {glyph}
+    </button>
+  );
+}
+
+/** Feedback and Settings shortcuts that sit beside the account button. */
+function ClusterActions({ onOpenFeedback }: { onOpenFeedback(): void }) {
+  return (
+    <>
+      <ClusterButton label="Send feedback" path={FEEDBACK_ICON} onClick={onOpenFeedback} />
+      <ClusterButton label="Settings" path={SETTINGS_ICON} to="/settings" />
+    </>
   );
 }
 
@@ -203,6 +252,7 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
           trailing={
             <div className="ks-tabbar-trailing">
               <GoalChip />
+              <ClusterActions onOpenFeedback={account.onOpenFeedback} />
               <AccountMenu {...account} />
             </div>
           }
@@ -217,6 +267,7 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
       <div className="edge-bottom ks-edge ks-edge--bottom" aria-hidden="true" />
       <GlassSurface as="header" className="ks-float-cluster" data-device={device}>
         <GoalChip compact={device === "phone"} />
+        <ClusterActions onOpenFeedback={account.onOpenFeedback} />
         <AccountMenu {...account} />
       </GlassSurface>
       <TabBar items={NAV_ITEMS} placement="bottom" condensed={condensed} />

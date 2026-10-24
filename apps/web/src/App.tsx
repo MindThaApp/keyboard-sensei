@@ -11,6 +11,7 @@ import DailyGoalPage from "./components/auth/DailyGoalPage";
 import FirstStepsPage from "./components/auth/FirstStepsPage";
 import SettingsPage from "./components/settings/SettingsPage";
 import AuthPage from "./components/auth/AuthPage";
+import ImportPage from "./components/library/ImportPage";
 import FeedbackWidget from "./components/feedback/FeedbackWidget";
 import AdminFeedbackPage from "./components/admin/AdminFeedbackPage";
 import AdminUsersPage from "./components/admin/AdminUsersPage";
@@ -200,6 +201,7 @@ function AppShell() {
           <Route path="/practice" element={<PracticePage tab="songs" />} />
           <Route path="/practice/gym" element={<PracticePage tab="gym" />} />
           <Route path="/practice/record" element={<PracticePage tab="record" />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
@@ -231,11 +233,7 @@ function AppShell() {
           <Route path="/admin/feedback" element={<RequireAdmin><AdminFeedbackPage /></RequireAdmin>} />
         </Routes>
       </main>
-      <FeedbackWidget
-        open={feedbackOpen}
-        onOpenChange={setFeedbackOpen}
-        showLauncher={isAdmin && !isPerformanceView}
-      />
+      <FeedbackWidget open={feedbackOpen} onOpenChange={setFeedbackOpen} />
       <AudioNoticeToasts />
       <RewardToasts />
     </div>
