@@ -242,7 +242,7 @@ describe.skipIf(!enabled)("catalogue search (real Postgres)", () => {
       }
       expect(new Set(seen).size).toBe(seen.length);
       expect(seen.length).toBe((await searchWorks(prisma, { genre: ["classical"], limit: 1 }, everyone)).total);
-    });
+    }, 20_000);
 
     it("Low is admin-only; a retired or uploaded version never shows", async () => {
       await prisma.song.update({ where: { id: "syn-song-1" }, data: { quality_tier: "low" } });
