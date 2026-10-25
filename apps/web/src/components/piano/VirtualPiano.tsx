@@ -315,8 +315,9 @@ function VirtualPiano({
     const shown = new Uint32Array(128);
     const colour = new Uint32Array(128);
     const none = new Uint32Array(128);
+    const baseShown = new Uint32Array(128);
     let lastAccent = -1;
-    const apply = ({ active, lit, accent }: KeyLightState) => {
+    const apply = ({ active, lit, accent, base }: KeyLightState) => {
       const mode = resolveKeyMode(keyHighlight, active);
       if (keybed.dataset.keyMode !== mode) keybed.dataset.keyMode = mode;
       // "Off" shows no lights, and the keys stay as they are.
@@ -328,10 +329,19 @@ function VirtualPiano({
       }
       if (accent !== lastAccent) {
         lastAccent = accent;
-        if (accent) keybed.style.setProperty("--key-light", keyLightRgb(accent));
-        else keybed.style.removeProperty("--key-light");
+        if (accent) keybed.style.setProperty("--key-accent", keyLightRgb(accent));
+        else keybed.style.removeProperty("--key-accent");
       }
       for (let note = 0; note < 128; note++) {
+        const b = base[note] ?? 0;
+        if (b !== baseShown[note]) {
+          baseShown[note] = b;
+          const el = keys[note];
+          if (el) {
+            if (b) el.style.setProperty("--key-base", keyLightRgb(b));
+            else el.style.removeProperty("--key-base");
+          }
+        }
         const packed = lights[note] ?? 0;
         if (packed === shown[note]) continue;
         shown[note] = packed;

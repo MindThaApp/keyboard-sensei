@@ -9,8 +9,8 @@ describe("resolveKeyMode", () => {
     expect(KEY_HIGHLIGHTS.map((o) => o.value)).toEqual(["match", "glow", "flat", "off"]);
   });
 
-  it("matches FX with a full glow and other styles with a soft one", () => {
-    expect(resolveKeyMode("match", true)).toBe("glow");
+  it("matches FX with a strong light and other styles with a soft one", () => {
+    expect(resolveKeyMode("match", true)).toBe("strong");
     expect(resolveKeyMode("match", false)).toBe("soft");
   });
 
@@ -54,6 +54,22 @@ describe("accent", () => {
     writer.setActive(true);
     writer.setAccent(1, 0, 0);
     expect(keyLightRgb(getKeyLights().accent)).toBe("255 0 0");
+    writer.setActive(false);
+  });
+});
+
+describe("base colour", () => {
+  it("is each note's pitch colour on a per-pitch look, and empty otherwise", () => {
+    const writer = new KeyLightWriter();
+    writer.setActive(true);
+    const pitch = new Float32Array(128 * 3);
+    pitch.set([1, 0, 0], 60 * 3);
+    pitch.set([0, 0, 1], 72 * 3);
+    writer.setBase(pitch);
+    expect(keyLightRgb(getKeyLights().base[60]!)).toBe("255 0 0");
+    expect(keyLightRgb(getKeyLights().base[72]!)).toBe("0 0 255");
+    writer.setBase(null);
+    expect(getKeyLights().base[60]).toBe(0);
     writer.setActive(false);
   });
 });
