@@ -3,6 +3,7 @@ import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
+import { DEFAULT_KEY_HIGHLIGHT, resolveKeyMode, type KeyHighlight } from "./keyHighlight";
 import { getKeyLights, keyLightRgb, subscribeKeyLights, type KeyLightState } from "./keyLights";
 import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
@@ -67,6 +68,8 @@ export interface VirtualPianoProps {
   variant?: "keybed" | "flat";
   /** Which hand a lit key is tinted for (right when absent). */
   handByNote?: Record<number, "left" | "right">;
+  /** How pressed and lit keys light up; "match" follows the notes style. */
+  keyHighlight?: KeyHighlight;
 }
 
 /** A key is wide enough for a label on every white key (Simple mode). */
@@ -86,6 +89,7 @@ interface KeyProps {
   height: number;
   down: boolean;
   tint: KeyTint;
+  hand: "left" | "right";
   expected: boolean;
   label: string | null;
   middleC: boolean;
@@ -99,7 +103,7 @@ interface KeyProps {
 
 /** One key. Memoised on primitives so a press re-renders only the keys that changed. */
 const PianoKey = memo(function PianoKey({
-  note, black, x, width, height, down, tint, expected, label, middleC, glyph, onDown, onEnter, onLeave, onActivate,
+  note, black, x, width, height, down, tint, hand, expected, label, middleC, glyph, onDown, onEnter, onLeave, onActivate,
 }: KeyProps) {
   const name = midiNoteToName(note);
   return (
@@ -117,6 +121,8 @@ const PianoKey = memo(function PianoKey({
       data-note={note}
       data-down={down}
       data-tint={tint}
+      data-hand={hand}
+      data-expected={expected || undefined}
       className={`ks-key absolute top-0 ${black ? "ks-key-black z-10" : "ks-key-white"}`}
       style={{ width, height, left: x }}
       onPointerDown={(e) => onDown(note, e)}
@@ -209,6 +215,7 @@ function VirtualPiano({
   showHint,
   variant = "keybed",
   handByNote,
+  keyHighlight = DEFAULT_KEY_HIGHLIGHT,
 }: VirtualPianoProps) {
   const flat = variant === "flat";
   const { device, orientation } = useDeviceClass();
@@ -307,13 +314,25 @@ function VirtualPiano({
     for (const key of keybed.querySelectorAll<HTMLElement>("[data-note]")) keys[Number(key.dataset.note)] = key;
     const shown = new Uint32Array(128);
     const colour = new Uint32Array(128);
-    const apply = ({ active, lit }: KeyLightState) => {
-      if (active !== (keybed.dataset.keyLights === "on")) {
-        if (active) keybed.dataset.keyLights = "on";
+    const none = new Uint32Array(128);
+    let lastAccent = -1;
+    const apply = ({ active, lit, accent }: KeyLightState) => {
+      const mode = resolveKeyMode(keyHighlight, active);
+      if (keybed.dataset.keyMode !== mode) keybed.dataset.keyMode = mode;
+      // "Off" shows no lights, and the keys stay as they are.
+      const lights = mode === "off" ? none : lit;
+      const dim = active && mode !== "off";
+      if (dim !== (keybed.dataset.keyLights === "on")) {
+        if (dim) keybed.dataset.keyLights = "on";
         else delete keybed.dataset.keyLights;
       }
+      if (accent !== lastAccent) {
+        lastAccent = accent;
+        if (accent) keybed.style.setProperty("--key-light", keyLightRgb(accent));
+        else keybed.style.removeProperty("--key-light");
+      }
       for (let note = 0; note < 128; note++) {
-        const packed = lit[note] ?? 0;
+        const packed = lights[note] ?? 0;
         if (packed === shown[note]) continue;
         shown[note] = packed;
         const key = keys[note];
@@ -336,7 +355,7 @@ function VirtualPiano({
       unsubscribe();
       for (const key of keys) if (key) delete key.dataset.lit;
     };
-  }, [flat, geometry]);
+  }, [flat, geometry, keyHighlight]);
 
   // Keep the next expected notes and the ones sounding in view when the keyboard scrolls.
   // Instant (scrollLeft), never smooth: this fires on every note change.
@@ -517,6 +536,7 @@ function VirtualPiano({
         height={black ? blackKeyHeightPx : whiteKeyHeightPx}
         down={pressedNotes.has(note) || soundingSet.has(note)}
         tint={tintFor(note)}
+        hand={handByNote?.[note] ?? "right"}
         expected={expectedSet.has(note)}
         label={black ? null : labelFor(note)}
         middleC={note === MIDDLE_C}

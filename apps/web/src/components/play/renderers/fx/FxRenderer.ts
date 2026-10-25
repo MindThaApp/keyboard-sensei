@@ -575,6 +575,7 @@ export class FxRenderer implements WaterfallRenderer {
       this.hotSpark.set(this.accent, 3);
     }
     line.uniforms.uAccent.value.fromArray(this.accent);
+    this.keyLights.setAccent(this.accent[0]!, this.accent[1]!, this.accent[2]!);
     line.uniforms.uBright.value = p.lineBrightness;
     line.uniforms.uFlame.value = p.flameHeight;
     line.uniforms.uFlick.value = p.flameFlicker;

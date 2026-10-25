@@ -15,12 +15,14 @@ export interface KeyLightState {
   /** A style that lights keys is on: the keyboard dims its keys so the lit ones glow. */
   active: boolean;
   lit: KeyLightTable;
+  /** Packed colour of the look's accent: what a key you press lights in when the song is not on it. 0 when unknown. */
+  accent: number;
 }
 
 type Listener = (state: KeyLightState) => void;
 
 const listeners = new Set<Listener>();
-let state: KeyLightState = { active: false, lit: new Uint32Array(128) };
+let state: KeyLightState = { active: false, lit: new Uint32Array(128), accent: 0 };
 /** The writer whose lights are showing; a writer that was replaced never clears them. */
 let owner: KeyLightWriter | null = null;
 
@@ -58,6 +60,15 @@ export class KeyLightWriter {
   private next = new Uint32Array(128);
   private shown = new Uint32Array(128);
   private active = false;
+  private accent = 0;
+
+  /** The look's accent colour (0..1 rgb), for keys the player presses that the song is not on. */
+  setAccent(r: number, g: number, b: number): void {
+    const packed = packKeyLight(r, g, b);
+    if (packed === this.accent) return;
+    this.accent = packed;
+    if (this.active && owner === this) publish({ active: true, lit: this.shown, accent: packed });
+  }
 
   /** The style is drawing (true) or gone (false); turning off clears every light. */
   setActive(active: boolean): void {
@@ -68,7 +79,7 @@ export class KeyLightWriter {
     if (active) owner = this;
     else if (owner !== this) return;
     else owner = null;
-    publish({ active, lit: this.shown });
+    publish({ active, lit: this.shown, accent: this.accent });
   }
 
   begin(): void {
@@ -91,7 +102,7 @@ export class KeyLightWriter {
     }
     if (!changed) return false;
     this.shown = this.next.slice();
-    publish({ active: true, lit: this.shown });
+    publish({ active: true, lit: this.shown, accent: this.accent });
     return true;
   }
 }
