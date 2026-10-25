@@ -14,13 +14,14 @@ import {
 import type { LoopRange } from "@keyboard-sensei/playalong-core";
 import { CLICK_LEVELS, type ClickLevel } from "../../utils/playalongMetronome";
 import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres";
+import { setMonitorKeys, useMonitorKeys } from "../../utils/monitorKeys";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import { KeyboardSizingControls } from "../piano/VirtualPiano";
 import type { KeyboardSizing } from "../piano/useKeyboardSizing";
 import { Button, InfoTip, ListGroup, ListRow, SegmentedControl, Sheet, Slider, Stepper, Toggle } from "../ui";
 import LoopBarStrip from "./LoopBarStrip";
 import { LEVEL_DESCRIPTIONS, LEVEL_LABELS } from "./practiceSession";
-import { LOOKAHEAD_MAX_S, LOOKAHEAD_MIN_S, TEMPO_MAX_PCT, TEMPO_MIN_PCT, type Settings, type ViewMode } from "./practiceSettings";
+import { LOOKAHEAD_MAX_S, LOOKAHEAD_MIN_S, TEMPO_MAX_PCT, TEMPO_MIN_PCT, isOnlyMyNotes, setOnlyMyNotes, type Settings, type ViewMode } from "./practiceSettings";
 import { NOTES_STYLES } from "./renderers";
 import type { NotesStyle } from "./renderers/types";
 import type { VisibilityMode } from "./stageLayout";
@@ -85,6 +86,7 @@ const CLICK_LABELS: Record<ClickLevel, string> = { bar: "Every bar", beat: "Ever
  * Nothing is folded away: every setting is the gear, a tab, and the control.
  */
 export default function PracticeSettingsSheet(props: Props) {
+  const monitorKeys = useMonitorKeys();
   const { settings, setSettings, level, hands, practiceLocked, settingsLocked, tab } = props;
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings((s) => ({ ...s, [key]: value }));
   const rate = settings.tempoPct / 100;
@@ -349,6 +351,11 @@ export default function PracticeSettingsSheet(props: Props) {
         <div role="group" aria-label="Sound settings">
           <ListGroup header="Music">
             <ListRow
+              title="Only my notes"
+              subtitle="The app stays silent except for the keys you press."
+              accessory={<Toggle label="Only my notes" hideLabel checked={isOnlyMyNotes(settings)} disabled={settingsLocked} onChange={(on) => setSettings((s) => setOnlyMyNotes(s, on))} />}
+            />
+            <ListRow
               title="Play my part along with me"
               accessory={<Toggle label="Play my part along with me" hideLabel checked={settings.guideAudio} disabled={settingsLocked} onChange={(on) => set("guideAudio", on)} />}
             />
@@ -364,6 +371,11 @@ export default function PracticeSettingsSheet(props: Props) {
                   onChange={(on) => setSettings((s) => ({ ...s, accompanimentMute: { ...s.accompanimentMute, removed: !on } }))}
                 />
               }
+            />
+            <ListRow
+              title="Sound my key presses"
+              subtitle="Turn off if your keyboard's own speaker is on, to avoid hearing each note twice."
+              accessory={<Toggle label="Sound my key presses" hideLabel checked={monitorKeys} onChange={setMonitorKeys} />}
             />
           </ListGroup>
 

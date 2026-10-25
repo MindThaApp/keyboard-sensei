@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, defaultSettingsFor, loadSettings, saveSettings, settingsToPersist } from "./practiceSettings";
+import { DEFAULT_SETTINGS, defaultSettingsFor, isOnlyMyNotes, loadSettings, setOnlyMyNotes, saveSettings, settingsToPersist } from "./practiceSettings";
 
 describe("defaultSettingsFor", () => {
   it("offers sheet music and falling notes together on a tablet or desktop", () => {
@@ -66,5 +66,46 @@ describe("settingsToPersist", () => {
   it("is a pass-through when the song opened on the saved settings ", () => {
     const changed = { ...saved, tempoPct: 120, lookaheadS: 6 };
     expect(settingsToPersist(changed, saved, saved)).toEqual(changed);
+  });
+});
+
+describe("Only my notes", () => {
+  it("is off by default and on turns all three song-audio sources off", () => {
+    expect(isOnlyMyNotes(DEFAULT_SETTINGS)).toBe(false);
+    const on = setOnlyMyNotes(DEFAULT_SETTINGS, true);
+    expect(isOnlyMyNotes(on)).toBe(true);
+    expect(on.guideAudio).toBe(false);
+    expect(on.accompanimentMute).toEqual({ removed: true, otherHand: true });
+  });
+
+  it("restores the previous values when turned off", () => {
+    const before = { ...DEFAULT_SETTINGS, guideAudio: false, accompanimentMute: { removed: false, otherHand: true } };
+    const off = setOnlyMyNotes(setOnlyMyNotes(before, true), false);
+    expect(off.guideAudio).toBe(false);
+    expect(off.accompanimentMute).toEqual({ removed: false, otherHand: true });
+    expect(isOnlyMyNotes(off)).toBe(false);
+  });
+
+  it("falls back to the defaults when there is nothing to restore", () => {
+    const allOff = { ...DEFAULT_SETTINGS, guideAudio: false, accompanimentMute: { removed: true, otherHand: true } };
+    expect(isOnlyMyNotes(allOff)).toBe(true);
+    const off = setOnlyMyNotes(allOff, false);
+    expect(off.guideAudio).toBe(true);
+    expect(off.accompanimentMute).toEqual({ removed: false, otherHand: false });
+  });
+
+  it("turns itself off when any one source is turned back on", () => {
+    const on = setOnlyMyNotes(DEFAULT_SETTINGS, true);
+    expect(isOnlyMyNotes({ ...on, guideAudio: true })).toBe(false);
+    expect(isOnlyMyNotes({ ...on, accompanimentMute: { ...on.accompanimentMute, removed: false } })).toBe(false);
+    expect(isOnlyMyNotes({ ...on, accompanimentMute: { ...on.accompanimentMute, otherHand: false } })).toBe(false);
+  });
+
+  it("survives a save and load", () => {
+    localStorage.clear();
+    saveSettings(setOnlyMyNotes(DEFAULT_SETTINGS, true));
+    const loaded = loadSettings("desktop");
+    expect(isOnlyMyNotes(loaded)).toBe(true);
+    expect(setOnlyMyNotes(loaded, false).guideAudio).toBe(true);
   });
 });
