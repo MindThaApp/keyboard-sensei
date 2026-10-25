@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BAND_MAX, BAND_MIN, averageSpeed, createFollowState, stepFollow } from "./scrollFollow";
+import { BAND_MAX, BAND_MIN, SEEK_TARGET, averageSpeed, createFollowState, stepFollow } from "./scrollFollow";
 
 const VIEW = 1400;
 const FRAME_MS = 1000 / 60;
@@ -73,6 +73,35 @@ describe("stepFollow", () => {
     expect(Math.max(...steps)).toBeLessThan(6);
   });
 
+  it("keeps the highlight hovering around the centre (mostly 40-60%)", () => {
+    const { positions } = run(unevenX, 80);
+    const settled = positions.slice(900).map((p) => p / VIEW);
+    const mean = settled.reduce((a, b) => a + b, 0) / settled.length;
+    expect(mean).toBeGreaterThan(0.45);
+    expect(mean).toBeLessThan(0.55);
+    const inside = settled.filter((f) => f >= 0.4 && f <= 0.6).length / settled.length;
+    expect(inside).toBeGreaterThan(0.6);
+  });
+
+  it("recentres a playhead that started off-centre without a jerk", () => {
+    // Playhead 20% too far left of centre to begin with (e.g. a restart at the band edge).
+    const state = createFollowState();
+    const xAt = (t: number) => 100 + 300 * t;
+    let now = 0;
+    stepFollow(state, { songTimeS: 10, nowMs: now, xAt, viewWidth: VIEW, maxOffset: 1e6 });
+    state.offset += 0.2 * VIEW;
+    let last = state.offset;
+    let maxStep = 0;
+    for (let t = 10; t < 40; t += 1 / 60) {
+      now += FRAME_MS;
+      const o = stepFollow(state, { songTimeS: t, nowMs: now, xAt, viewWidth: VIEW, maxOffset: 1e6 });
+      maxStep = Math.max(maxStep, Math.abs(o - last));
+      last = o;
+    }
+    expect(Math.abs((xAt(40) - state.offset) / VIEW - 0.5)).toBeLessThan(0.05);
+    expect(maxStep).toBeLessThan(8);
+  });
+
   it("never jumps by more than a few px per frame during normal playback", () => {
     const { offsets } = run(unevenX, 40);
     const steps = offsets.slice(1).map((o, i) => Math.abs(o - offsets[i]));
@@ -141,7 +170,8 @@ describe("stepFollow", () => {
     const base = { xAt: unevenX, viewWidth: VIEW, maxOffset: 1e6, reducedMotion: true };
     stepFollow(state, { ...base, songTimeS: 1, nowMs: 0 });
     const after = stepFollow(state, { ...base, songTimeS: 80, nowMs: FRAME_MS });
-    expect(unevenX(80) - after).toBeCloseTo(VIEW * 0.35, 3);
+    expect(unevenX(80) - after).toBeCloseTo(VIEW * SEEK_TARGET, 3);
+    expect(SEEK_TARGET).toBe(0.5);
   });
 
   it("holds the ribbon still at the start and clamps at the end", () => {
