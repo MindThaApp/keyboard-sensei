@@ -52,7 +52,7 @@ describe("PracticeSettingsSheet", () => {
       Play: ["Version", "Speed", "Wait for me", "Play the other hand for me", "Keyboard status"],
       Loop: ["Loop a few bars", "Repeat until I get it right", "Speed up when I get it right", "Speed-up starts at", "Right means at least"],
       Look: ["Show", "Notes style", "Key highlight", "Note names on the keys", "How far ahead you see", "Seeing further makes", "Key size"],
-      Sound: ["Play my part along with me", "Play the left-out notes quietly", "Metronome", "Click"],
+      Sound: ["Only my notes", "Play my part along with me", "Play the left-out notes quietly", "Sound my key presses", "Metronome", "Click"],
     };
     for (const [tab, titles] of Object.entries(expected)) {
       openTab(tab);
