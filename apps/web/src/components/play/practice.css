@@ -28,15 +28,18 @@
 /* ------------------------------------------------------------ stage */
 /* Outside full screen the stage starts below the controls, so they never cover a
    falling note; their measured height (they wrap on narrow screens) is the reserve.
-   In full screen they float over the stage and fade away. */
-.ks-practice:not([data-focus]) {
+   Full screen on a laptop or tablet keeps that reserve too, so the sheet is never
+   covered; the controls still fade (the reserve just goes quiet, nothing moves). Only
+   a phone, where every pixel counts, lets them float over the stage and fade away. */
+.ks-practice:not([data-focus]),
+.ks-practice[data-focus]:not([data-device="phone"]) {
   padding-top: calc(env(safe-area-inset-top) + var(--ks-top-height, 120px) + 20px);
 }
 .ks-practice__notation {
   flex: none;
   padding: 0 12px;
 }
-.ks-practice[data-focus] .ks-practice__notation {
+.ks-practice[data-focus][data-device="phone"] .ks-practice__notation {
   padding-top: 12px;
 }
 .ks-practice__osmd {
