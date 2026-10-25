@@ -16,6 +16,17 @@ describe("defaultSettingsFor", () => {
 describe("loadSettings", () => {
   afterEach(() => localStorage.clear());
 
+  it("matches the look by default and keeps a stored key highlight", () => {
+    expect(loadSettings("tablet").keyHighlight).toBe("match");
+    saveSettings({ ...DEFAULT_SETTINGS, keyHighlight: "flat" });
+    expect(loadSettings("tablet").keyHighlight).toBe("flat");
+  });
+
+  it("falls back to matching the look for a key highlight it does not know", () => {
+    localStorage.setItem("ks-playalong-settings", JSON.stringify({ keyHighlight: "disco" }));
+    expect(loadSettings("tablet").keyHighlight).toBe("match");
+  });
+
   it("uses the device's defaults when nothing is stored", () => {
     expect(loadSettings("tablet")).toEqual(DEFAULT_SETTINGS);
     expect(loadSettings("phone").viewMode).toBe("falling");

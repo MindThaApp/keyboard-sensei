@@ -1,3 +1,4 @@
+import { KEY_HIGHLIGHTS, type KeyHighlight } from "../piano/keyHighlight";
 import { lazy, Suspense, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
   difficultyMultiplier,
@@ -279,6 +280,14 @@ export default function PracticeSettingsSheet(props: Props) {
                   onChange={(value: NotesStyle) => set("notesStyle", value)}
                   block
                 />
+              </div>
+            </li>
+            <li className="ks-row ks-practice-row--stack">
+              <div className="ks-row__main">
+                <span className="ks-row__title" id="ks-keyhl-label">
+                  Key highlight
+                </span>
+                <SegmentedControl aria-labelledby="ks-keyhl-label" options={KEY_HIGHLIGHTS} value={settings.keyHighlight} onChange={(value: KeyHighlight) => set("keyHighlight", value)} block />
               </div>
             </li>
             <ListRow title="Note names on the keys" accessory={<Toggle label="Note names on the keys" hideLabel checked={settings.showLabels} onChange={(on) => set("showLabels", on)} />} />
