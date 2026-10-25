@@ -1,6 +1,7 @@
 import { forwardRef, memo, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { PlayAlongNote } from "@keyboard-sensei/midi-engine";
 import NotationRenderer, { type NotationRendererHandle } from "../notation/NotationRenderer";
+import { createFollowState, stepFollow, type FollowState } from "./scrollFollow";
 import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
 import { barRangesFrom, type SongBeatGrid, type SongKeyChange, type TimeSignatureSegment } from "@keyboard-sensei/playalong-core";
 
@@ -247,6 +248,10 @@ export function engraveSong(
   };
 }
 
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 const DEFAULT_VIEWPORT_HEIGHT_PX = 240;
 // The viewport takes the rendered score's own height (a wide-ranging piece
 // needs ledger lines a fixed 240px clipped off), within these bounds.
@@ -259,11 +264,10 @@ const MAX_VIEWPORT_HEIGHT_PX = 340;
  * NotationRenderer's `setActiveNoteIds`, a CSS-class toggle on the drawn
  * SVG). At the start the highlight moves
  * rightward while the ribbon stays still; once it reaches the viewport's
- * horizontal centre it pins there and the ribbon scrolls right-to-left
- * underneath it instead; near the end (once the ribbon has run out) the
- * highlight resumes moving, travelling the last stretch to the right edge.
- * See setSongTime below for the single formula that produces all three
- * phases.
+ * band (25-70% of the view) it drifts there while the ribbon scrolls
+ * right-to-left at a steady, averaged speed; near the end (once the ribbon has
+ * run out) the highlight resumes moving to the right edge. The camera maths is
+ * in scrollFollow.ts.
  *
  * The WHOLE piece is rendered as one VexFlow system (no paging/windowing):
  * an earlier windowed design re-rendered every 32 bars from a fresh x-origin,
@@ -293,6 +297,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
   // a monotone cubic built from them is what setSongTime actually evaluates
   // (see buildMonotoneCubic's docstring for why not a plain lerp).
   const beatXSplineRef = useRef<MonotoneCubicSpline>({ xs: [], ys: [], ms: [] });
+  const followRef = useRef<FollowState>(createFollowState());
   const idToBeatRef = useRef(idToBeat);
   idToBeatRef.current = idToBeat;
   // The currently-highlighted note ids. Compared by VALUE every frame in
@@ -309,6 +314,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
       points.push({ x: beat, y: x });
     }
     beatXSplineRef.current = buildMonotoneCubic(points);
+    followRef.current = createFollowState(); // a new layout invalidates the camera
     // Once per (re)draw, never per frame.
     const renderedHeight = ribbonRef.current?.offsetHeight ?? 0;
     if (renderedHeight > 0) {
@@ -341,19 +347,19 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
         const spline = beatXSplineRef.current;
         if (!viewport || !ribbon || spline.xs.length === 0) return;
 
-        const cursorX = evalMonotoneCubic(spline, beat);
+        // Camera: a steady, averaged scroll speed with the playhead free to drift in a
+        // comfortable band (see scrollFollow.ts), instead of pinning it to the centre.
         const viewportWidth = viewport.clientWidth;
-        const ribbonWidth = ribbon.scrollWidth;
-        const maxOffset = Math.max(0, ribbonWidth - viewportWidth);
-        // One formula for all three phases: before the highlight reaches
-        // centre, cursorX - viewportWidth/2 is negative, so offset clamps to
-        // 0 (ribbon still, highlight moves). Through the middle of the piece
-        // it's the normal positive offset (ribbon scrolls, highlight pinned
-        // at centre). Near the end it saturates at maxOffset (ribbon can't
-        // scroll further), so cursorX - offset grows past centre again — the
-        // highlight resumes moving for the final stretch to the right edge.
-        const offset = Math.min(maxOffset, Math.max(0, cursorX - viewportWidth / 2));
-        ribbon.style.transform = `translateX(${-offset}px)`;
+        const maxOffset = Math.max(0, ribbon.scrollWidth - viewportWidth);
+        const offset = stepFollow(followRef.current, {
+          songTimeS: t,
+          nowMs: performance.now(),
+          xAt: (time) => evalMonotoneCubic(spline, lerpSeries(anchors, time)),
+          viewWidth: viewportWidth,
+          maxOffset,
+          reducedMotion: prefersReducedMotion(),
+        });
+        ribbon.style.transform = `translate3d(${-offset}px, 0, 0)`;
       },
     }),
     [anchors, scrollNotes],
