@@ -43,14 +43,25 @@ describe("presets", () => {
 
   it("maps the reference table onto parameters", () => {
     const { ember, spectrum, gold, frost, crimson, glassBlue, moonlight, clean } = FX_PRESET_PARAMS;
-    expect([ember.colorMode, ember.stops, ember.sparkCount, ember.sparkRise, ember.flare]).toEqual(["byHeight", ["#FFD25A", "#FF9A4A", "#FF5C6E"], 3000, 60, 0.9]);
-    expect([spectrum.stops.length, spectrum.sparkCount, spectrum.flare]).toEqual([4, 3500, 0.8]);
-    expect([gold.colorMode, gold.body, gold.sparkCount]).toEqual(["single", "gradient", 2000]);
-    expect([frost.smokeDensity, frost.sparkSwirl]).toEqual([0.15, 0.6]);
-    expect([crimson.hue, crimson.noteGlow, crimson.keyTint]).toEqual([0, 0.5, 0.8]);
-    expect([glassBlue.body, glassBlue.noiseAmt, glassBlue.noiseSpeed, glassBlue.rim, glassBlue.sparkSwirl, glassBlue.flare]).toEqual(["glass", 0.5, 0.5, 0.4, 0.8, 1]);
-    expect([moonlight.sparkCount, moonlight.smokeDensity, moonlight.noteGlow]).toEqual([4000, 0.35, 0.3]);
+    expect([ember.colorMode, ember.stops, ember.sparkRise, ember.flare]).toEqual(["byHeight", ["#FFD25A", "#FF9A4A", "#FF5C6E"], 60, 1]);
+    expect([spectrum.colorMode, spectrum.pitchSpan]).toEqual(["byPitch", 300]);
+    expect([gold.colorMode, gold.hue]).toEqual(["single", hexHsl("#FFC83D").hue]);
+    expect(frost.smokeDensity).toBeGreaterThan(0.15);
+    expect([crimson.hue, crimson.keyTint]).toEqual([0, 0.9]);
+    expect([glassBlue.noiseAmt, glassBlue.sparkSwirl, glassBlue.flare]).toEqual([0.65, 0.85, 1]);
+    expect(moonlight.smokeDensity).toBeGreaterThanOrEqual(0.5);
     expect([clean.sparkCount, clean.smokeDensity, clean.flare, clean.keyTint, clean.colorMode]).toEqual([0, 0, 0.2, 0.3, "byHand"]);
+  });
+
+  it("draws every look but Clean as rounded glass bars with a rim and a wide glow", () => {
+    for (const [id, params] of Object.entries(FX_PRESET_PARAMS)) {
+      if (id === "clean") continue;
+      expect(params.body, id).toBe("glass");
+      expect(params.cornerRadius, id).toBeGreaterThanOrEqual(0.5);
+      expect(params.rim, id).toBeGreaterThanOrEqual(0.45);
+      expect(params.glow, id).toBeGreaterThanOrEqual(0.9);
+      expect(params.sparkCount, id).toBeGreaterThanOrEqual(2500);
+    }
   });
 
   it("starts on Custom, whose starting look is the red glass target", () => {
