@@ -111,12 +111,22 @@ export function stageToneFor(options: { scheme: "light" | "dark"; style: string;
 }
 
 /** CSS custom properties for DOM pieces drawn in the same colours (keys, legend chips). */
+/** "#RRGGBB" as "r g b" for `rgb(var(--x) / a)`; anything else gives undefined. */
+export function hexTriplet(hex: string): string | undefined {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return undefined;
+  const n = parseInt(m[1]!, 16);
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
 export function notePaletteCssVars(palette: NotePalette): Record<string, string> {
   return {
     "--note-right": palette.note.right.base,
     "--note-right-hi": palette.note.right.hi,
     "--note-left": palette.note.left.base,
     "--note-left-hi": palette.note.left.hi,
+    ...(hexTriplet(palette.note.right.base) ? { "--note-right-rgb": hexTriplet(palette.note.right.base)! } : {}),
+    ...(hexTriplet(palette.note.left.base) ? { "--note-left-rgb": hexTriplet(palette.note.left.base)! } : {}),
     "--key-lit-right": palette.key.lit.right,
     "--key-lit-left": palette.key.lit.left,
     "--stage-top": palette.stage.top,
