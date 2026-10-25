@@ -185,6 +185,54 @@
 .ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key[data-lit="true"]:not([data-down="true"])::before {
   box-shadow: inset 0 0 0 2px rgb(var(--kc) / 0.9), inset 0 3px 2px -1px rgb(255 255 255 / 0.6);
 }
+/*
+ * FX looks (Match look and Glow while a style that lights keys is drawing): the key is lit
+ * from the impact, not filled. The light is brightest at the top where the bar lands, a
+ * near-white core in the bar's colour, then falls off down the key to the front edge, so
+ * it reads as the bar's light spilling in. Pressed keys run at --lvl 1, expected-only keys
+ * at the softer --lvl set above. Classic looks keep the treatment above.
+ */
+.ks-keybed[data-key-lights="on"]:is([data-key-mode="strong"], [data-key-mode="glow"]) .ks-key:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"]))::before {
+  background-color: transparent;
+  background-image:
+    /* hot core at the impact point, centred on the key's top edge */
+    radial-gradient(ellipse 90% 30% at 50% 0%, rgb(255 255 255 / calc(1 * var(--core) * var(--lvl))) 0%, rgb(255 255 255 / calc(0.6 * var(--core) * var(--lvl))) 50%, rgb(255 255 255 / 0) 100%),
+    /* wider bloom just below it, tinted toward white */
+    radial-gradient(ellipse 130% 55% at 50% 0%, rgb(var(--kc) / calc(0.7 * var(--lvl))) 0%, rgb(var(--kc) / 0) 100%),
+    /* the fall-off down the key */
+    linear-gradient(180deg,
+      rgb(var(--kc) / calc(1 * var(--lvl))) 0%,
+      rgb(var(--kc) / calc(0.95 * var(--lvl))) 18%,
+      rgb(var(--kc) / calc(0.7 * var(--lvl))) 46%,
+      rgb(var(--kc) / calc(0.4 * var(--lvl))) 78%,
+      rgb(var(--kc) / calc(0.22 * var(--lvl))) 100%);
+  box-shadow: inset 0 2px 1px -1px rgb(255 255 255 / calc(0.9 * var(--lvl)));
+  animation: ks-impact 380ms ease-out;
+}
+/* The flash as the bar lands: brighter for a moment, then it settles. */
+@keyframes ks-impact {
+  from { filter: brightness(1.7) saturate(1.1); }
+  to { filter: none; }
+}
+.ks-keybed[data-key-lights="on"]:is([data-key-mode="strong"], [data-key-mode="glow"]) .ks-key[data-lit="true"]:not([data-down="true"])::before {
+  box-shadow: inset 0 2px 1px -1px rgb(255 255 255 / 0.5);
+}
+/* Spill onto the neighbours, held to the hit line: the bar's light, not a column above it. */
+.ks-keybed[data-key-lights="on"]:is([data-key-mode="strong"], [data-key-mode="glow"]) .ks-key-white:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"])) {
+  box-shadow:
+    inset -1px 0 0 rgb(0 0 0 / 0.16),
+    0 0 10px 1px rgb(var(--kc) / calc(0.55 * var(--lvl))),
+    0 -14px 22px -6px rgb(var(--kc) / calc(0.8 * var(--flare) * var(--lvl)));
+}
+.ks-keybed[data-key-lights="on"]:is([data-key-mode="strong"], [data-key-mode="glow"]) .ks-key-black:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"])) {
+  box-shadow:
+    0 0 10px 1px rgb(var(--kc) / calc(0.55 * var(--lvl))),
+    0 -12px 20px -6px rgb(var(--kc) / calc(0.8 * var(--flare) * var(--lvl)));
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-keybed[data-key-lights="on"] .ks-key::before { animation: none !important; }
+}
+
 /* Light on the keybed under the lit keys: the felt line glows too. */
 .ks-keybed[data-key-lights="on"]:is([data-key-mode="glow"], [data-key-mode="strong"]) .ks-case-felt {
   box-shadow: 0 0 18px 4px rgb(var(--key-accent, 255 255 255) / 0.35);
