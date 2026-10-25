@@ -49,7 +49,7 @@ import {
   simpleOpening,
   type LadderState,
 } from "./practiceSession";
-import { defaultSettingsFor, loadSettings, saveSettings, settingsToPersist, TEMPO_MAX_PCT, TEMPO_MIN_PCT, type Settings } from "./practiceSettings";
+import { defaultSettingsFor, isOnlyMyNotes, loadSettings, setOnlyMyNotes, saveSettings, settingsToPersist, TEMPO_MAX_PCT, TEMPO_MIN_PCT, type Settings } from "./practiceSettings";
 import "./practice.css";
 
 /** A loop starts out this long when switched on with no preset. */
@@ -708,6 +708,16 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       />
     </StripGroup>
   );
+  const onlyMineGroup = (
+    <StripGroup caption="Sound" disabled={settingsLocked} hint={pausedHint}>
+      <LedToggle
+        label={phone ? "Mine" : "Only my notes"}
+        title="Only my notes: the app stays silent except for the keys you press"
+        pressed={isOnlyMyNotes(settings)}
+        onChange={(on) => setSettings((s) => setOnlyMyNotes(s, on))}
+      />
+    </StripGroup>
+  );
   const viewGroup = (
     <StripGroup caption="View">
       <SegmentedControl aria-label="View" options={viewOptions} value={notationFits ? settings.viewMode : "falling"} onChange={(value) => set("viewMode", value)} />
@@ -923,6 +933,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
                     {levelGroup}
                     {loopGroup}
                     {metronomeGroup}
+                    {onlyMineGroup}
                     {viewGroup}
                   </div>
                 }
@@ -948,6 +959,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
               </div>
               {waitGroup}
               {metronomeGroup}
+              {onlyMineGroup}
               {viewGroup}
             </>
           )}
