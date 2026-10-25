@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useId, useRef, type ReactNode } from "react"
 import { GlassSurface, SegmentedControl } from "../ui";
 import { getFocusable } from "../ui/focus";
 import { cx } from "../ui/cx";
+import { KEY_HIGHLIGHTS, type KeyHighlight } from "../piano/keyHighlight";
 import { NOTES_STYLES } from "./renderers";
 import type { NotesStyle } from "./renderers/types";
 
@@ -101,12 +102,14 @@ interface LookSwitcherProps {
   onOpenChange: (open: boolean) => void;
   style: NotesStyle;
   onStyle: (style: NotesStyle) => void;
+  keyHighlight: KeyHighlight;
+  onKeyHighlight: (value: KeyHighlight) => void;
   /** Phones show the icon alone (named "Look: Classic" for screen readers and as a tooltip). */
   iconOnly?: boolean;
 }
 
 /** "Look: Classic": the notes style, and the FX look presets once FX is picked. Changes apply live. */
-export function LookSwitcher({ open, onOpenChange, style, onStyle, iconOnly = false }: LookSwitcherProps) {
+export function LookSwitcher({ open, onOpenChange, style, onStyle, keyHighlight, onKeyHighlight, iconOnly = false }: LookSwitcherProps) {
   return (
     <PopoverButton
       open={open}
@@ -122,6 +125,10 @@ export function LookSwitcher({ open, onOpenChange, style, onStyle, iconOnly = fa
             Notes style
           </p>
           <SegmentedControl aria-labelledby="ks-look-style-label" options={STYLE_OPTIONS} value={style} onChange={onStyle} block />
+          <p className="ks-strip-caption" id="ks-look-keys-label">
+            Key highlight
+          </p>
+          <SegmentedControl aria-labelledby="ks-look-keys-label" options={KEY_HIGHLIGHTS} value={keyHighlight} onChange={onKeyHighlight} block />
           {style === "fx" && (
             <div className="ks-look__fx">
               <Suspense fallback={<p className="ks-look__loading glass-text">Loading looks…</p>}>

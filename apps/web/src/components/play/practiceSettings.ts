@@ -4,6 +4,7 @@ import { METRONOME_SOUNDS, type MetronomeSound } from "../../utils/clickTimbres"
 import type { LoopOptions } from "./practiceSession";
 import type { VisibilityMode } from "./stageLayout";
 import { isNotesStyle, type NotesStyle } from "./renderers";
+import { DEFAULT_KEY_HIGHLIGHT, isKeyHighlight, type KeyHighlight } from "../piano/keyHighlight";
 import type { DeviceClass } from "../../utils/appearance";
 
 // Continuous speed and look-ahead. Bounds are set by what the engine and API accept:
@@ -35,6 +36,8 @@ export interface Settings extends LoopOptions {
   visibilityMode: VisibilityMode;
   accompanimentMute: AccompanimentMute;
   notesStyle: NotesStyle;
+  /** How the keys light up when pressed or expected. */
+  keyHighlight: KeyHighlight;
   /** Note names on the keys. */
   showLabels: boolean;
 }
@@ -56,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   speedUpStartPct: 60,
   cleanAccuracyPct: 90,
   notesStyle: "classic",
+  keyHighlight: DEFAULT_KEY_HIGHLIGHT,
   showLabels: true,
 };
 
@@ -96,6 +100,7 @@ export function loadSettings(device: DeviceClass): Settings {
       speedUpStartPct: clampNum(parsed.speedUpStartPct, TEMPO_MIN_PCT, 95, 60),
       cleanAccuracyPct: clampNum(parsed.cleanAccuracyPct, 50, 100, 90),
       notesStyle: isNotesStyle(parsed.notesStyle) ? parsed.notesStyle : "classic",
+      keyHighlight: isKeyHighlight(parsed.keyHighlight) ? parsed.keyHighlight : DEFAULT_KEY_HIGHLIGHT,
       showLabels: parsed.showLabels !== false,
     };
   } catch {

@@ -796,6 +796,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
                 showHint={false}
                 showLabels={settings.showLabels}
                 handByNote={handByNote}
+                keyHighlight={settings.keyHighlight}
                 maxWhiteKeyHeightPx={pianoHeightPx}
               />
             </div>
@@ -876,6 +877,8 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
             }}
             style={settings.notesStyle}
             onStyle={(style) => set("notesStyle", style)}
+            keyHighlight={settings.keyHighlight}
+            onKeyHighlight={(value) => set("keyHighlight", value)}
             iconOnly={phone}
           />
           <button type="button" className="ks-practice-iconbtn" onClick={() => openSettings()} aria-label="Practice settings" title="Practice settings">

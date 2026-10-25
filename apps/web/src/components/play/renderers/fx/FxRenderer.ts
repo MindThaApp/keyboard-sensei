@@ -575,6 +575,7 @@ export class FxRenderer implements WaterfallRenderer {
       this.hotSpark.set(this.accent, 3);
     }
     line.uniforms.uAccent.value.fromArray(this.accent);
+    this.keyLights.setAccent(this.accent[0]!, this.accent[1]!, this.accent[2]!);
     line.uniforms.uBright.value = p.lineBrightness;
     line.uniforms.uFlame.value = p.flameHeight;
     line.uniforms.uFlick.value = p.flameFlicker;
@@ -617,6 +618,8 @@ export class FxRenderer implements WaterfallRenderer {
           noteColor(p, stub, geometry.lowestNote, geometry.highestNote, this.pitchRgb, (hand * 128 + midi) * 3);
         }
       }
+      // Keys the player holds with no song note take their pitch colour on a per-pitch look.
+      this.keyLights.setBase(p.colorMode === "byPitch" ? this.pitchRgb.subarray(0, 128 * 3) : null);
     }
   }
 

@@ -136,25 +136,77 @@
     background-color 200ms ease-out,
     box-shadow 220ms ease-out;
 }
-.ks-key[data-lit="true"]::before {
-  background-color: rgb(var(--key-light) / 0.92);
-  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.9) 0%, rgb(255 255 255 / 0.35) 14%, rgb(255 255 255 / 0) 48%),
-    linear-gradient(180deg, rgb(0 0 0 / 0) 60%, rgb(0 0 0 / 0.18) 100%);
+/*
+ * Lit and pressed keys. data-lit is what the song expects (FX colours), data-down is what
+ * the player holds. --kc is the key's colour as "r g b": the song note's colour when lit,
+ * else the look's pitch/accent colour (--key-base), else the hand colour outside FX.
+ * A held key is lit from inside: a near-white core fading to the colour at the edges and
+ * foot, a bright top rim, light spilling onto the neighbours and a soft flare rising above
+ * the hit line. A key that is only expected is the same at a lower level inside an outline.
+ * --core and --flare set the strength per mode; the colours are the only per-key values.
+ */
+.ks-key { --hl: var(--note-right); --kc: var(--note-right-rgb, 242 71 95); --lvl: 1; }
+.ks-key[data-hand="left"] { --hl: var(--note-left); --kc: var(--note-left-rgb, 76 125 255); }
+.ks-keybed[data-key-lights="on"] .ks-key { --kc: var(--key-base, var(--key-accent, 255 160 60)); }
+.ks-keybed[data-key-lights="on"] .ks-key[data-lit="true"] { --kc: var(--key-light); }
+.ks-keybed[data-key-mode="glow"] { --core: 1; --flare: 1; }
+.ks-keybed[data-key-mode="strong"] { --core: 0.85; --flare: 0.8; }
+.ks-keybed[data-key-mode="soft"] { --core: 0.5; --flare: 0.3; }
+
+.ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"])):not([data-down="true"]) {
+  --lvl: 0.55;
+}
+.ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"]))::before {
+  background-color: rgb(var(--kc) / calc(0.6 + 0.4 * var(--lvl)));
+  background-image:
+    radial-gradient(ellipse 95% 100% at 50% 8%, rgb(255 255 255 / calc(var(--core) * var(--lvl))) 0%, rgb(255 255 255 / calc(0.9 * var(--core) * var(--lvl))) 38%, rgb(255 255 255 / calc(0.35 * var(--core) * var(--lvl))) 68%, rgb(255 255 255 / 0) 100%),
+    linear-gradient(180deg, rgb(255 255 255 / calc(0.55 * var(--core) * var(--lvl))) 0, rgb(255 255 255 / 0) 38%),
+    linear-gradient(180deg, rgb(0 0 0 / 0) 55%, rgb(0 0 0 / 0.2) 100%);
+  box-shadow: inset 0 4px 3px -1px rgb(255 255 255 / 0.95);
   transition: none;
 }
-.ks-key-white[data-lit="true"] {
+.ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key-white:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"])) {
   z-index: 5;
   box-shadow:
     inset -1px 0 0 rgb(0 0 0 / 0.16),
-    0 0 8px 2px rgb(var(--key-light) / 0.95),
-    0 0 26px 8px rgb(var(--key-light) / 0.55),
-    0 -18px 30px 2px rgb(var(--key-light) / 0.45);
+    0 0 8px 2px rgb(var(--kc) / calc(0.95 * var(--lvl))),
+    0 0 26px 8px rgb(var(--kc) / calc(0.6 * var(--core) * var(--lvl))),
+    0 -40px 30px -4px rgb(var(--kc) / calc(1 * var(--flare) * var(--lvl))),
+    0 -100px 64px -14px rgb(var(--kc) / calc(0.7 * var(--flare) * var(--lvl)));
 }
-.ks-key-black[data-lit="true"] {
+.ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key-black:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"])) {
   box-shadow:
-    0 0 8px 2px rgb(var(--key-light) / 0.95),
-    0 0 24px 8px rgb(var(--key-light) / 0.5),
-    0 -18px 28px 2px rgb(var(--key-light) / 0.45);
+    0 0 8px 2px rgb(var(--kc) / calc(0.95 * var(--lvl))),
+    0 0 24px 7px rgb(var(--kc) / calc(0.6 * var(--core) * var(--lvl))),
+    0 -36px 26px -4px rgb(var(--kc) / calc(1 * var(--flare) * var(--lvl))),
+    0 -90px 56px -14px rgb(var(--kc) / calc(0.7 * var(--flare) * var(--lvl)));
+}
+/* Expected but not held: the same light, lower, inside an outline. */
+.ks-keybed:is([data-key-mode="soft"], [data-key-mode="strong"], [data-key-mode="glow"]) .ks-key[data-lit="true"]:not([data-down="true"])::before {
+  box-shadow: inset 0 0 0 2px rgb(var(--kc) / 0.9), inset 0 3px 2px -1px rgb(255 255 255 / 0.6);
+}
+/* Light on the keybed under the lit keys: the felt line glows too. */
+.ks-keybed[data-key-lights="on"]:is([data-key-mode="glow"], [data-key-mode="strong"]) .ks-case-felt {
+  box-shadow: 0 0 18px 4px rgb(var(--key-accent, 255 255 255) / 0.35);
+}
+
+/* Flat colour: the fill and nothing else. */
+.ks-keybed[data-key-mode="flat"] .ks-key:is([data-lit="true"], [data-down="true"]:is([data-tint="right"], [data-tint="left"]))::before {
+  background-color: rgb(var(--kc) / 0.95);
+  background-image: none;
+  box-shadow: none;
+}
+
+/* Off: the keys only move. */
+.ks-keybed[data-key-mode="off"] .ks-key[data-tint="right"]::before,
+.ks-keybed[data-key-mode="off"] .ks-key[data-tint="left"]::before {
+  background-color: transparent;
+}
+
+/* Expected but not held (Wait for me): an outline in the hand's colour, not a fill. */
+.ks-keybed:not([data-key-mode="off"]) .ks-key[data-expected="true"]:not([data-down="true"], [data-lit="true"])::before {
+  background-color: color-mix(in srgb, var(--hl) 22%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hl) 80%, transparent);
 }
 
 /* Next-expected key: a red dot with a 3 px halo. */

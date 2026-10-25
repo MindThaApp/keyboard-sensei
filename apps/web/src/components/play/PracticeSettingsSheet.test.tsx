@@ -51,7 +51,7 @@ describe("PracticeSettingsSheet", () => {
     const expected: Record<string, string[]> = {
       Play: ["Version", "Speed", "Wait for me", "Play the other hand for me", "Keyboard status"],
       Loop: ["Loop a few bars", "Repeat until I get it right", "Speed up when I get it right", "Speed-up starts at", "Right means at least"],
-      Look: ["Show", "Notes style", "Note names on the keys", "How far ahead you see", "Seeing further makes", "Key size"],
+      Look: ["Show", "Notes style", "Key highlight", "Note names on the keys", "How far ahead you see", "Seeing further makes", "Key size"],
       Sound: ["Play my part along with me", "Play the left-out notes quietly", "Metronome", "Click"],
     };
     for (const [tab, titles] of Object.entries(expected)) {
@@ -67,5 +67,14 @@ describe("PracticeSettingsSheet", () => {
     openTab("Look");
     const show = screen.getByRole("radiogroup", { name: /Show/ });
     for (const name of ["Notes", "Sheet", "Both"]) expect(show.querySelector(`[title="${name}"]`)).not.toBeNull();
+  });
+
+  it("shows the key highlight choices on the Look tab, whatever the notes style", () => {
+    render(<Harness />);
+    openTab("Look");
+    const group = screen.getByRole("radiogroup", { name: /Key highlight/ });
+    for (const name of ["Match look", "Glow", "Flat", "Off"]) expect(group.querySelector(`[title="${name}"]`)).not.toBeNull();
+    fireEvent.click(group.querySelector('[title="Glow"]') as HTMLElement);
+    expect(screen.getByRole("radiogroup", { name: /Key highlight/ }).querySelector('[aria-checked="true"]')?.getAttribute("title")).toBe("Glow");
   });
 });
