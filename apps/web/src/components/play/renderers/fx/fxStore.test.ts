@@ -36,13 +36,15 @@ describe("fxStore", () => {
 
   it("a tweak on a preset becomes Custom, starting from that preset, and leaves the preset alone", () => {
     selectFxPreset("glassBlue");
+    const presetSparks = FX_PRESET_PARAMS.glassBlue.sparkCount;
     tweakFx({ sparkCount: 1200 });
     const state = getFxState();
     expect(state.preset).toBe("custom");
     expect(state.custom.sparkCount).toBe(1200);
     expect(state.custom.body).toBe("glass");
     expect(state.custom.hue).toBe(FX_PRESET_PARAMS.glassBlue.hue);
-    expect(FX_PRESET_PARAMS.glassBlue.sparkCount).toBe(3000);
+    expect(FX_PRESET_PARAMS.glassBlue.sparkCount).toBe(presetSparks);
+    expect(presetSparks).not.toBe(1200);
   });
 
   it("Custom keeps the tweaks when another preset is tried and Custom is picked again", () => {

@@ -3,6 +3,7 @@ import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { useMidiContext } from "../midi/MidiContext";
 import { isBlackKey } from "../play/waterfall";
 import { PIANO_LOWEST, PIANO_HIGHEST, type KeyRange } from "../../utils/keyboardRange";
+import { getKeyLights, keyLightRgb, subscribeKeyLights, type KeyLightState } from "./keyLights";
 import { useKeyboardSizing, ZOOM_MIN_PX, ZOOM_MAX_PX, type KeyboardSizing } from "./useKeyboardSizing";
 import InstrumentPicker from "../instruments/InstrumentPicker";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
@@ -113,6 +114,7 @@ const PianoKey = memo(function PianoKey({
       }}
       aria-label={name}
       aria-pressed={down}
+      data-note={note}
       data-down={down}
       data-tint={tint}
       className={`ks-key absolute top-0 ${black ? "ks-key-black z-10" : "ks-key-white"}`}
@@ -292,6 +294,49 @@ function VirtualPiano({
     const keysOffset = keys.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
     scroller.scrollLeft = Math.max(0, Math.round(keysOffset + centre - scroller.clientWidth / 2));
   }, [geometry, focusLow, focusHigh, scrollable, containerWidth]);
+
+  // Keys a notes style lights in its own colours (FX). Applied to the key elements
+  // directly: these change with every note, and must not re-render the keyboard.
+  useEffect(() => {
+    if (flat) return;
+    const keybed = scrollerRef.current;
+    if (!keybed) return;
+    // Key elements by note, found once per layout; each update touches only the keys
+    // whose light changed, so a chord costs a handful of style writes.
+    const keys: (HTMLElement | undefined)[] = [];
+    for (const key of keybed.querySelectorAll<HTMLElement>("[data-note]")) keys[Number(key.dataset.note)] = key;
+    const shown = new Uint32Array(128);
+    const colour = new Uint32Array(128);
+    const apply = ({ active, lit }: KeyLightState) => {
+      if (active !== (keybed.dataset.keyLights === "on")) {
+        if (active) keybed.dataset.keyLights = "on";
+        else delete keybed.dataset.keyLights;
+      }
+      for (let note = 0; note < 128; note++) {
+        const packed = lit[note] ?? 0;
+        if (packed === shown[note]) continue;
+        shown[note] = packed;
+        const key = keys[note];
+        if (!key) continue;
+        if (packed) {
+          // The colour stays set after the light goes off, so the key fades out in it.
+          if (colour[note] !== packed) {
+            colour[note] = packed;
+            key.style.setProperty("--key-light", keyLightRgb(packed));
+          }
+          key.dataset.lit = "true";
+        } else {
+          delete key.dataset.lit;
+        }
+      }
+    };
+    apply(getKeyLights());
+    const unsubscribe = subscribeKeyLights(apply);
+    return () => {
+      unsubscribe();
+      for (const key of keys) if (key) delete key.dataset.lit;
+    };
+  }, [flat, geometry]);
 
   // Keep the next expected notes and the ones sounding in view when the keyboard scrolls.
   // Instant (scrollLeft), never smooth: this fires on every note change.

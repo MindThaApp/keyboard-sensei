@@ -20,13 +20,13 @@ export interface FxTier {
 
 export const FX_TIERS: Record<QualityTier, FxTier> = {
   ultra: { dprCap: TIERS.ultra.dprCap, sparks: 1, smoke: 1, bloomScale: TIERS.ultra.bloomScale, bloomMips: TIERS.ultra.bloomMips, glassNoise: true },
-  high: { dprCap: TIERS.high.dprCap, sparks: 0.75, smoke: 0.75, bloomScale: 0.25, bloomMips: 3, glassNoise: true },
-  medium: { dprCap: TIERS.medium.dprCap, sparks: 0.35, smoke: 0.35, bloomScale: 0.125, bloomMips: 2, glassNoise: true },
+  high: { dprCap: TIERS.high.dprCap, sparks: 0.75, smoke: 0.75, bloomScale: 0.25, bloomMips: 4, glassNoise: true },
+  medium: { dprCap: TIERS.medium.dprCap, sparks: 0.35, smoke: 0.35, bloomScale: 0.125, bloomMips: 3, glassNoise: true },
   minimal: { dprCap: TIERS.minimal.dprCap, sparks: 0, smoke: 0, bloomScale: 0, bloomMips: 0, glassNoise: false },
 };
 
 /** Most smoke sprites ever alive; the pool is allocated once at this size. */
-export const MAX_SMOKE = 48;
+export const MAX_SMOKE = 72;
 /** Most sparks ever alive. */
 export const MAX_SPARKS = 5000;
 
