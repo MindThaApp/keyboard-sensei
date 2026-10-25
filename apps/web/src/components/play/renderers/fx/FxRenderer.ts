@@ -618,6 +618,8 @@ export class FxRenderer implements WaterfallRenderer {
           noteColor(p, stub, geometry.lowestNote, geometry.highestNote, this.pitchRgb, (hand * 128 + midi) * 3);
         }
       }
+      // Keys the player holds with no song note take their pitch colour on a per-pitch look.
+      this.keyLights.setBase(p.colorMode === "byPitch" ? this.pitchRgb.subarray(0, 128 * 3) : null);
     }
   }
 

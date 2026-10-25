@@ -17,12 +17,14 @@ export interface KeyLightState {
   lit: KeyLightTable;
   /** Packed colour of the look's accent: what a key you press lights in when the song is not on it. 0 when unknown. */
   accent: number;
+  /** Packed colour per MIDI note for a key the player holds that the song is not on: its pitch colour on a per-pitch look, else the accent. */
+  base: KeyLightTable;
 }
 
 type Listener = (state: KeyLightState) => void;
 
 const listeners = new Set<Listener>();
-let state: KeyLightState = { active: false, lit: new Uint32Array(128), accent: 0 };
+let state: KeyLightState = { active: false, lit: new Uint32Array(128), accent: 0, base: new Uint32Array(128) };
 /** The writer whose lights are showing; a writer that was replaced never clears them. */
 let owner: KeyLightWriter | null = null;
 
@@ -61,13 +63,26 @@ export class KeyLightWriter {
   private shown = new Uint32Array(128);
   private active = false;
   private accent = 0;
+  private base = new Uint32Array(128);
+
+  /**
+   * The colour of keys the player holds with no song note on them: `pitch` (3 floats per MIDI
+   * note, 0..1) when the look colours by pitch, otherwise null for the accent colour.
+   */
+  setBase(pitch: ArrayLike<number> | null): void {
+    const next = new Uint32Array(128);
+    for (let i = 0; i < 128; i++) next[i] = pitch ? packKeyLight(pitch[i * 3]!, pitch[i * 3 + 1]!, pitch[i * 3 + 2]!) : 0;
+    if (next.every((v, i) => v === this.base[i])) return;
+    this.base = next;
+    if (this.active && owner === this) publish({ active: true, lit: this.shown, accent: this.accent, base: next });
+  }
 
   /** The look's accent colour (0..1 rgb), for keys the player presses that the song is not on. */
   setAccent(r: number, g: number, b: number): void {
     const packed = packKeyLight(r, g, b);
     if (packed === this.accent) return;
     this.accent = packed;
-    if (this.active && owner === this) publish({ active: true, lit: this.shown, accent: packed });
+    if (this.active && owner === this) publish({ active: true, lit: this.shown, accent: packed, base: this.base });
   }
 
   /** The style is drawing (true) or gone (false); turning off clears every light. */
@@ -79,7 +94,7 @@ export class KeyLightWriter {
     if (active) owner = this;
     else if (owner !== this) return;
     else owner = null;
-    publish({ active, lit: this.shown, accent: this.accent });
+    publish({ active, lit: this.shown, accent: this.accent, base: this.base });
   }
 
   begin(): void {
@@ -102,7 +117,7 @@ export class KeyLightWriter {
     }
     if (!changed) return false;
     this.shown = this.next.slice();
-    publish({ active: true, lit: this.shown, accent: this.accent });
+    publish({ active: true, lit: this.shown, accent: this.accent, base: this.base });
     return true;
   }
 }

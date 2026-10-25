@@ -23,9 +23,10 @@ export function isKeyHighlight(value: unknown): value is KeyHighlight {
  * - off: no lighting
  * - flat: a solid fill in the note colour
  * - soft: fill, bright top edge and a gentle glow (the match-look treatment for classic styles)
- * - glow: fill, bright top edge and light spilling onto the neighbours and the keybed
+ * - strong: the match-look treatment in FX, close to glow
+ * - glow: the strongest: white-hot core, light spilling onto the neighbours and keybed, and a flare above the keys
  */
-export type KeyMode = "off" | "flat" | "soft" | "glow";
+export type KeyMode = "off" | "flat" | "soft" | "strong" | "glow";
 
 /** `fx` is true while a style that lights keys in its own colours (FX) is drawing. */
 export function resolveKeyMode(setting: KeyHighlight, fx: boolean): KeyMode {
@@ -37,6 +38,6 @@ export function resolveKeyMode(setting: KeyHighlight, fx: boolean): KeyMode {
     case "glow":
       return "glow";
     default:
-      return fx ? "glow" : "soft";
+      return fx ? "strong" : "soft";
   }
 }
