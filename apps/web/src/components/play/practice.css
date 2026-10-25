@@ -715,3 +715,15 @@ html.dark .ks-heatmap__cell:not([data-tone="empty"]) {
 .ks-practice[data-focus] .glass.ks-practice-module {
   background: rgb(var(--glass-base) / 0.94);
 }
+
+.ks-fx-fine {
+  margin-top: 8px;
+}
+.ks-fx-fine__summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
