@@ -14,6 +14,7 @@ import type { NativeBluetoothMidiDevice } from "@keyboard-sensei/midi-engine/cap
 import { createHardwareMidiAdapter, isHardwareMidiSupported, supportsBluetoothMidiScan, type HardwareMidiAdapter } from "../../native/hardwareMidi";
 import { isNativeApp } from "../../native/platform";
 import { pianoSynth } from "../../utils/synth";
+import { gatedMonitor } from "../../utils/monitorKeys";
 import {
   DEFAULT_RANGE,
   autoRangePreference,
@@ -175,16 +176,19 @@ export function MidiProvider({ children }: { children: ReactNode }) {
     // Control changes carry the adapter's own timestamp (the performance.now()
     // basis the notes use). They used to be stamped with Date.now(), which put a
     // recorded sustain pedal ~decades away from the notes it was holding.
-    const handleControlChange = (controller: number, value: number, timestampMs: number) => {
+    // Real keyboard input goes through the monitor gate; the on-screen piano (the mock
+    // adapter) always sounds, since nothing else would.
+    const hardwareSynth = gatedMonitor(pianoSynth);
+    const makeControlChange = (synth: typeof pianoSynth | typeof hardwareSynth) => (controller: number, value: number, timestampMs: number) => {
       if (controller !== 64) return;
       const event = { controller, value, timestampMs };
       for (const listener of controlChangeListenersRef.current) listener(event);
       const down = value >= 64;
-      pianoSynth.setSustainPedal(down);
+      synth.setSustainPedal(down);
       setSustainPedalDown((current) => (current === down ? current : down));
     };
-    const handleNoteOff = (note: number, timestampMs: number) => {
-      pianoSynth.stopNote(note);
+    const makeNoteOff = (synth: typeof pianoSynth | typeof hardwareSynth) => (note: number, timestampMs: number) => {
+      synth.stopNote(note);
       emit({ note, velocity: 0, type: "noteoff", timestampMs });
     };
 
@@ -194,14 +198,14 @@ export function MidiProvider({ children }: { children: ReactNode }) {
         pianoSynth.playNote(note, velocity);
         emit({ note, velocity, type: "noteon", timestampMs });
       }),
-      mockAdapter.onNoteOff(handleNoteOff),
-      mockAdapter.onControlChange(handleControlChange),
-      webAdapter.onNoteOff(handleNoteOff),
-      webAdapter.onControlChange(handleControlChange),
+      mockAdapter.onNoteOff(makeNoteOff(pianoSynth)),
+      mockAdapter.onControlChange(makeControlChange(pianoSynth)),
+      webAdapter.onNoteOff(makeNoteOff(hardwareSynth)),
+      webAdapter.onControlChange(makeControlChange(hardwareSynth)),
     );
 
     unsubscribers.push(webAdapter.onNoteOn((note, velocity, timestampMs) => {
-      pianoSynth.playNote(note, velocity);
+      hardwareSynth.playNote(note, velocity);
       const currentCalibration = calibrationRef.current;
       const calibrationHandled = currentCalibration.status !== "idle";
       if (currentCalibration.status === "awaitingLow") {

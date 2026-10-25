@@ -40,6 +40,36 @@ export interface Settings extends LoopOptions {
   keyHighlight: KeyHighlight;
   /** Note names on the keys. */
   showLabels: boolean;
+  /** The song-audio values from before "Only my notes" was turned on, so turning it off restores them. */
+  songAudioBackup: SongAudio | null;
+}
+
+/** The three sources of song sound: your part, the left-out notes and the other hand. */
+export interface SongAudio {
+  guideAudio: boolean;
+  removed: boolean;
+  otherHand: boolean;
+}
+
+const DEFAULT_SONG_AUDIO: SongAudio = { guideAudio: true, removed: false, otherHand: false };
+
+const songAudioOf = (s: Settings): SongAudio => ({ guideAudio: s.guideAudio, removed: s.accompanimentMute.removed, otherHand: s.accompanimentMute.otherHand });
+
+/** "Only my notes" is on exactly when all three song-audio sources are off. */
+export const isOnlyMyNotes = (s: Settings): boolean => !s.guideAudio && s.accompanimentMute.removed && s.accompanimentMute.otherHand;
+
+/**
+ * Turns "Only my notes" on (all song audio off, remembering what it was) or off (restoring
+ * the remembered values, or the defaults). Turning any one source back on by hand makes
+ * isOnlyMyNotes false by itself, so the switch needs no state of its own.
+ */
+export function setOnlyMyNotes(s: Settings, on: boolean): Settings {
+  if (on === isOnlyMyNotes(s)) return s;
+  if (on) {
+    return { ...s, songAudioBackup: songAudioOf(s), guideAudio: false, accompanimentMute: { removed: true, otherHand: true } };
+  }
+  const back = s.songAudioBackup && !(!s.songAudioBackup.guideAudio && s.songAudioBackup.removed && s.songAudioBackup.otherHand) ? s.songAudioBackup : DEFAULT_SONG_AUDIO;
+  return { ...s, songAudioBackup: null, guideAudio: back.guideAudio, accompanimentMute: { removed: back.removed, otherHand: back.otherHand } };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notesStyle: "classic",
   keyHighlight: DEFAULT_KEY_HIGHLIGHT,
   showLabels: true,
+  songAudioBackup: null,
 };
 
 /**
@@ -73,6 +104,12 @@ export const defaultSettingsFor = (device: DeviceClass): Settings =>
 
 const clampNum = (value: unknown, min: number, max: number, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+
+function parseSongAudio(value: unknown): SongAudio | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<SongAudio>;
+  return { guideAudio: v.guideAudio !== false, removed: Boolean(v.removed), otherHand: Boolean(v.otherHand) };
+}
 
 export function loadSettings(device: DeviceClass): Settings {
   const defaults = defaultSettingsFor(device);
@@ -102,6 +139,7 @@ export function loadSettings(device: DeviceClass): Settings {
       notesStyle: isNotesStyle(parsed.notesStyle) ? parsed.notesStyle : "classic",
       keyHighlight: isKeyHighlight(parsed.keyHighlight) ? parsed.keyHighlight : DEFAULT_KEY_HIGHLIGHT,
       showLabels: parsed.showLabels !== false,
+      songAudioBackup: parseSongAudio(parsed.songAudioBackup),
     };
   } catch {
     return defaults;
