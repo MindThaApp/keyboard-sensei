@@ -18,7 +18,7 @@ import { useMidiContext } from "../midi/MidiContext";
 import { snapRangeToWhiteKeys, useKeyboardSizing } from "../piano/useKeyboardSizing";
 import SongStars from "../progress/SongStars";
 import { Button, ErrorState, GlassSurface, SegmentedControl, Stepper, Toast } from "../ui";
-import { useExperienceMode } from "../ui/useExperienceMode";
+import { useBeginnerOpening } from "./beginnerOpening";
 import { notePalette, notePaletteCssVars, stageToneFor } from "./notePalette";
 import { LiveOsmdNotation, LiveVerovioNotation, PlayAlongHud, PlayAlongPiano, WaitAnnouncer } from "./PlayAlongLive";
 import PracticeResultSheet, { submitStateForError, type FinishedRun, type SubmitState } from "./PracticeResultSheet";
@@ -145,7 +145,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const { device, orientation } = useDeviceClass();
   // Only where a song opens (the beginner start and its ladder) still follows the
   // onboarding answer; nothing on this screen is hidden by it.
-  const beginnerOpening = useExperienceMode() === "simple";
+  const beginnerOpening = useBeginnerOpening();
   const reducedMotion = useReducedMotion();
   const focus = useFocusMode({ hotkey: true });
   const location = useLocation();
