@@ -11,10 +11,18 @@
  */
 
 /** Playhead may drift between these fractions of the view width without any correction. */
-export const BAND_MIN = 0.25;
-export const BAND_MAX = 0.7;
+export const BAND_MIN = 0.35;
+export const BAND_MAX = 0.65;
+/** The playhead is steered towards this fraction of the view (the centre). */
+export const CENTRE = 0.5;
 /** Where a seek / loop / restart puts the playhead. */
-export const SEEK_TARGET = 0.35;
+export const SEEK_TARGET = CENTRE;
+/**
+ * Centring pull: the steady speed is scaled by 1 + CENTRE_GAIN * (error / viewWidth), where
+ * error is how far right of centre the playhead is. A smooth, proportional nudge to the speed
+ * (never a jump), strong enough to keep the highlight hovering near the middle.
+ */
+const CENTRE_GAIN = 2.2;
 /** Time constant (s) of the gentle band correction. */
 const BAND_TAU_S = 0.7;
 /** Time constant (s) of the glide after a seek: quick, but visibly animated. */
@@ -92,7 +100,7 @@ export function stepFollow(state: FollowState, input: FollowInput): number {
   state.lastSongTimeS = songTimeS;
 
   if (first) {
-    state.offset = offsetFor(cursorX, BAND_MIN, input);
+    state.offset = offsetFor(cursorX, CENTRE, input);
     state.glideTo = null;
     state.speedAtS = -Infinity;
     return state.offset;
@@ -124,7 +132,7 @@ export function stepFollow(state: FollowState, input: FollowInput): number {
   if (input.reducedMotion) {
     // No continuous motion: hold still, and when the playhead leaves the band re-place it.
     const pos = cursorX - state.offset;
-    if (pos < viewWidth * BAND_MIN || pos > viewWidth * BAND_MAX) state.offset = offsetFor(cursorX, BAND_MIN, input);
+    if (pos < viewWidth * BAND_MIN || pos > viewWidth * BAND_MAX) state.offset = offsetFor(cursorX, CENTRE, input);
     return state.offset;
   }
 
@@ -134,8 +142,12 @@ export function stepFollow(state: FollowState, input: FollowInput): number {
     state.speedPxPerS = averageSpeed(input.xAt, songTimeS, viewWidth);
     state.speedAtS = songTimeS;
   }
-  // (At the very start the ribbon waits until the playhead has reached the band.)
-  if (state.offset > 0 || cursorX > viewWidth * BAND_MIN) state.offset += state.speedPxPerS * songDt;
+  // The speed is nudged in proportion to how far the playhead is from the centre, so it
+  // keeps hovering around the middle. (At the very start the ribbon waits, clamped at 0,
+  // until the playhead has reached the centre.)
+  const centreError = (cursorX - state.offset - viewWidth * CENTRE) / viewWidth;
+  const pull = clamp(1 + CENTRE_GAIN * centreError, 0.4, 1.8);
+  if (state.offset > 0 || centreError >= 0) state.offset += state.speedPxPerS * pull * songDt;
 
   // Gentle correction only when the playhead would leave the band.
   const pos = cursorX - state.offset;

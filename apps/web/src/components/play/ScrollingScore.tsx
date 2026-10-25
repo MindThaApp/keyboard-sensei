@@ -264,7 +264,7 @@ const MAX_VIEWPORT_HEIGHT_PX = 340;
  * NotationRenderer's `setActiveNoteIds`, a CSS-class toggle on the drawn
  * SVG). At the start the highlight moves
  * rightward while the ribbon stays still; once it reaches the viewport's
- * band (25-70% of the view) it drifts there while the ribbon scrolls
+ * band (35-65% of the view, steered to the centre) it drifts there while the ribbon scrolls
  * right-to-left at a steady, averaged speed; near the end (once the ribbon has
  * run out) the highlight resumes moving to the right edge. The camera maths is
  * in scrollFollow.ts.
