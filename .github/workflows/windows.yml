@@ -11,7 +11,7 @@ name: Windows
 
 on:
   push:
-    branches: [master]
+    branches: [master, mp/integration]
     paths: ["apps/windows/**", "apps/web/**", "packages/**", ".github/workflows/windows.yml", "pnpm-lock.yaml"]
   pull_request:
     paths: ["apps/windows/**", "apps/web/**", "packages/**", ".github/workflows/windows.yml", "pnpm-lock.yaml"]
