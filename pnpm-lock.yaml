@@ -162,6 +162,9 @@ importers:
       '@keyboard-sensei/music-theory':
         specifier: workspace:*
         version: link:../../packages/music-theory
+      '@keyboard-sensei/piano-tuning':
+        specifier: workspace:*
+        version: link:../../packages/piano-tuning
       '@keyboard-sensei/playalong-core':
         specifier: workspace:*
         version: link:../../packages/playalong-core
@@ -290,6 +293,15 @@ importers:
         version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(jsdom@30.1.3)(tsx@4.22.4)
 
   packages/music-theory:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(jsdom@30.1.3)(tsx@4.22.4)
+
+  packages/piano-tuning:
     devDependencies:
       typescript:
         specifier: ^5.8.3
