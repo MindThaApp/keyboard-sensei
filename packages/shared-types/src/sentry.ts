@@ -59,10 +59,24 @@ export function scrubString(value: string): string {
     .replace(ANDROID_DATA, "/data/app");
 }
 
+export const AUDIO_REMOVED = "[audio removed]";
+
+/** Float sample arrays (Web Audio's format) and AudioBuffer / MediaStream-like objects. */
+function isAudioLike(value: object): boolean {
+  if (value instanceof Float32Array || value instanceof Float64Array) return true;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate["getChannelData"] === "function") return true;
+  if (typeof candidate["getAudioTracks"] === "function") return true;
+  return typeof candidate["sampleRate"] === "number" && typeof candidate["numberOfChannels"] === "number";
+}
+
 function scrubValue(value: unknown, depth: number): unknown {
   if (typeof value === "string") return scrubString(value);
   if (value === null || typeof value !== "object") return value;
   if (depth >= MAX_DEPTH) return "[truncated]";
+  // Microphone audio never leaves the device, not even inside a crash report: sample
+  // arrays and AudioBuffer-like objects are dropped (docs/specs/MUSIC-PORTAL.md 4.8).
+  if (isAudioLike(value)) return AUDIO_REMOVED;
   // Binary payloads (screenshot attachments) pass through untouched.
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return value;
   if (Array.isArray(value)) return value.slice(0, MAX_ARRAY).map((item) => scrubValue(item, depth + 1));
