@@ -9,7 +9,7 @@ const refreshProgress = () => {
 };
 
 /** Starts offline sync, re-runs it on sign-in, and shows a note while offline or while attempts wait. */
-export default function OfflineSync() {
+export default function OfflineStatusBanner() {
   const { authenticated } = useAuth();
   const [status, setStatus] = useState<OfflineStatus>(offlineStatus);
 
