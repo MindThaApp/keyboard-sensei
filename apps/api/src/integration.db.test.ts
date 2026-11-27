@@ -1666,7 +1666,8 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
         expect(item.tier, item.id).toBe(expected.tier);
         expect(item.skills, item.id).toEqual(expected.skills);
-        perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
+        // Other instruments count their own tiers; the piano course keeps these numbers.
+        if (!expected.instrument) perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
       }
       expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
       const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
