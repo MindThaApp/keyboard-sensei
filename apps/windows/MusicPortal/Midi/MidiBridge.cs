@@ -59,7 +59,7 @@ public sealed class MidiBridge : IDisposable
             started = true;
             enumerated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             watcher = DeviceInformation.CreateWatcher(MidiInPort.GetDeviceSelector());
-            watcher.Added += (_, info) => _ = OpenAsync(info.Id, info.Name);
+            watcher.Added += (sender, info) => _ = OpenAsync(info.Id, info.Name);
             watcher.Removed += (_, update) => Close(update.Id);
             watcher.Updated += (_, _) => { };
             watcher.EnumerationCompleted += (_, _) => enumerated.TrySetResult();
