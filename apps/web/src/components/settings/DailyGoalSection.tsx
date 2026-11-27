@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { updateDailyGoal, type DailyGoalMinutes } from "../../services/api";
@@ -5,6 +6,7 @@ import DailyGoalPicker from "./DailyGoalPicker";
 
 /** Settings → Account: the daily practice goal. Saves on pick. */
 export default function DailyGoalSection() {
+  useT();
   const { user, setUser } = useAuth();
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -16,9 +18,9 @@ export default function DailyGoalSection() {
     setError(null);
     try {
       setUser(await updateDailyGoal(minutes));
-      setStatus(`Daily goal set to ${minutes} minutes.`);
+      setStatus(t("settings.goalSet", { minutes }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save your goal");
+      setError(e instanceof Error ? e.message : t("goal.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -28,10 +30,10 @@ export default function DailyGoalSection() {
     <section className="card space-y-3 p-5" aria-labelledby="daily-goal-heading">
       <div>
         <h2 id="daily-goal-heading" className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Daily practice goal
+          {t("settings.dailyGoal")}
         </h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Your streak counts the days you meet it. Changing it applies from today; days already met stay met.
+          {t("settings.dailyGoalHint")}
         </p>
       </div>
       <DailyGoalPicker value={user?.daily_goal_minutes ?? 10} onChange={(minutes) => void choose(minutes)} disabled={saving || !user} />

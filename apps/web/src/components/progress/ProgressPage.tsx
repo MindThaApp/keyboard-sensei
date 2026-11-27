@@ -1,3 +1,5 @@
+import { tRich } from "../../i18n";
+import { t, getLocale, useT } from "../../i18n";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getProgression, type Achievement, type AchievementCategory, type ProgressionResponse } from "../../services/api";
@@ -13,12 +15,9 @@ import PracticeHistory from "./PracticeHistory";
 import { buildWeek, formatMinutes, StarRating, WeekDots } from "./ProgressBits";
 
 type Tab = "overview" | "achievements" | "history";
-const TABS: { value: Tab; label: string }[] = [
-  { value: "overview", label: "Overview" },
-  { value: "achievements", label: "Achievements" },
-  { value: "history", label: "History" },
-];
-const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.value === value);
+const TAB_VALUES: Tab[] = ["overview", "achievements", "history"];
+const tabs = (): { value: Tab; label: string }[] => TAB_VALUES.map((value) => ({ value, label: t(`progress.tab.${value}`) }));
+const isTab = (value: string | null): value is Tab => TAB_VALUES.some((tab) => tab === value);
 
 const MEDALS_SHOWN = 6;
 
@@ -43,22 +42,23 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 }
 
 function LevelCard({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const { level } = progression;
   return (
-    <Card as="section" aria-label="Level">
+    <Card as="section" aria-label={t("progress.level")}>
       <div className="flex items-center gap-4">
         <ProgressRing
           value={level.xpForNextLevel > 0 ? level.xpIntoLevel / level.xpForNextLevel : 0}
           size={88}
           stroke={9}
           label={level.level}
-          sublabel="level"
-          aria-label={`Level ${level.level}, ${level.xpIntoLevel} of ${level.xpForNextLevel} points to the next level`}
+          sublabel={t("progress.levelWord")}
+          aria-label={t("progress.levelAria", { level: level.level, into: level.xpIntoLevel, next: level.xpForNextLevel })}
         />
         <div className="min-w-0">
           <h2 className="text-title3 text-label">{levelTitle(level.level, level.tier)}</h2>
           <p className="text-subhead text-label-2a">
-            {level.xpIntoLevel} / {level.xpForNextLevel} points to level {level.level + 1}
+            {t("progress.toNext", { into: level.xpIntoLevel, next: level.xpForNextLevel, level: level.level + 1 })}
           </p>
         </div>
       </div>
@@ -67,17 +67,18 @@ function LevelCard({ progression }: { progression: ProgressionResponse }) {
 }
 
 function WeekCard({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const week = useMemo(
     () => buildWeek(progression.today, progression.calendar, progression.frozenDays),
     [progression.today, progression.calendar, progression.frozenDays],
   );
   const metDays = week.filter((day) => day.state === "met").length;
   return (
-    <Card as="section" aria-label="This week">
+    <Card as="section" aria-label={t("progress.thisWeek")}>
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-headline text-label">This week</h2>
+        <h2 className="text-headline text-label">{t("progress.thisWeek")}</h2>
         <p className="text-footnote text-label-2a">
-          {metDays} of 7 days met · goal {progression.dailyGoal.goalMinutes} min a day
+          {t("progress.weekSummary", { met: metDays, goal: progression.dailyGoal.goalMinutes })}
         </p>
       </div>
       <WeekDots days={week} />
@@ -86,9 +87,10 @@ function WeekCard({ progression }: { progression: ProgressionResponse }) {
 }
 
 function Skills({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const strongest = Math.max(1, ...progression.skills.map((skill) => skill.points));
   if (progression.skills.every((skill) => skill.points === 0)) {
-    return <p className="text-subhead text-label-2a">Skill points start counting once you finish a lesson.</p>;
+    return <p className="text-subhead text-label-2a">{t("progress.skillsEmpty")}</p>;
   }
   return (
     <ul className="space-y-2.5">
@@ -97,7 +99,7 @@ function Skills({ progression }: { progression: ProgressionResponse }) {
           <div className="flex items-baseline justify-between text-subhead">
             <span className="text-label">{skill.label}</span>
             <span className="tabular-nums text-footnote text-label-2a" data-testid={`skill-${skill.id}`}>
-              {skill.points} pts
+              {t("progress.pts", { n: skill.points })}
             </span>
           </div>
           <div className="mt-1 h-2 overflow-hidden rounded-pill bg-fill">
@@ -110,6 +112,7 @@ function Skills({ progression }: { progression: ProgressionResponse }) {
 }
 
 function Medals({ achievements }: { achievements: Achievement[] }) {
+  useT();
   const { unlocked, total } = achievementCount(achievements);
   const earned = achievements
     .filter((a) => a.unlocked)
@@ -119,13 +122,13 @@ function Medals({ achievements }: { achievements: Achievement[] }) {
     <section aria-labelledby="medals-heading">
       <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
         <h2 id="medals-heading" className="text-headline text-label">
-          Achievements <span className="text-subhead font-normal tabular-nums text-label-2a">{unlocked} of {total}</span>
+          {t("progress.achievements")} <span className="text-subhead font-normal tabular-nums text-label-2a">{t("progress.ofTotal", { unlocked, total })}</span>
         </h2>
-        <Link to="/progress?tab=achievements" className="inline-flex min-h-hit items-center text-subhead text-tint">See all</Link>
+        <Link to="/progress?tab=achievements" className="inline-flex min-h-hit items-center text-subhead text-tint">{t("progress.seeAll")}</Link>
       </div>
       {earned.length === 0 ? (
         <Card>
-          <EmptyState title="No medals yet" message="Finish your first lesson to earn one." />
+          <EmptyState title={t("progress.noMedals")} message={t("progress.noMedalsMsg")} />
         </Card>
       ) : (
         <ul className="grid grid-cols-3 gap-2">
@@ -142,6 +145,7 @@ function Medals({ achievements }: { achievements: Achievement[] }) {
 }
 
 function StarsCard({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const lessons = useProgressStore((s) => s.lessons);
   const starredSongs = Object.entries(progression.songStars)
     .filter(([, stars]) => stars.best > 0)
@@ -151,14 +155,14 @@ function StarsCard({ progression }: { progression: ProgressionResponse }) {
 
   if (totalLessonStars === 0 && starredSongs.length === 0) {
     return (
-      <Card as="section" aria-label="Stars">
-        <EmptyState title="No stars yet" message="Pass an exercise to earn stars on a lesson, or play a song to the end, hitting 70% of the notes." />
+      <Card as="section" aria-label={t("progress.stars")}>
+        <EmptyState title={t("progress.noStars")} message={t("progress.noStarsMsg")} />
       </Card>
     );
   }
   return (
-    <Card as="section" aria-label="Stars">
-      <h2 className="text-headline text-label">Stars</h2>
+    <Card as="section" aria-label={t("progress.stars")}>
+      <h2 className="text-headline text-label">{t("progress.stars")}</h2>
       {totalLessonStars > 0 && (
         <ul className="mt-2 space-y-2">
           {pathsInOrder(lessons).map((path) => {
@@ -180,7 +184,7 @@ function StarsCard({ progression }: { progression: ProgressionResponse }) {
       {starredSongs.length > 0 && (
         <>
           <h3 className="mt-4 text-subhead font-semibold text-label">
-            Songs · <span className="tabular-nums">{totalSongStars}</span> stars
+            {tRich("progress.songsStars", { n: totalSongStars })}
           </h3>
           <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
             {starredSongs.map(([songId, stars]) => (
@@ -208,6 +212,7 @@ function StarsCard({ progression }: { progression: ProgressionResponse }) {
 }
 
 function Overview({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const { device } = useDeviceClass();
   const loaded = useProgressStore((s) => s.loaded);
   const loadAll = useProgressStore((s) => s.loadAll);
@@ -222,11 +227,11 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
         <div className="space-y-4">
           <LevelCard progression={progression} />
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Practice" value={formatMinutes(progression.practiceMinutes)} hint={`${progression.level.totalXp.toLocaleString()} points total`} />
+            <StatCard label={t("progress.practice")} value={formatMinutes(progression.practiceMinutes)} hint={t("progress.pointsTotal", { n: progression.level.totalXp.toLocaleString(getLocale()) })} />
             <StatCard
-              label="Streak"
-              value={`${streak.current} day${streak.current === 1 ? "" : "s"}`}
-              hint={streak.longest > 0 ? `Best ${streak.longest}` : "Meet your goal to start one"}
+              label={t("progress.streak")}
+              value={t("progress.days", { n: streak.current })}
+              hint={streak.longest > 0 ? t("progress.best", { n: streak.longest }) : t("progress.startStreak")}
             />
           </div>
           <WeekCard progression={progression} />
@@ -237,14 +242,14 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
         </div>
       </div>
       <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Card as="section" aria-label="Skills">
-          <h2 className="mb-3 text-headline text-label">Skills</h2>
+        <Card as="section" aria-label={t("progress.skills")}>
+          <h2 className="mb-3 text-headline text-label">{t("progress.skills")}</h2>
           <Skills progression={progression} />
-          <p className="mt-3 text-footnote text-label-2a">Earned from completed lessons (more for more stars) and from song stars.</p>
+          <p className="mt-3 text-footnote text-label-2a">{t("progress.skillsNote")}</p>
         </Card>
         {progression.recentXp.length > 0 && (
-          <Card as="section" aria-label="Recent points">
-            <h2 className="mb-2 text-headline text-label">Recent points</h2>
+          <Card as="section" aria-label={t("progress.recentPoints")}>
+            <h2 className="mb-2 text-headline text-label">{t("progress.recentPoints")}</h2>
             <ul className="space-y-1.5">
               {progression.recentXp.map((entry, index) => (
                 <li key={index} className="flex justify-between gap-3 text-subhead text-label-2">
@@ -261,6 +266,7 @@ function Overview({ progression }: { progression: ProgressionResponse }) {
 }
 
 function AchievementTile({ achievement }: { achievement: Achievement }) {
+  useT();
   const { current, target } = achievement.progress;
   return (
     <li
@@ -271,11 +277,11 @@ function AchievementTile({ achievement }: { achievement: Achievement }) {
       <p className="flex items-center gap-1.5 text-subhead font-semibold text-label">
         <span aria-hidden>{achievement.unlocked ? "🏅" : "🔒"}</span>
         {achievement.title}
-        {!achievement.unlocked && <span className="sr-only"> (locked)</span>}
+        {!achievement.unlocked && <span className="sr-only"> ({t("common.locked")})</span>}
       </p>
       <p className="text-footnote text-label-2a">{achievement.description}</p>
       {achievement.unlocked ? (
-        achievement.unlockedAt && <p className="text-footnote text-label-2a">Unlocked {new Date(achievement.unlockedAt).toLocaleDateString()}</p>
+        achievement.unlockedAt && <p className="text-footnote text-label-2a">{t("progress.unlockedOn", { date: new Date(achievement.unlockedAt).toLocaleDateString(getLocale()) })}</p>
       ) : (
         target > 1 && (
           <div className="mt-1 flex items-center gap-2">
@@ -293,6 +299,7 @@ function AchievementTile({ achievement }: { achievement: Achievement }) {
 }
 
 function Achievements({ progression }: { progression: ProgressionResponse }) {
+  useT();
   const groups = useMemo(() => {
     const map = new Map<AchievementCategory, Achievement[]>();
     for (const achievement of progression.achievements) {
@@ -304,7 +311,7 @@ function Achievements({ progression }: { progression: ProgressionResponse }) {
   return (
     <div className="space-y-6">
       <p className="text-subhead text-label-2a" data-testid="achievement-total">
-        {unlocked} of {total} unlocked
+        {t("progress.unlockedCount", { unlocked, total })}
       </p>
       {groups.map(([category, achievements]) => (
         <section key={category} aria-labelledby={`cat-${category}`}>
@@ -326,8 +333,9 @@ function Achievements({ progression }: { progression: ProgressionResponse }) {
 }
 
 function ProgressSkeleton(): ReactNode {
+  useT();
   return (
-    <div className="space-y-4" role="status" aria-label="Loading progress">
+    <div className="space-y-4" role="status" aria-label={t("progress.loading")}>
       <Skeleton height={112} radius={20} />
       <Skeleton height={96} radius={20} />
       <Skeleton height={120} radius={20} />
@@ -337,6 +345,7 @@ function ProgressSkeleton(): ReactNode {
 
 /** Level, streak, week, stars and achievements, with the full history on its own tab. */
 export default function ProgressPage() {
+  useT();
   const [params, setParams] = useSearchParams();
   const tab: Tab = isTab(params.get("tab")) ? (params.get("tab") as Tab) : "overview";
   const [progression, setProgression] = useState<ProgressionResponse | null>(null);
@@ -361,10 +370,10 @@ export default function ProgressPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-large-title text-label">Progress</h1>
+      <h1 className="text-large-title text-label">{t("progress.title")}</h1>
       <SegmentedControl
-        aria-label="Progress sections"
-        options={TABS}
+        aria-label={t("progress.sections")}
+        options={tabs()}
         value={tab}
         onChange={(value) => setParams(value === "overview" ? {} : { tab: value })}
       />
@@ -372,9 +381,9 @@ export default function ProgressPage() {
         <PracticeHistory />
       ) : error && !progression ? (
         <ErrorState
-          title="Couldn't load your progress"
-          message="Check your connection and try again."
-          action={<Button variant="filled" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>}
+          title={t("progress.loadError")}
+          message={t("common.checkConnection")}
+          action={<Button variant="filled" onClick={() => setAttempt((n) => n + 1)}>{t("common.tryAgain")}</Button>}
         />
       ) : !progression ? (
         <ProgressSkeleton />

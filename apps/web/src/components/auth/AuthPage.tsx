@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
+import { t, tRich, useT } from "../../i18n";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
 import Wordmark from "../brand/Wordmark";
@@ -11,6 +12,7 @@ type EntryKind = "demo" | "signup" | "login";
 
 /** "or" rule plus the Google button; nothing at all until Google sign-in is configured. */
 function GoogleOption({ onSignedIn }: { onSignedIn(created: boolean): void }) {
+  useT();
   const { loginWithGoogle } = useAuth();
   const [error, setError] = useState<string | null>(null);
   if (!googleSignInEnabled) return null;
@@ -18,7 +20,7 @@ function GoogleOption({ onSignedIn }: { onSignedIn(created: boolean): void }) {
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-        or
+        {t("auth.or")}
         <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
       </div>
       <GoogleSignInButton
@@ -26,7 +28,7 @@ function GoogleOption({ onSignedIn }: { onSignedIn(created: boolean): void }) {
           setError(null);
           loginWithGoogle(credential)
             .then(onSignedIn)
-            .catch((e: unknown) => setError(e instanceof Error ? e.message : "Google sign-in failed"));
+            .catch((e: unknown) => setError(e instanceof Error ? e.message : t("auth.googleFailed")));
         }}
       />
       {error && (
@@ -40,11 +42,12 @@ function GoogleOption({ onSignedIn }: { onSignedIn(created: boolean): void }) {
 
 /** Shown instead of a session when the server requires a confirmed email. */
 function CheckYourEmail({ email }: { email: string }) {
+  useT();
   const [resent, setResent] = useState(false);
   return (
     <div role="status" className="space-y-2 rounded-md bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
       <p>
-        We've sent a confirmation link to <strong>{email}</strong>. Open it to finish setting up your account.
+        {tRich("auth.checkEmail", { email, strong: (c) => <strong>{c}</strong> })}
       </p>
       <button
         type="button"
@@ -52,7 +55,7 @@ function CheckYourEmail({ email }: { email: string }) {
         disabled={resent}
         onClick={() => void api.resendVerification(email).then(() => setResent(true))}
       >
-        {resent ? "Sent again" : "Send the link again"}
+        {resent ? t("auth.sentAgain") : t("auth.sendAgain")}
       </button>
     </div>
   );
@@ -74,6 +77,7 @@ function LabeledInput({
   onChange(value: string): void;
   autoComplete?: string;
 }) {
+  useT();
   const id = useId();
   const [shown, setShown] = useState(false);
   const isPassword = type === "password";
@@ -99,7 +103,7 @@ function LabeledInput({
             aria-pressed={shown}
             onClick={() => setShown((s) => !s)}
           >
-            {shown ? "Hide" : "Show"}
+            {shown ? t("auth.hide") : t("auth.show")}
           </button>
         )}
       </div>
@@ -132,7 +136,7 @@ function KeysIllustration() {
 export function RegistrationForm({
   onRegistered,
   onGoogleSignedIn,
-  submitLabel = "Create account",
+  submitLabel,
 }: {
   onRegistered(): void;
   /** Offer Google sign-in too; called with whether a new account was created. */
@@ -157,7 +161,7 @@ export function RegistrationForm({
       }
       onRegistered();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Registration failed");
+      setError(e instanceof Error ? e.message : t("auth.registrationFailed"));
     } finally {
       setBusy(false);
     }
@@ -168,24 +172,24 @@ export function RegistrationForm({
   return (
     <div className="space-y-3">
       <LabeledInput
-        label="Your name"
-        hint="What we call you in the app. You can change it later."
+        label={t("auth.name")}
+        hint={t("auth.nameHint")}
         value={name}
         onChange={setName}
         autoComplete="name"
       />
       <LabeledInput
-        label="Email"
+        label={t("common.email")}
         type="email"
-        hint="Use an address you can open: it's how you get back in if you forget your password."
+        hint={t("auth.emailHint")}
         value={email}
         onChange={setEmail}
         autoComplete="email"
       />
       <LabeledInput
-        label="Password"
+        label={t("common.password")}
         type="password"
-        hint="At least 8 characters."
+        hint={t("auth.passwordHint")}
         value={password}
         onChange={setPassword}
         autoComplete="new-password"
@@ -196,18 +200,21 @@ export function RegistrationForm({
         </p>
       )}
       <button className="primary-button w-full" disabled={busy} onClick={() => void submit()}>
-        {busy ? "Creating account…" : submitLabel}
+        {busy ? t("auth.creating") : (submitLabel ?? t("auth.createAccount"))}
       </button>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        By creating an account you agree to the{" "}
-        <Link to="/terms" className="underline">
-          terms
-        </Link>{" "}
-        and the{" "}
-        <Link to="/privacy" className="underline">
-          privacy policy
-        </Link>
-        .
+        {tRich("auth.agree", {
+          terms: (c) => (
+            <Link to="/terms" className="underline">
+              {c}
+            </Link>
+          ),
+          privacy: (c) => (
+            <Link to="/privacy" className="underline">
+              {c}
+            </Link>
+          ),
+        })}
       </p>
       {onGoogleSignedIn && <GoogleOption onSignedIn={onGoogleSignedIn} />}
     </div>
@@ -215,6 +222,7 @@ export function RegistrationForm({
 }
 
 export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): void }) {
+  useT();
   const { login } = useAuth();
   // The shared demo account is for the private build only; unknown config counts as "not public yet".
   const serverConfig = useServerConfig();
@@ -236,7 +244,7 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
         setUnverified(true);
         return;
       }
-      setError(e instanceof Error ? e.message : "Login failed");
+      setError(e instanceof Error ? e.message : t("auth.loginFailed"));
     }
   };
   const googleSignedIn = (created: boolean) => onEntered(created ? "signup" : "login");
@@ -254,7 +262,7 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
               Piano MIDI Player
             </p>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              Learn piano one small step at a time, on a keyboard or on your screen.
+              {t("auth.tagline")}
             </p>
           </div>
           {mode === "landing" && <KeysIllustration />}
@@ -262,27 +270,27 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
           {mode === "landing" && (
             <div className="space-y-3">
               <button className="primary-button w-full" onClick={() => setMode("register")}>
-                Create a free account
+                {t("auth.createFree")}
               </button>
               {demoAvailable && (
                 <button className="secondary-button w-full" onClick={() => void logIn(true)}>
-                  Try it without an account
+                  {t("auth.tryDemo")}
                 </button>
               )}
               <button
                 className="w-full text-sm text-felt-700 underline dark:text-felt-300"
                 onClick={() => setMode("login")}
               >
-                Already have an account? Log in
+                {t("auth.haveAccount")}
               </button>
             </div>
           )}
 
           {mode === "login" && (
             <div className="space-y-3">
-              <LabeledInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+              <LabeledInput label={t("common.email")} type="email" value={email} onChange={setEmail} autoComplete="email" />
               <LabeledInput
-                label="Password"
+                label={t("common.password")}
                 type="password"
                 value={password}
                 onChange={setPassword}
@@ -295,17 +303,17 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
               )}
               {unverified && <CheckYourEmail email={email} />}
               <button className="primary-button w-full" onClick={() => void logIn()}>
-                Log in
+                {t("auth.logIn")}
               </button>
               <Link
                 to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
                 className="block text-center text-sm text-felt-700 underline dark:text-felt-300"
               >
-                Forgot password?
+                {t("auth.forgot")}
               </Link>
               <GoogleOption onSignedIn={googleSignedIn} />
               <button className="w-full text-sm underline" onClick={() => setMode("landing")}>
-                Back
+                {t("common.back")}
               </button>
             </div>
           )}
@@ -317,7 +325,7 @@ export default function AuthPage({ onEntered }: { onEntered(kind: EntryKind): vo
                 className="w-full text-sm text-felt-700 underline dark:text-felt-300"
                 onClick={() => setMode("login")}
               >
-                Already have an account? Log in
+                {t("auth.haveAccount")}
               </button>
             </div>
           )}

@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { MidiExercise as MidiExerciseDef, MidiExerciseSection } from "@keyboard-sensei/shared-types";
@@ -26,6 +27,7 @@ interface Props {
  * once every exercise here reaches the pass score.
  */
 export default function ExerciseSet({ lessonId, sections, exercises, initialBests, focusExerciseId, afterLast, focus }: Props) {
+  useT();
   const navigate = useNavigate();
   const [bests, setBests] = useState<Record<string, number>>(initialBests);
   const [selected, setSelected] = useState(() => {
@@ -41,21 +43,21 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
     ? afterLast
       ? { label: afterLast.label, onClick: () => navigate(afterLast.to) }
       : undefined
-    : { label: `Next: ${sections[selected + 1]!.title}`, onClick: () => setSelected(selected + 1) };
+    : { label: t("exercise.next", { title: sections[selected + 1]!.title }), onClick: () => setSelected(selected + 1) };
 
   return (
-    <section className="space-y-4" aria-label="Exercises">
+    <section className="space-y-4" aria-label={t("exercise.exercises")}>
       {!focus?.active && (
         <div className="space-y-2">
           <div className="flex items-baseline justify-between gap-2">
             <p className="font-display text-lg font-semibold">
-              Step {selected + 1} of {sections.length}
+              {t("exercise.stepOf", { n: selected + 1, total: sections.length })}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="exercise-set-progress">
-              {passedCount} of {sections.length} done
+              {t("exercise.done", { done: passedCount, total: sections.length })}
             </p>
           </div>
-          <ol className="flex gap-2" aria-label="Steps">
+          <ol className="flex gap-2" aria-label={t("exercise.steps")}>
             {sections.map((item, index) => {
               const best = bests[item.exerciseId];
               const passed = (best ?? 0) >= PASS_SCORE;
@@ -65,7 +67,7 @@ export default function ExerciseSet({ lessonId, sections, exercises, initialBest
                   <button
                     type="button"
                     aria-current={active ? "step" : undefined}
-                    aria-label={`Step ${index + 1}: ${item.title}${passed ? ", passed" : ""}`}
+                    aria-label={t(passed ? "exercise.stepAriaPassed" : "exercise.stepAria", { n: index + 1, title: item.title })}
                     title={item.title}
                     onClick={() => setSelected(index)}
                     className="group flex min-h-11 w-full items-center"

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { t, useT } from "../../i18n";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
 import { useDailySummary } from "../../state/useDailySummary";
@@ -15,10 +16,11 @@ const icon = (path: string): ReactNode => (
 );
 
 /** The top-level destinations, as flat tabs. Settings sits in the account cluster. */
-export const NAV_ITEMS: TabBarItem[] = [
+export const NAV_ITEMS: (TabBarItem & { labelKey: string })[] = [
   {
     to: "/",
     label: "Today",
+    labelKey: "nav.today",
     end: true,
     icon: icon(
       "M10 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 2a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H3Zm13 0a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2h-1ZM10 15a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1ZM4.9 4.9a1 1 0 0 1 1.4 0l.7.7A1 1 0 0 1 5.6 7l-.7-.7a1 1 0 0 1 0-1.4Zm9.5 9.5a1 1 0 0 1 1.4 0l.7.7a1 1 0 0 1-1.4 1.4l-.7-.7a1 1 0 0 1 0-1.4Zm1.4-9.5a1 1 0 0 1 0 1.4l-.7.7A1 1 0 0 1 13.7 5.6l.7-.7a1 1 0 0 1 1.4 0ZM6.3 14.4a1 1 0 0 1 0 1.4l-.7.7a1 1 0 0 1-1.4-1.4l.7-.7a1 1 0 0 1 1.4 0Z",
@@ -27,6 +29,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/learn",
     label: "Learn",
+    labelKey: "nav.learn",
     matches: ["/lessons"],
     icon: icon(
       "M9 4.8C7.6 3.9 5.6 3.5 3.5 3.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1c2 0 3.8.4 5.5 1.4V4.8Zm2 12.1c1.7-1 3.5-1.4 5.5-1.4a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1c-2.1 0-4.1.4-5.5 1.3v12.1Z",
@@ -35,6 +38,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/practice",
     label: "Library",
+    labelKey: "nav.library",
     end: true,
     matches: ["/play"],
     icon: icon(
@@ -44,6 +48,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/practice/gym",
     label: "Practice",
+    labelKey: "nav.practice",
     matches: ["/practice/record", "/practice/notes"],
     icon: icon(
       "M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z",
@@ -52,6 +57,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/import",
     label: "Import",
+    labelKey: "nav.import",
     icon: icon(
       "M10 2.5a1 1 0 0 1 .7.3l3.5 3.5a1 1 0 1 1-1.4 1.4L11 5.9V12a1 1 0 1 1-2 0V5.9L7.2 7.7a1 1 0 0 1-1.4-1.4l3.5-3.5a1 1 0 0 1 .7-.3ZM3 12a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1Z",
     ),
@@ -59,6 +65,7 @@ export const NAV_ITEMS: TabBarItem[] = [
   {
     to: "/progress",
     label: "Progress",
+    labelKey: "nav.progress",
     icon: icon(
       "M3 16a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm1-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1H4v-1Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v5H9V8Zm5-4a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v9h-3V4Z",
     ),
@@ -89,6 +96,7 @@ export function useCondensedOnScroll(): boolean {
 
 /** Today's goal at a glance: ring, minutes and streak, linking to Today. */
 function GoalChip({ compact = false }: { compact?: boolean }) {
+  useT();
   const { user } = useAuth();
   const summary = useDailySummary(user?.daily_goal_minutes);
   if (!summary) return null;
@@ -101,15 +109,15 @@ function GoalChip({ compact = false }: { compact?: boolean }) {
       <span aria-hidden="true">
         <ProgressRing value={goalMinutes > 0 ? minutesToday / goalMinutes : 0} size={28} stroke={4} />
       </span>
-      <span className="sr-only">Daily goal: </span>
+      <span className="sr-only">{t("nav.dailyGoalSr")}</span>
       <span className="ks-goal-chip__text glass-text">
-        {compact ? `${minutes}/${goalMinutes}` : `${minutes} of ${goalMinutes} min today`}
-        {met && <span className="sr-only">, met</span>}
+        {compact ? t("nav.goalMinutesCompact", { done: minutes, goal: goalMinutes }) : t("nav.goalToday", { done: minutes, goal: goalMinutes })}
+        {met && <span className="sr-only">{t("nav.metSr")}</span>}
         {summary.streak.current > 0 && (
           <span className="ks-goal-chip__streak">
             {" "}
             <span aria-hidden="true">{"🔥"}</span>
-            <span className="sr-only">streak </span>
+            <span className="sr-only">{t("nav.streakSr")}</span>
             {summary.streak.current}
           </span>
         )}
@@ -143,10 +151,11 @@ function ClusterButton({ label, path, to, onClick }: { label: string; path: stri
 
 /** Feedback and Settings shortcuts that sit beside the account button. */
 function ClusterActions({ onOpenFeedback }: { onOpenFeedback(): void }) {
+  useT();
   return (
     <>
-      <ClusterButton label="Send feedback" path={FEEDBACK_ICON} onClick={onOpenFeedback} />
-      <ClusterButton label="Settings" path={SETTINGS_ICON} to="/settings" />
+      <ClusterButton label={t("nav.feedback")} path={FEEDBACK_ICON} onClick={onOpenFeedback} />
+      <ClusterButton label={t("nav.settings")} path={SETTINGS_ICON} to="/settings" />
     </>
   );
 }
@@ -159,6 +168,7 @@ interface AccountMenuProps {
 }
 
 function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: AccountMenuProps) {
+  useT();
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const location = useLocation();
@@ -187,7 +197,7 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Account
     <div ref={rootRef} className="ks-account">
       <button
         type="button"
-        aria-label="Account menu"
+        aria-label={t("nav.accountMenu")}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((value) => !value)}
@@ -196,14 +206,14 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Account
         {initial}
       </button>
       {open && (
-        <div id={menuId} className="ks-menu" role="group" aria-label="Account">
+        <div id={menuId} className="ks-menu" role="group" aria-label={t("nav.account")}>
           {displayName && <p className="ks-menu__name">{displayName}</p>}
           <Link to="/settings" className="ks-menu__item">
-            Settings
+            {t("nav.settings")}
           </Link>
           {isAdmin && (
             <Link to="/admin/users" className="ks-menu__item">
-              Admin
+              {t("nav.admin")}
             </Link>
           )}
           <button
@@ -214,10 +224,10 @@ function AccountMenu({ isAdmin, displayName, onLogout, onOpenFeedback }: Account
               onOpenFeedback();
             }}
           >
-            Send feedback
+            {t("nav.feedback")}
           </button>
           <button type="button" className="ks-menu__item" onClick={onLogout}>
-            Log out
+            {t("nav.logOut")}
           </button>
         </div>
       )}
@@ -237,7 +247,9 @@ export interface AppNavigationProps extends AccountMenuProps {
  */
 export default function AppNavigation({ performanceView, ...account }: AppNavigationProps) {
   const { device } = useDeviceClass();
+  useT();
   const condensed = useCondensedOnScroll();
+  const navItems = NAV_ITEMS.map(({ labelKey, ...item }) => ({ ...item, label: t(labelKey) }));
 
   // The practice screen has its own back and title module, so the shell steps aside.
   if (performanceView) return null;
@@ -247,7 +259,7 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
       <>
         <div className="edge-top ks-edge ks-edge--top" aria-hidden="true" />
         <TabBar
-          items={NAV_ITEMS}
+          items={navItems}
           placement="top"
           trailing={
             <div className="ks-tabbar-trailing">
@@ -270,7 +282,7 @@ export default function AppNavigation({ performanceView, ...account }: AppNaviga
         <ClusterActions onOpenFeedback={account.onOpenFeedback} />
         <AccountMenu {...account} />
       </GlassSurface>
-      <TabBar items={NAV_ITEMS} placement="bottom" condensed={condensed} />
+      <TabBar items={navItems} placement="bottom" condensed={condensed} />
     </>
   );
 }
