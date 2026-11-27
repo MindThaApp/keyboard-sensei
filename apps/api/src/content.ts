@@ -10,6 +10,7 @@ import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
 import { tierOf, withTier, validateTiers } from "./content/tiers.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
+import { guitarChordsLessons, guitarExercises, guitarFoundationsLessons } from "./content/guitar.js";
 
 /**
  * Exercises scored on dynamics as well (see ExerciseDynamics), because their
@@ -35,6 +36,7 @@ export const exercises: MidiExercise[] = [
   ...keyExercises,
   ...readingExercises,
   ...modernExercises,
+  ...guitarExercises,
 ].map((exercise) => (DYNAMICS_OPT_IN[exercise.exerciseId] ? { ...exercise, dynamics: DYNAMICS_OPT_IN[exercise.exerciseId] } : exercise));
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
@@ -65,7 +67,12 @@ const readingPath = chainLessons(byTier(readingLessons), ["lesson-11"]);
 // Modern Chords opens after the foundation assessment (lesson 12), which covers triads.
 const modernPath = chainLessons(byTier(modernLessons), ["lesson-12"]);
 
-export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath]
+// Guitar has its own two paths, independent of the piano chain: a guitar lesson never unlocks from a piano
+// lesson. Chords start once the learner has tuned up and picked their first rhythms.
+const guitarFoundationsPath = chainLessons(byTier(guitarFoundationsLessons));
+const guitarChordsPath = chainLessons(byTier(guitarChordsLessons), ["guitar-open-string-rhythm"]);
+
+export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath, ...guitarFoundationsPath, ...guitarChordsPath]
   .map(withPractice)
   .map(withTier)
   .map((lesson) => ({ ...lesson, estimatedMinutes: estimateLessonMinutes(lesson, exerciseById) }));

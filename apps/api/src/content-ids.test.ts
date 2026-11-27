@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { exercises, lessons } from "./content.js";
+import { exercises as allExercises, lessons as allLessons } from "./content.js";
+
+// Guitar ids are frozen separately in guitar-content.test.ts.
+const lessons = allLessons.filter((lesson) => (lesson.instrument ?? "piano") === "piano");
+const exercises = allExercises.filter((exercise) => (exercise.instrument ?? "piano") === "piano");
 
 /**
  * Content ids are database keys. UserProgress, ExerciseAttempt and QuizAttempt rows on
