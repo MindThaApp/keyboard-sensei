@@ -1,5 +1,5 @@
 import type { PracticeHands, PracticeLevel } from "@keyboard-sensei/midi-engine";
-import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
+import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, PlayedInstrument, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
 import { publishRewards } from "../state/rewards";
 
@@ -732,3 +732,5 @@ export const importInstrumentFromUrl = (fields: { url: string; name: string; des
   request<InstrumentInfo>("/instruments/import-url", { method: "POST", body: JSON.stringify(fields) });
 export const updateExperienceMode = (experience_mode: "simple" | "advanced") =>
   request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ experience_mode }) });
+export const updateInstruments = (played_instruments: PlayedInstrument[], active_instrument: PlayedInstrument) =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ played_instruments, active_instrument }) });

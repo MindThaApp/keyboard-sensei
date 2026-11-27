@@ -1,3 +1,13 @@
+/** What a learner plays. Not the sampled sound (that is an "Instrument" in the sound bank). */
+export type PlayedInstrument = "piano" | "guitar" | "violin";
+export const PLAYED_INSTRUMENTS: readonly PlayedInstrument[] = ["piano", "guitar", "violin"];
+export const DEFAULT_PLAYED_INSTRUMENT: PlayedInstrument = "piano";
+export const isPlayedInstrument = (value: unknown): value is PlayedInstrument =>
+  typeof value === "string" && (PLAYED_INSTRUMENTS as readonly string[]).includes(value);
+/** The instrument a lesson is for; lessons written before instruments existed are piano. */
+export const lessonInstrument = (lesson: { instrument?: PlayedInstrument | null }): PlayedInstrument =>
+  lesson.instrument ?? DEFAULT_PLAYED_INSTRUMENT;
+
 export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive";
 export type LevelId = "foundation" | "elementary" | "intermediate" | "late-intermediate" | "advanced" | "virtuoso";
 export type BranchId = "technique" | "theory" | "repertoire";
@@ -31,7 +41,7 @@ export const TIER_NAMES: Record<TierId, string> = {
   6: "Upper intermediate",
   7: "Advanced",
 };
-export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
+export interface Lesson { id: string; /** Absent = piano. */ instrument?: PlayedInstrument; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
@@ -95,7 +105,7 @@ export interface LessonListItem extends Lesson { order: number; progress: Lesson
 /** `exerciseBests`: the learner's best score per exercise in this lesson (absent = never attempted). */
 export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[]; exerciseBests: Record<string, number> }
 /** `daily_goal_minutes` / `timezone` / `experience_mode` come with GET and PATCH /users/me (not with login). */
-export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin"; daily_goal_minutes?: number; timezone?: string | null; experience_mode?: "simple" | "advanced" | null; google_linked?: boolean }
+export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin"; daily_goal_minutes?: number; timezone?: string | null; experience_mode?: "simple" | "advanced" | null; played_instruments?: PlayedInstrument[]; active_instrument?: PlayedInstrument | null; google_linked?: boolean }
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }

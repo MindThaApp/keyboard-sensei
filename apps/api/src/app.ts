@@ -10,6 +10,7 @@ import type {
   Lesson,
   MidiExercise,
   PerformedNote,
+  PlayedInstrument,
   SkillChip,
   TierId,
   RawMidiEvent,
@@ -56,6 +57,8 @@ const updateProfileSchema = z
     daily_goal_minutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
     timezone: z.string().max(64).refine(isValidTimeZone, "Unknown timezone").optional(),
     experience_mode: z.enum(["simple", "advanced"]).optional(),
+    played_instruments: z.array(z.enum(["piano", "guitar", "violin"])).max(3).optional(),
+    active_instrument: z.enum(["piano", "guitar", "violin"]).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
 
@@ -68,6 +71,8 @@ const PROFILE_SELECT = {
   daily_goal_minutes: true,
   timezone: true,
   experience_mode: true,
+  played_instruments: true,
+  active_instrument: true,
   google_sub: true,
 } as const;
 
@@ -155,8 +160,9 @@ const sanitizeLesson = (lesson: Lesson): Lesson => ({
 });
 
 /** The tier and skills columns are authoritative; stored lesson JSON from before they existed lacks them. */
-const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[] }): Lesson => ({
+const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[]; instrument?: string }): Lesson => ({
   ...lesson,
+  instrument: (row.instrument ?? "piano") as PlayedInstrument,
   tier: row.tier as TierId,
   skills: row.skills as SkillChip[],
 });
@@ -313,14 +319,17 @@ async function completedLessonIdsFor(uid: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.lesson_id));
 }
 
+const lessonsQuerySchema = z.object({ instrument: z.enum(["piano", "guitar", "violin"]).optional() });
+
 app.get("/lessons", async (req, res, next) => {
   try {
     const uid = userId(req);
+    const { instrument } = lessonsQuerySchema.parse(req.query);
     const [admin, completedIds, rows] = await Promise.all([
       isAdmin(uid),
       completedLessonIdsFor(uid),
       prisma.lesson.findMany({
-        where: { retired_at: null },
+        where: { retired_at: null, ...(instrument ? { instrument } : {}) },
         orderBy: { order: "asc" },
         include: { progress: { where: { user_id: uid } } },
       }),
