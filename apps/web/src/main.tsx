@@ -9,6 +9,7 @@ import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { monitoring, startMonitoring } from "./monitoring";
 import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import ExperienceSync from "./contexts/ExperienceSync";
+import OfflineSync from "./offline/OfflineSync";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
 import "./index.css";
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <AuthProvider>
               <MonitoringBridge />
               <ExperienceSync />
+              <OfflineSync />
               <MidiProvider>
                 <App />
               </MidiProvider>
