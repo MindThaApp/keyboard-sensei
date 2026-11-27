@@ -514,7 +514,6 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
     const exercise = validateMidiExercise(row.exercise_json);
     const { performedNotes, result } = scoreAttempt(exercise, input);
     const playedAt = resolvePlayedAt(input.playedAt, new Date());
-    const uid = userId(req);
 
     const lesson = validateLesson(row.lesson.lesson_json);
     const lessonExerciseIds = lesson.sections.flatMap((section) =>
