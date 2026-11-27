@@ -13,6 +13,17 @@ import { STORAGE_KEY_INVENTORY } from "./storageKeys";
 
 const src = dirname(dirname(fileURLToPath(import.meta.url)));
 const webRoot = dirname(src);
+const repoRoot = dirname(dirname(webRoot));
+// Workspace packages the app hands `localStorage` to (they own some keys too).
+const packageSources = readdirSync(join(repoRoot, "packages"))
+  .map((name) => join(repoRoot, "packages", name, "src"))
+  .filter((dir) => {
+    try {
+      return statSync(dir).isDirectory();
+    } catch {
+      return false;
+    }
+  });
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -26,21 +37,21 @@ const KEY_PREFIX = "(?:ks|keyboard-sensei|mp)-";
 const PATTERNS: { kind: "exact" | "prefix"; regex: RegExp }[] = [
   // localStorage.getItem("ks-x"), setItem("ks-x", ...), removeItem("ks-x")
   { kind: "exact", regex: new RegExp(`(?:get|set|remove)Item\\(\\s*["'](${KEY_PREFIX}[^"']+)["']`, "g") },
-  // const SOME_KEY = "ks-x" / const KEY = "ks-x" / const SOME_PREFIX = "ks-x:"
-  { kind: "exact", regex: new RegExp(`\\b[A-Z_]*(?:KEY|PREFIX)[A-Z_]*\\s*=\\s*["'](${KEY_PREFIX}[^"']+)["']`, "g") },
+  // const SOME_KEY = "ks-x" / const KEY = "ks-x" / const SOME_PREFIX = "ks-x:" / const SOME_DB_NAME = "mp-x"
+  { kind: "exact", regex: new RegExp(`\\b[A-Z_]*(?:KEY|PREFIX|DB_NAME)[A-Z_]*\\s*=\\s*["'](${KEY_PREFIX}[^"']+)["']`, "g") },
   // `ks-family:${id}`
   { kind: "prefix", regex: new RegExp(`\`(${KEY_PREFIX}[a-z0-9-]*:)\\$\\{`, "g") },
 ];
 
 function discoveredKeys(): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>();
-  const files = [...sourceFiles(src), join(webRoot, "index.html")];
+  const files = [...sourceFiles(src), ...packageSources.flatMap(sourceFiles), join(webRoot, "index.html")];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     for (const { regex } of PATTERNS) {
       for (const match of text.matchAll(regex)) {
         const key = match[1];
-        found.set(key, (found.get(key) ?? new Set()).add(relative(webRoot, file)));
+        found.set(key, (found.get(key) ?? new Set()).add(relative(repoRoot, file)));
       }
     }
   }

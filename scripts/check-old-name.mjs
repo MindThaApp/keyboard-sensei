@@ -14,6 +14,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** Whole files that may mention the old name. */
 const ALLOWED_FILES = [
   /^docs\/specs\//, // the plan describes the rename itself
+  /^docs\/store\//, // Store listing and policy drafts: old answer vs new, "Midivory is now Music Portal"
+  /^docs\/WHATS-NEW\.md$/, // release notes that announce the rename to existing users
   /^brand\/midivory-icon\.svg$/, // the previous mark, kept until the new one has shipped everywhere
   /^scripts\/check-old-name\.mjs$/,
   /\.(png|jpg|jpeg|webp|ico|jks|keystore|mid|midi|wav|mp3|ogg|sf2|pdf|zip|gz)$/i,
@@ -26,6 +28,7 @@ const ALLOWED_SPANS = [
   /midivory-icon\.svg/g, // file name of the previous mark
   /formerly \**Midivory\**/gi, // rename notes for existing users
   /was called Midivory/g,
+  /\bused Midivory\b/g, // user guide: "If you (already) used Midivory", existing users keep their account
   /from the Midivory days/g,
 ];
 

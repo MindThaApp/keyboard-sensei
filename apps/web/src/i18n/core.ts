@@ -11,7 +11,8 @@ export type TranslationKey = keyof typeof en;
 /** "auto" follows the device language. */
 export type LocalePreference = "auto" | string;
 
-const STORAGE_KEY = "ks-locale";
+/** New key (Music Portal), so the mp- prefix. */
+const STORAGE_KEY = "mp-locale";
 
 const loaders = import.meta.glob<{ default: Messages }>("./locales/*.json");
 

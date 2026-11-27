@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { OFFLINE_DB_NAME } from "../offline/kvStore";
 import { STORAGE_KEY_INVENTORY } from "./storageKeys";
 import {
   LATEST_STORAGE_VERSION,
@@ -65,13 +66,29 @@ const CURRENT_INSTALL: Record<string, string> = {
   "ks-fx-debug": "stats",
   "ks-practice-song:song-123": JSON.stringify({ level: 2, bars: [1, 8] }),
   "ks-practice-song-choices:song-123": JSON.stringify({ hands: "right" }),
+  // Music Portal keys (new, mp-)
+  "mp-locale": "de-DE",
+  "mp-active-instrument": "guitar",
+  "mp-played-instruments": JSON.stringify(["piano", "guitar"]),
+  "mp-instrument-pending": "1",
+  "mp-instrument-prompt-done": "1",
+  "mp-mic-calibration:usb-1": JSON.stringify({ deviceId: "usb-1", gateDb: -45, latencyMs: 30 }),
+  "mp-mic-device": "usb-1",
+  "mp-mic-explained": "1",
+  "mp-tuner-settings": JSON.stringify({ a4Hz: 442, customTunings: [] }),
+  "mp-piano-tuning-session": JSON.stringify({ a4: 440, done: [60, 62] }),
+  "mp-piano-check-reports": JSON.stringify([]),
 };
+
+/** Inventory entries that are not localStorage keys (IndexedDB database names). */
+const NOT_LOCAL_STORAGE = new Set([OFFLINE_DB_NAME]);
 
 describe("the current-install fixture", () => {
   it("covers every key in the inventory", () => {
     const keys = Object.keys(CURRENT_INSTALL);
     for (const entry of STORAGE_KEY_INVENTORY) {
       if (entry.key === STORAGE_VERSION_KEY) continue; // written by the migrations themselves
+      if (NOT_LOCAL_STORAGE.has(entry.key)) continue;
       const covered = entry.kind === "exact" ? keys.includes(entry.key) : keys.some((key) => key.startsWith(entry.key));
       expect(covered, `fixture is missing ${entry.key}`).toBe(true);
     }
