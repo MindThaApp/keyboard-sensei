@@ -56,6 +56,7 @@ const updateProfileSchema = z
     daily_goal_minutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
     timezone: z.string().max(64).refine(isValidTimeZone, "Unknown timezone").optional(),
     experience_mode: z.enum(["simple", "advanced"]).optional(),
+    tuner_a4_hz: z.number().min(415).max(466).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
 
@@ -68,6 +69,7 @@ const PROFILE_SELECT = {
   daily_goal_minutes: true,
   timezone: true,
   experience_mode: true,
+  tuner_a4_hz: true,
   google_sub: true,
 } as const;
 

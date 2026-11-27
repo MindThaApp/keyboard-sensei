@@ -732,3 +732,5 @@ export const importInstrumentFromUrl = (fields: { url: string; name: string; des
   request<InstrumentInfo>("/instruments/import-url", { method: "POST", body: JSON.stringify(fields) });
 export const updateExperienceMode = (experience_mode: "simple" | "advanced") =>
   request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ experience_mode }) });
+export const updateTunerA4 = (tuner_a4_hz: number) =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ tuner_a4_hz }) });

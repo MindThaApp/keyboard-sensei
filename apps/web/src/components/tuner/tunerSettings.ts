@@ -39,6 +39,8 @@ export interface TunerSettings {
   capo: number;
   customTunings: CustomTuning[];
   referenceTimbre: ReferenceTimbre;
+  /** A4 changed on this device and not yet saved to the account. */
+  a4PendingSync: boolean;
 }
 
 export const DEFAULT_TUNER_SETTINGS: Readonly<TunerSettings> = {
@@ -49,6 +51,7 @@ export const DEFAULT_TUNER_SETTINGS: Readonly<TunerSettings> = {
   capo: 0,
   customTunings: [],
   referenceTimbre: "sine",
+  a4PendingSync: false,
 };
 
 const INSTRUMENTS: TuningInstrument[] = ["guitar", "violin", "piano"];
@@ -89,7 +92,7 @@ export function parseTunerSettings(raw: string | null): TunerSettings {
       : DEFAULT_TUNING_PRESET_ID[instrument] ?? "chromatic";
   const capo = typeof v.capo === "number" && Number.isInteger(v.capo) && v.capo >= 0 && v.capo <= 12 ? v.capo : 0;
   const referenceTimbre = v.referenceTimbre === "warm" ? "warm" : "sine";
-  return { a4Hz: a4, greenZoneCents: green, instrument, tuningId, capo, customTunings, referenceTimbre };
+  return { a4Hz: a4, greenZoneCents: green, instrument, tuningId, capo, customTunings, referenceTimbre, a4PendingSync: v.a4PendingSync === true };
 }
 
 const listeners = new Set<() => void>();
@@ -122,7 +125,10 @@ export function saveTunerSettings(update: Partial<TunerSettings>): TunerSettings
   } catch {
     // Replace an unreadable value.
   }
-  const next: TunerSettings = { ...current, ...update, a4Hz: clampReferencePitch(update.a4Hz ?? current.a4Hz) };
+  const a4Hz = clampReferencePitch(update.a4Hz ?? current.a4Hz);
+  // A changed A4 is queued for the account unless the caller says how it stands (sync, adoption).
+  const a4PendingSync = update.a4PendingSync ?? (a4Hz !== current.a4Hz ? true : current.a4PendingSync);
+  const next: TunerSettings = { ...current, ...update, a4Hz, a4PendingSync };
   const raw = JSON.stringify({ ...extra, ...next });
   try {
     localStorage.setItem(TUNER_SETTINGS_KEY, raw);
