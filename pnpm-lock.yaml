@@ -150,6 +150,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.5.3
         version: 8.5.3
+      '@keyboard-sensei/audio-analysis':
+        specifier: workspace:*
+        version: link:../../packages/audio-analysis
       '@keyboard-sensei/challenge-gen':
         specifier: workspace:*
         version: link:../../packages/challenge-gen

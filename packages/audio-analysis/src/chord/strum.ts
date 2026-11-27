@@ -30,12 +30,20 @@ const DEFAULTS = { hopMs: 5, gateDb: -50, riseDb: 6, refractoryMs: 180, windowSt
 export function detectStrumOnsets(samples: Float32Array | Float64Array, sampleRate: number, options: StrumOptions = {}): StrumOnset[] {
   const o = { ...DEFAULTS, ...options };
   const hop = Math.max(1, Math.round((sampleRate * o.hopMs) / 1000));
-  const levels: number[] = [];
+  // Level over a 25 ms window per hop: shorter windows ripple with the phase of low strings (82 Hz repeats every 12 ms).
+  const hopEnergy: number[] = [];
   for (let start = 0; start + hop <= samples.length; start += hop) {
     let sum = 0;
     for (let i = start; i < start + hop; i++) sum += samples[i]! * samples[i]!;
-    levels.push(10 * Math.log10(sum / hop + 1e-12));
+    hopEnergy.push(sum / hop);
   }
+  const span = Math.max(1, Math.round(25 / o.hopMs));
+  const levels = hopEnergy.map((_, i) => {
+    let total = 0;
+    let count = 0;
+    for (let j = Math.max(0, i - span + 1); j <= i; j++) { total += hopEnergy[j]!; count++; }
+    return 10 * Math.log10(total / count + 1e-12);
+  });
   const lookback = Math.round(60 / o.hopMs);
   const onsets: StrumOnset[] = [];
   let lastMs = -Infinity;
@@ -49,7 +57,7 @@ export function detectStrumOnsets(samples: Float32Array | Float64Array, sampleRa
     if (level - past >= o.riseDb && timeMs - lastMs >= o.refractoryMs) {
       // Walk back to where the rise began so the onset time is the attack, not the peak.
       let begin = i;
-      while (begin > 0 && levels[begin - 1]! < levels[begin]! - 1 && i - begin < 8) begin--;
+      while (begin > 0 && levels[begin - 1]! < levels[begin]! - 1 && i - begin < span + 10) begin--;
       onsets.push({ timeMs: begin * o.hopMs, levelDb: level });
       lastMs = timeMs;
     }
