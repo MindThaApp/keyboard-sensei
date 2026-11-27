@@ -1,4 +1,5 @@
 import type { Lesson, SkillChip, TierId } from "@keyboard-sensei/shared-types";
+import { GUITAR_LESSON_TIERS } from "./guitar-tiers.js";
 
 interface TierAssignment {
   tier: TierId;
@@ -84,6 +85,9 @@ export const LESSON_TIERS: Record<string, TierAssignment> = {
   "lesson-chords-progressions": at(5, ["chords"]),
   "lesson-chords-twelve-bar-blues": at(5, ["chords", "repertoire"]),
   "lesson-chords-lead-sheet": at(5, ["chords", "repertoire", "two-hands"]),
+
+  // Guitar (see guitar-tiers.ts)
+  ...GUITAR_LESSON_TIERS,
 };
 
 /** The tier of a lesson id; throws if the lesson has no assignment. */

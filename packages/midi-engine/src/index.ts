@@ -11,3 +11,4 @@ export function scoreRawMidiEvents(params: { exercise: MidiExercise; rawEvents: 
 }
 export * from "./playalong.js";
 export * from "./arrangement.js";
+export * from "./chordScoring.js";

@@ -1,13 +1,14 @@
 import { TIER_NAMES, type LessonListItem, type SkillChip, type TierId } from "@keyboard-sensei/shared-types";
 
 /** Learn's filter: the three learning paths, as a way to narrow the tier list. */
-export type LearnFilter = "all" | "foundations" | "reading" | "chords";
+export type LearnFilter = "all" | "foundations" | "reading" | "chords" | "guitar";
 
 export const LEARN_FILTERS: { value: LearnFilter; label: string; paths: readonly string[] | null }[] = [
   { value: "all", label: "All", paths: null },
   { value: "foundations", label: "Foundations", paths: ["classical-technical"] },
   { value: "reading", label: "Reading", paths: ["sightreading-intensive"] },
   { value: "chords", label: "Chords & Pop", paths: ["modern-chords"] },
+  { value: "guitar", label: "Guitar", paths: ["guitar-foundations", "guitar-chords-rhythm"] },
 ];
 
 export const SKILL_LABEL: Record<SkillChip, string> = {
