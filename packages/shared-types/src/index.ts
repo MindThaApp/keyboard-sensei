@@ -115,7 +115,7 @@ export interface GuitarHint { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number; finge
 /** One chord to strum. `pitchClasses` come from the shared chord dictionary, so what is drawn is what is graded. */
 export interface ChordTarget { id: string; symbol: string; pitchClasses: number[]; bassPitchClass?: number; startBeat: number; durationBeats: number }
 /** What the chord detector heard for one strum (labels only, never audio). */
-export interface ChordDetection { onsetMs: number; label: string | null; confidence: number; pitchClasses?: number[] }
+export interface ChordDetection { onsetMs: number; label: string | null; confidence: number; runnerUp?: { label: string; confidence: number } | null }
 export interface Lesson { instrument?: PlayedInstrument }
 export interface MidiExercise {
   instrument?: PlayedInstrument;
