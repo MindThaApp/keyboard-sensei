@@ -1,4 +1,6 @@
-export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive";
+export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "violin-foundations" | "violin-technique";
+export type PlayedInstrument = "piano" | "guitar" | "violin";
+export type ExerciseInput = "midi" | "mic-mono" | "mic-chord" | "any";
 export type LevelId = "foundation" | "elementary" | "intermediate" | "late-intermediate" | "advanced" | "virtuoso";
 export type BranchId = "technique" | "theory" | "repertoire";
 
@@ -31,7 +33,7 @@ export const TIER_NAMES: Record<TierId, string> = {
   6: "Upper intermediate",
   7: "Advanced",
 };
-export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
+export interface Lesson { instrument?: PlayedInstrument; id: string; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
@@ -43,7 +45,7 @@ export interface ExerciseKey { fifths: number; mode: "major" | "minor" }
  * the same loudness. Velocity is never scored unless an exercise asks for it.
  */
 export interface ExerciseDynamics { evenVolume?: boolean; balancedChords?: boolean }
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
+export interface MidiExercise { instrument?: PlayedInstrument; input?: ExerciseInput; intonationToleranceCents?: number; techniqueHints?: Record<string, ViolinHint>; exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
 /** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
  * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
  * 25-200 BPM slider. The API accepts [10, 250]. */
@@ -106,3 +108,4 @@ export interface AttemptSummary { id: string; exerciseId: string; lessonId: stri
 export interface AttemptsResponse { attempts: AttemptSummary[] }
 export interface ApiErrorResponse { error: { code: string; message: string; details?: unknown } }
 export * from "./sentry.js";
+export * from "./violin.js";
