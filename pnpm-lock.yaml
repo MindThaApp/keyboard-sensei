@@ -162,6 +162,9 @@ importers:
       '@keyboard-sensei/music-theory':
         specifier: workspace:*
         version: link:../../packages/music-theory
+      '@keyboard-sensei/piano-check':
+        specifier: workspace:*
+        version: link:../../packages/piano-check
       '@keyboard-sensei/playalong-core':
         specifier: workspace:*
         version: link:../../packages/playalong-core

@@ -39,6 +39,7 @@ import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./compon
 
 // Dev-only component kit page. The condition is a build-time constant, so production
 // bundles drop the import entirely.
+const PianoCheckPage = lazy(() => import("./components/pianoCheck/PianoCheckPage"));
 const KitPreview = import.meta.env.DEV ? lazy(() => import("./components/ui/KitPreview")) : null;
 
 /**
@@ -204,6 +205,7 @@ function AppShell() {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/piano-check" element={<Suspense fallback={null}><PianoCheckPage /></Suspense>} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
           {/* New screens: register their routes here, above the redirects. */}
           <Route path="/practice/notes" element={<NoteReadingGame />} />
