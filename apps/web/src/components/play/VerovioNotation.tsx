@@ -103,7 +103,7 @@ export default function VerovioNotation({ mei, songTimeS }: { mei: string; songT
   }, [songTimeS, status]);
 
   return (
-    <div ref={containerRef} className="ks-verovio" data-status={status}>
+    <div ref={containerRef} className="ks-verovio" data-status={status} dir="ltr">
       <div ref={svgRef} />
       {status === "loading" && <p className="ks-verovio__message">Engraving the score…</p>}
       {status === "failed" && <p className="ks-verovio__message">The sheet music couldn't be shown.</p>}

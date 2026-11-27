@@ -366,7 +366,7 @@ const ScrollingScore = forwardRef<ScrollingScoreHandle, Props>(function Scrollin
   );
 
   return (
-    <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40" dir="ltr">
       <div ref={viewportRef} className="relative overflow-hidden" style={{ height: viewportHeight }}>
         <div ref={ribbonRef} className="absolute left-0 top-0 will-change-transform">
           <NotationRenderer

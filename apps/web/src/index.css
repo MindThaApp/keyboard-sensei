@@ -228,3 +228,16 @@ html.appearance-solid .glass-text { box-shadow: none; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Right-to-left languages ───────────────────────────────────────────────
+   The language provider sets dir="rtl" on <html> for Arabic and Urdu. Text and flex rows
+   flip by themselves; these rules mirror the few physical utilities the layout relies on.
+   Music notation, the on-screen keyboard and the score viewers carry dir="ltr" themselves
+   so pitch always runs low to high from left to right. */
+html[dir="rtl"] .text-left { text-align: right; }
+html[dir="rtl"] .text-right { text-align: left; }
+html[dir="rtl"] .ml-auto { margin-left: 0; margin-right: auto; }
+html[dir="rtl"] .mr-auto { margin-right: 0; margin-left: auto; }
+html[dir="rtl"] .rotate-90 { transform: rotate(-90deg); }
+html[dir="rtl"] [dir="ltr"] .text-left { text-align: left; }
+html[dir="rtl"] [dir="ltr"] .text-right { text-align: right; }
