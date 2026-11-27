@@ -214,6 +214,7 @@ export default defineConfig({
       { find: /^@keyboard-sensei\/music-theory$/, replacement: path.resolve(workspaceRoot, "packages/music-theory/src/index.ts") },
       { find: /^@keyboard-sensei\/playalong-core$/, replacement: path.resolve(workspaceRoot, "packages/playalong-core/src/index.ts") },
       { find: /^@keyboard-sensei\/audio-analysis$/, replacement: path.resolve(workspaceRoot, "packages/audio-analysis/src/index.ts") },
+      { find: /^@keyboard-sensei\/piano-check$/, replacement: path.resolve(workspaceRoot, "packages/piano-check/src/index.ts") },
       { find: /^@keyboard-sensei\/challenge-gen$/, replacement: path.resolve(workspaceRoot, "packages/challenge-gen/src/index.ts") },
     ],
   },

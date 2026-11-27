@@ -43,6 +43,7 @@ import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./compon
 // The tuner works signed in or out (spec 5): its own chunk, loaded on first visit.
 const TunerPage = lazy(() => import("./components/tuner/TunerPage"));
 
+const PianoCheckPage = lazy(() => import("./components/pianoCheck/PianoCheckPage"));
 const KitPreview = import.meta.env.DEV ? lazy(() => import("./components/ui/KitPreview")) : null;
 
 /**
@@ -219,6 +220,7 @@ function AppShell() {
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/tune" element={<Suspense fallback={null}><TunerPage /></Suspense>} />
+          <Route path="/piano-check" element={<Suspense fallback={null}><PianoCheckPage /></Suspense>} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
           {/* New screens: register their routes here, above the redirects. */}
           <Route path="/practice/notes" element={<NoteReadingGame />} />
