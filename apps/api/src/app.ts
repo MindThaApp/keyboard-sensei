@@ -14,7 +14,7 @@ import type {
   TierId,
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
-import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
+import { pairRawMidiEvents, scoreExercise } from "@keyboard-sensei/midi-engine";
 import {
   calculateAssessmentPlacement,
   lessonCompletion,
@@ -113,6 +113,11 @@ const performedSchema = z.object({
   startTimestampMs: z.number().nonnegative(),
   endTimestampMs: z.number().nonnegative().nullable(),
   durationMs: z.number().nonnegative().nullable(),
+  // Mic attempts (docs/specs/MUSIC-PORTAL.md 2.4): derived pitch data only, never audio.
+  // Listed here because zod strips unknown keys and the re-score needs them.
+  centsOffset: z.number().min(-100).max(100).optional(),
+  pitchConfidence: z.number().min(0).max(1).optional(),
+  source: z.enum(["midi", "mic"]).optional(),
 });
 
 // Continuous since 2026-07-12 (was the literal union 25|50|75|100). Lessons drive
@@ -449,7 +454,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
     const exercise = validateMidiExercise(row.exercise_json);
     const performedNotes = (input.performedNotes ??
       pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    const result = scoreMidiExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
+    const result = scoreExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
     const uid = userId(req);
 
     const lesson = validateLesson(row.lesson.lesson_json);
@@ -688,7 +693,7 @@ app.post("/practice/score", async (req, res, next) => {
     const exercise = validateMidiExercise(body.exercise) as MidiExercise;
     const performedNotes = (performance.performedNotes ??
       pairRawMidiEvents(performance.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    res.json(scoreMidiExercise({ exercise, performedNotes, tempoPct: performance.tempoPct }));
+    res.json(scoreExercise({ exercise, performedNotes, tempoPct: performance.tempoPct }));
   } catch (e) {
     next(e);
   }

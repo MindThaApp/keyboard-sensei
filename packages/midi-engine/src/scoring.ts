@@ -2,11 +2,20 @@ import type { DynamicsResult, ExerciseDynamics, ExpectedNoteEvent, MidiExercise,
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { resolveScoreWeights } from "./config.js";
 
-export interface ScoreMidiExerciseParams { exercise: MidiExercise; performedNotes: PerformedNote[]; durationTolerancePercent?: number; tempoPct?: number }
+export interface ScoreMidiExerciseParams {
+  exercise: MidiExercise;
+  performedNotes: PerformedNote[];
+  durationTolerancePercent?: number;
+  tempoPct?: number;
+  /** Count a note held longer than written as correct (plucked and bowed mic notes; see scoreExercise). */
+  ignoreHeldTooLong?: boolean;
+  /** Called for every expected note matched by a performed note of the same pitch (intonation scoring uses it). */
+  onPitchMatch?: (expected: ExpectedNoteEvent, performed: PerformedNote) => void;
+}
 const round = (value: number) => Math.round(Math.max(0, Math.min(100, value)));
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent, tempoPct = 100 }: ScoreMidiExerciseParams): ScoringResult {
+export function scoreMidiExercise({ exercise, performedNotes, durationTolerancePercent, tempoPct = 100, ignoreHeldTooLong = false, onPitchMatch }: ScoreMidiExerciseParams): ScoringResult {
   const untimed = exercise.scoring === "untimed";
   const msPerBeat = (60_000 / exercise.tempoBpm) * (100 / tempoPct);
   const rate = tempoPct / 100;
@@ -38,7 +47,7 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
     durationKnown++;
     const target = exp.durationBeats * msPerBeat;
     const error = ((got.durationMs - target) / target) * 100;
-    if (Math.abs(error) <= tolerancePercent) durationHits++;
+    if (Math.abs(error) <= tolerancePercent || (ignoreHeldTooLong && error > 0)) durationHits++;
     else if (error < 0) { add(exp, got, "held-too-short"); feedback.add(`Try holding ${midiNoteToName(exp.note)} for its full value.`) }
     else { add(exp, got, "held-too-long"); feedback.add(`${midiNoteToName(exp.note)} was held too long.`) }
   };
@@ -54,7 +63,7 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
     if (index < 0 && !untimed) index = performed.findIndex((_, i) => !used.has(i) && Math.abs(performed[i]!.startTimestampMs - targetTime(exp)) <= timingTolerance);
     if (index < 0) { add(exp, null, "missed"); feedback.add(`You missed ${midiNoteToName(exp.note)}.`); continue }
     used.add(index); const got = performed[index]!;
-    if (got.note === exp.note) { pitchHits++; matchedVelocities.push(got.velocity) } else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
+    if (got.note === exp.note) { pitchHits++; matchedVelocities.push(got.velocity); onPitchMatch?.(exp, got) } else { add(exp, got, "wrong"); feedback.add(`Expected ${midiNoteToName(exp.note)}, but heard ${midiNoteToName(got.note)}.`) }
     if (!untimed) { scoreTiming(exp, got); scoreDuration(exp, got) }
   }
 
@@ -64,7 +73,7 @@ export function scoreMidiExercise({ exercise, performedNotes, durationToleranceP
     const selected: { note: PerformedNote; index: number }[] = [];
     for (const exp of chord) {
       const match = candidates.find(({ note, index }) => !selected.some((item) => item.index === index) && note.note === exp.note);
-      if (match) { selected.push(match); used.add(match.index); pitchHits++; if (!untimed) scoreDuration(exp, match.note) }
+      if (match) { selected.push(match); used.add(match.index); pitchHits++; onPitchMatch?.(exp, match.note); if (!untimed) scoreDuration(exp, match.note) }
       else { add(exp, null, "missing-chord-tone", groupId); feedback.add(`The chord was missing ${midiNoteToName(exp.note)}.`) }
     }
     chordVelocities.push(selected.map(({ note }) => note.velocity));
