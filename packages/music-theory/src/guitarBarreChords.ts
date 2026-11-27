@@ -17,6 +17,7 @@ export const GUITAR_BARRE_CHORDS: Record<string, GuitarChordShape> = {
   Bb: shape("Bb", "B-flat major (A-shape barre)", [null, 1, 3, 3, 3, 1], [0, 1, 2, 3, 4, 1], 1, { fret: 1, fromString: 5, toString: 1 }),
   B: shape("B", "B major (A-shape barre)", [null, 2, 4, 4, 4, 2], [0, 1, 2, 3, 4, 1], 2, { fret: 2, fromString: 5, toString: 1 }),
   Bm: shape("Bm", "B minor (A-shape barre)", [null, 2, 4, 4, 3, 2], [0, 1, 3, 4, 2, 1], 2, { fret: 2, fromString: 5, toString: 1 }),
+  B7: shape("B7", "B dominant 7", [null, 2, 1, 2, 0, 2], [0, 2, 1, 3, 0, 4], 1),
   E5: shape("E5", "E power chord", [0, 2, 2, null, null, null], [0, 1, 2, 0, 0, 0], 1),
   A5: shape("A5", "A power chord", [null, 0, 2, 2, null, null], [0, 0, 1, 2, 0, 0], 1),
   D5: shape("D5", "D power chord", [null, null, 0, 2, 3, null], [0, 0, 0, 1, 2, 0], 1),
