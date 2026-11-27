@@ -12,3 +12,4 @@ export function midiNoteToName(note: number): string {
   const octave = getOctave(note);
   return pitch.includes("/") ? pitch.split("/").map(name => `${name}${octave}`).join("/") : `${pitch}${octave}`;
 }
+export * from "./tunings.js";

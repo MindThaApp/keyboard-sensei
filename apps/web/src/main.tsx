@@ -8,6 +8,7 @@ import { AppearanceProvider } from "./contexts/AppearanceContext";
 import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { monitoring, startMonitoring } from "./monitoring";
 import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
+import TunerSync from "./components/tuner/TunerSync";
 import ExperienceSync from "./contexts/ExperienceSync";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <AuthProvider>
               <MonitoringBridge />
               <ExperienceSync />
+              <TunerSync />
               <MidiProvider>
                 <App />
               </MidiProvider>

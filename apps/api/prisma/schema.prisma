@@ -40,6 +40,9 @@ model User {
   // "simple" | "advanced": the interface mode, synced so a new device picks it up.
   // NULL until the user has chosen one.
   experience_mode    String?
+  // Tuner reference A4 in Hz (415-466), synced: a property of the learner's ensemble,
+  // not the device. NULL until set (reads as 440).
+  tuner_a4_hz        Float?
   created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]
