@@ -48,3 +48,31 @@ describe("chord dictionary", () => {
     expect(chordBassPitchClass(guitarChord("G"))).toBe(7);
   });
 });
+
+import { nearNeighbours, parseChordSymbol, sameChord } from "./index.js";
+describe("chord symbols", () => {
+  it("parses roots and qualities", () => {
+    expect(parseChordSymbol("Em")).toEqual({ root: 4, suffix: "m", pitchClasses: [4, 7, 11] });
+    expect(parseChordSymbol("Bbmaj7")?.root).toBe(10);
+    expect(parseChordSymbol("H")).toBeNull();
+    expect(parseChordSymbol("Cadd9")).toBeNull();
+  });
+  it("compares chords by notes", () => {
+    expect(sameChord("A#", "Bb")).toBe(true);
+    expect(sameChord("C", "Cmaj7")).toBe(false);
+    expect(nearNeighbours("C", "Cmaj7")).toBe(true);
+    expect(nearNeighbours("C", "Am")).toBe(false);
+    expect(nearNeighbours("C", "Cm")).toBe(false);
+  });
+  it("dictionary symbols are all in the vocabulary and agree with their diagrams", () => {
+    for (const symbol of Object.keys(GUITAR_CHORDS)) {
+      const parsed = parseChordSymbol(symbol);
+      expect(parsed, symbol).not.toBeNull();
+      const drawn = chordPitchClasses(GUITAR_CHORDS[symbol]!);
+      // every note of the named chord is in the diagram, and the diagram adds nothing foreign
+      expect(drawn.filter((pc) => !parsed!.pitchClasses.includes(pc)), symbol).toEqual([]);
+      // only the fifth may be left out (C7 is normally played without it)
+      expect(parsed!.pitchClasses.filter((pc) => !drawn.includes(pc) && pc !== (parsed!.root + 7) % 12), symbol).toEqual([]);
+    }
+  });
+});
