@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="MusicPortal.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
+    <Grid>
+        <controls:WebView2 x:Name="WebView" />
+        <StackPanel x:Name="RuntimeMissingPanel" Visibility="Collapsed" Spacing="12" Padding="32"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+            <TextBlock Text="Music Portal needs the Microsoft Edge WebView2 Runtime" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+            <TextBlock TextWrapping="Wrap"
+                       Text="It is part of Windows 11 and most Windows 10 PCs, but it is missing on this one. Install it, then open Music Portal again." />
+            <HyperlinkButton Content="Download the WebView2 Runtime" NavigateUri="https://go.microsoft.com/fwlink/p/?LinkId=2124703" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -99,7 +99,11 @@ export interface AuthUser { id: string; email: string; display_name: string; nar
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }
-export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct }
+/** `clientAttemptId` / `playedAt`: set by the offline outbox so a replay is stored once and dated when it was played. */
+export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct; clientAttemptId?: string; playedAt?: string }
+/** GET /content/offline: every live lesson with its exercises, versioned by a content hash (also the ETag). */
+export interface OfflineLessonEntry { lesson: Lesson; order: number; exercises: MidiExercise[] }
+export interface OfflineContentBundle { contentHash: string; generatedAt: string; lessons: OfflineLessonEntry[] }
 export interface QuizAnswerPayload { selectedAnswer: number }
 export interface QuizAnswerResponse { correct: boolean; explanation?: string; correctIndex?: number }
 export interface AttemptSummary { id: string; exerciseId: string; lessonId: string; lessonTitle: string; score: number; createdAt: string }

@@ -1,7 +1,11 @@
 import type { PracticeHands, PracticeLevel } from "@keyboard-sensei/midi-engine";
-import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
+import type { AssessmentPlacement, AttemptsResponse, AuthResponse, AuthUser, ExerciseAttemptPayload, LessonDetail, LessonListItem, MidiExercise, OfflineContentBundle, QuizAnswerPayload, QuizAnswerResponse, ScoringResult, UserProgress } from "@keyboard-sensei/shared-types";
 
 import { publishRewards } from "../state/rewards";
+import { cachedLessonDetail, cachedLessonList, cachedProgress, rememberLessonDetail, rememberLessonList, rememberProgress } from "../offline/offlineContent";
+import { scoreAttemptOffline } from "../offline/offlineScoring";
+import { newClientAttemptId, queueAttempt, type OutboxEntry, type ReplayOutcome } from "../offline/outbox";
+import { userScopeFromToken } from "../offline/userScope";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const TOKEN_KEY = "keyboard-sensei-access-token";
@@ -41,16 +45,74 @@ export const resendVerification = (email: string) => request<{ ok: true }>("/aut
 export const deleteMyAccount = (confirm: { password: string } | { google_credential: string }) => request<{ ok: true }>("/users/me", { method: "DELETE", body: JSON.stringify(confirm) });
 /** Signed out (the public /delete-account page). */
 export const deleteAccountWithPassword = (email: string, password: string) => request<{ ok: true }>("/auth/delete-account", { method: "POST", body: JSON.stringify({ email, password }) });
-export const getLessons = () => request<LessonListItem[]>("/lessons");
-export const getLesson = (id: string) => request<LessonDetail>(`/lessons/${encodeURIComponent(id)}`);
-export const getProgress = () => request<UserProgress>("/users/me/progress");
+/** The server could not be reached (no network, or the proxy in front of a stopped API). */
+export const isUnreachable = (error: unknown) =>
+  error instanceof ApiError ? error.status === 502 || error.status === 503 || error.status === 504 : error instanceof Error;
+const offlineScope = () => userScopeFromToken(getToken());
+
+/** Network first; when the server is unreachable, the copy cached on this device for this account. */
+async function networkFirst<T>(load: () => Promise<T>, remember: (scope: string, value: T) => Promise<void>, recall: (scope: string) => Promise<T | undefined>): Promise<T> {
+  const scope = offlineScope();
+  try {
+    const value = await load();
+    if (scope) void remember(scope, value).catch(() => undefined);
+    return value;
+  } catch (error) {
+    if (!scope || !isUnreachable(error)) throw error;
+    const cached = await recall(scope).catch(() => undefined);
+    if (cached === undefined) throw error;
+    return cached;
+  }
+}
+
+export const getLessons = () => networkFirst(() => request<LessonListItem[]>("/lessons"), rememberLessonList, cachedLessonList);
+export const getLesson = (id: string) => networkFirst(() => request<LessonDetail>(`/lessons/${encodeURIComponent(id)}`), rememberLessonDetail, (scope) => cachedLessonDetail(scope, id));
+export const getProgress = () => networkFirst(() => request<UserProgress>("/users/me/progress"), rememberProgress, cachedProgress);
+/** The offline content bundle, or null when `knownHash` is still current (304). */
+export const fetchOfflineBundle = async (knownHash?: string): Promise<OfflineContentBundle | null> => {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/content/offline`, {
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(knownHash ? { "if-none-match": `"${knownHash}"` } : {}) },
+  });
+  if (response.status === 304) return null;
+  if (!response.ok) throw new ApiError(`Request failed (${response.status})`, response.status);
+  return await response.json() as OfflineContentBundle;
+};
 export const getAttempts = () => request<AttemptsResponse>("/users/me/attempts");
 // Saved attempts come back with progress rewards; publishing them here gives every
 // screen that saves one the toasts and a refreshed header, for free.
-export const submitExerciseAttempt = async (exerciseId: string, payload: ExerciseAttemptPayload) => {
-  const result = await request<ScoringResult & { rewards?: Rewards | null }>(`/exercises/${encodeURIComponent(exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(payload) });
+// Signed in, every attempt carries a client id, so a retry after a lost response is
+// stored once. With the server unreachable it is scored on the device from cached
+// content and queued in the outbox (`offline: true`); see offline/offlineSync.ts.
+export const submitExerciseAttempt = async (exerciseId: string, payload: ExerciseAttemptPayload): Promise<ScoringResult & { rewards?: Rewards | null; offline?: boolean }> => {
+  const scope = offlineScope();
+  const body = scope ? { ...payload, clientAttemptId: payload.clientAttemptId ?? newClientAttemptId() } : payload;
+  let result: ScoringResult & { rewards?: Rewards | null };
+  try {
+    result = await request<ScoringResult & { rewards?: Rewards | null }>(`/exercises/${encodeURIComponent(exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(body) });
+  } catch (error) {
+    if (!scope || !isUnreachable(error)) throw error;
+    const offline = await scoreAttemptOffline(scope, exerciseId, body).catch(() => null);
+    if (!offline) throw error;
+    await queueAttempt(scope, exerciseId, body);
+    return { ...offline, rewards: null, offline: true };
+  }
   publishRewards(result.rewards);
   return result;
+};
+/** One outbox replay. Rewards earned by it are published like a live attempt's. */
+export const replayExerciseAttempt = async (entry: OutboxEntry): Promise<ReplayOutcome> => {
+  try {
+    const result = await request<ScoringResult & { rewards?: Rewards | null }>(`/exercises/${encodeURIComponent(entry.exerciseId)}/attempts`, { method: "POST", body: JSON.stringify(entry.payload) });
+    publishRewards(result.rewards);
+    return "sent";
+  } catch (error) {
+    if (!(error instanceof ApiError)) return "retry";
+    if (error.status === 401 || error.status === 403) return "stop";
+    // Retired exercise, invalid payload, id reused: replaying again cannot help.
+    if (error.status === 400 || error.status === 404 || error.status === 409 || error.status === 422) return "rejected";
+    return "retry";
+  }
 };
 export const submitQuizAnswer = async (questionId: string, payload: QuizAnswerPayload) => {
   const result = await request<QuizAnswerResponse & { rewards?: Rewards | null }>(`/quiz-questions/${encodeURIComponent(questionId)}/answer`, { method: "POST", body: JSON.stringify(payload) });

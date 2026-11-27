@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Unit tests for the host's platform-free code (parser, bridge protocol, host
+    policy, timestamps). The files are linked from the app project rather than
+    referenced, so the tests build and run on any OS without the Windows App SDK.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MusicPortal.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\MusicPortal\Midi\MidiMessageParser.cs" Link="Linked\MidiMessageParser.cs" />
+    <Compile Include="..\MusicPortal\Midi\BridgeProtocol.cs" Link="Linked\BridgeProtocol.cs" />
+    <Compile Include="..\MusicPortal\Midi\MidiDeviceInfo.cs" Link="Linked\MidiDeviceInfo.cs" />
+    <Compile Include="..\MusicPortal\HostPolicy.cs" Link="Linked\HostPolicy.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>
