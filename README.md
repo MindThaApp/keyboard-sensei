@@ -1,6 +1,14 @@
-# Midivory
+# Music Portal
 
-Piano MIDI Player.
+Piano, guitar and violin lessons, with a tuner. Formerly **Midivory** (piano, MIDI-first);
+see `docs/specs/MUSIC-PORTAL.md` for the plan.
+
+The product name changed; the technical identifiers did not. The Android id
+`com.midivory.app`, the `@keyboard-sensei/*` packages, the `keyboard_sensei` database,
+the `keyboard-sensei-*` Docker volumes and GHCR images, the `ks-*` / `keyboard-sensei-*`
+browser storage keys and every lesson id stay as they are, because stored data and
+installed apps depend on them (spec section 1.2). `node scripts/check-old-name.mjs`
+keeps the old name out of everything else.
 
 Full-stack piano learning app. pnpm monorepo: `apps/web` (React/Vite/TypeScript/Tailwind/VexFlow/Zustand), `apps/api` (Express 5/Prisma/PostgreSQL/JWT/Zod), plus shared `packages/*` for domain types, MIDI capture/scoring, note naming, and lesson validation.
 

@@ -35,6 +35,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-migration-prefixes.mjs
+      - run: node scripts/check-old-name.mjs
       - run: pnpm db:generate # @prisma/client types must be generated before typecheck
       - run: pnpm typecheck
       - run: pnpm db:migrate:deploy

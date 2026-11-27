@@ -41,7 +41,7 @@ deletes their account (backups: up to 14 days more).
 | Personal info → **Email address** | Yes | No | Required | Account management, App functionality | Sign-in identifier; password-reset and confirmation emails |
 | Personal info → **Name** | Yes | No | Required | Account management, App functionality | The display name the user types (or their Google profile name with Google sign-in) |
 | Personal info → **User IDs** | Yes | No | Required | Account management | Our account id; the Google account id (`google_sub`) when Google sign-in is used |
-| App activity → **App interactions** | Yes | No | Required | App functionality, Personalisation | Lesson progress, exercise attempts (notes played: pitch, velocity, timing) and scores, quiz answers, play-along runs and settings, XP, achievements, practice minutes per day, daily goal, narration usage counts |
+| App activity → **App interactions** | Yes | No | Required | App functionality, Personalisation | Lesson progress, exercise attempts (notes played: pitch, velocity, timing; for microphone exercises also tuning in cents and chord names, never audio) and scores, quiz answers, play-along runs and settings, XP, achievements, practice minutes per day, daily goal, narration usage counts |
 | App activity → **Other user-generated content** | Yes | No | Optional | App functionality | Feedback messages (with the page they were sent from); titles the user gives uploaded songs; import URLs |
 | Audio → **Music files** | Yes | No | Optional | App functionality | MIDI files the user uploads, and practice recordings the user chooses to save (MIDI note data, not audio) |
 | Audio → **Other audio files** | Yes | No | Optional | App functionality | Instrument sound samples the user uploads |
@@ -52,7 +52,9 @@ deletes their account (backups: up to 14 days more).
 
 Not collected (answer **No**): Location (approximate or precise), Financial info,
 Health and fitness, Messages, Photos other than feedback screenshots, Videos, Voice
-or sound recordings (the app never uses the microphone), Files and docs, Calendar,
+or sound recordings (microphone features analyse sound on the device; no audio is
+transmitted or stored, so "Audio" is not collected. `RECORD_AUDIO` is declared and
+explained in the listing from the release that ships them), Files and docs, Calendar,
 Contacts, Web browsing history, Search history (the song search runs on the
 device), Installed apps, Device or other IDs,
 Race/ethnicity, Political or religious beliefs, Sexual orientation, Other info.

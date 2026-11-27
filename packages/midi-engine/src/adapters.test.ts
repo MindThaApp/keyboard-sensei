@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { MidiEventHub, MockMidiAdapter, dispatchMidiMessage } from "./adapters.js";
 
 describe("MockMidiAdapter", () => {
+  it("lists one virtual keyboard under the app's name", () => {
+    expect(new MockMidiAdapter(() => 0).listDevices()).toEqual([{ id: "mock", name: "Virtual Keyboard", manufacturer: "Music Portal" }]);
+  });
+
   it("delivers every event to every subscriber, and stops after unsubscribe", () => {
     const adapter = new MockMidiAdapter(() => 42);
     const a: number[] = [];

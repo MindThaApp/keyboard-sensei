@@ -1,3 +1,5 @@
+// Must stay the first import: brings local storage up to date before anything reads it.
+import "./state/migrateStorageOnStartup";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

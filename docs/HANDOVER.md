@@ -1,7 +1,7 @@
-# Midivory handover, 2026-11-27
+# Music Portal handover, 2026-11-27
 
 ## What the app is
-Midivory ("Midivory: Piano MIDI Player", applicationId com.midivory.app), formerly Keyboard Sensei / OctaviApp. GitHub repo MindThaApp/keyboard-sensei.
+Music Portal (Play: "Music Portal: Piano & Guitar"; applicationId com.midivory.app, unchanged), formerly Midivory, Keyboard Sensei and OctaviApp. Plan: docs/specs/MUSIC-PORTAL.md. GitHub repo MindThaApp/keyboard-sensei.
 Stack: pnpm monorepo. apps/web (React, Vite, TypeScript), apps/api (Express 5, Prisma, Postgres), apps/mobile (Capacitor 8), packages/playalong-core.
 Layout: a keyboard-app folder holding OctaviApp (main checkout), worktrees and handover. Node 22 via nvm: run node/pnpm through `bash -ic`.
 
