@@ -1,5 +1,5 @@
 import type { ExerciseKey, MidiExercise } from "@keyboard-sensei/shared-types";
-import type { ViolinHint } from "@keyboard-sensei/shared-types";
+import { isViolinHint, type ViolinHint } from "@keyboard-sensei/shared-types";
 import { FINGER_PATTERNS, defaultFingering, printedMarks, type FingerPatternId, type ViolinFingering } from "@keyboard-sensei/music-theory/violin";
 import { drill, vexKey, type DrillInput } from "./build.js";
 
@@ -130,7 +130,10 @@ export function violinNotation(exercise: MidiExercise, options: ViolinNotationOp
   const flats = (exercise.keySignature?.fifths ?? 0) < 0;
   const notes = [...exercise.expected].sort((a, b) => a.startBeat - b.startBeat);
   const hints = exercise.techniqueHints ?? {};
-  const printed = printedMarks(notes.map((note) => hints[note.id]));
+  const printed = printedMarks(notes.map((note) => {
+    const hint = hints[note.id];
+    return isViolinHint(hint) ? hint : undefined;
+  }));
   const totalBeats = Math.max(...notes.map((n) => n.startBeat + n.durationBeats));
   const barCount = Math.ceil(totalBeats / beatsPerBar - 1e-9);
   const measures: { notes: Record<string, unknown>[] }[] = Array.from({ length: barCount }, () => ({ notes: [] }));

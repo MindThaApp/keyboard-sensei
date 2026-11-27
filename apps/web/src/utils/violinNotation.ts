@@ -1,4 +1,4 @@
-import type { ViolinHint } from "@keyboard-sensei/shared-types";
+import { isViolinHint, type GuitarHint, type ViolinHint } from "@keyboard-sensei/shared-types";
 import { VIOLIN_STRING_NUMERAL, ordinal, printedMarks, type FingerPatternId, type ViolinStringName } from "@keyboard-sensei/music-theory/violin";
 
 /**
@@ -39,14 +39,15 @@ interface HintedNote { ids?: string[]; duration: string; violin?: ViolinMarks }
 interface HintedStaff<N extends HintedNote> { measures: { notes: N[] }[] }
 
 /**
- * Copies an exercise's violin hints onto the engraved notes (matched by note id); what gets
+ * Copies an exercise's violin hints onto the engraved notes (matched by note id; any guitar
+ * hints are ignored); what gets
  * printed is decided by `printedMarks` (music-theory) so lessons and the player agree.
  * Pure: returns a new staff and leaves the input alone.
  */
-export function applyViolinHints<N extends HintedNote, T extends HintedStaff<N>>(staff: T, hints: Record<string, ViolinHint>): T {
+export function applyViolinHints<N extends HintedNote, T extends HintedStaff<N>>(staff: T, hints: Record<string, GuitarHint | ViolinHint>): T {
   const notes = staff.measures.flatMap((measure) => measure.notes);
   const hintFor = (note: N): ViolinHint | undefined =>
-    note.duration.includes("r") ? undefined : note.ids?.map((id) => hints[id]).find((h): h is ViolinHint => h !== undefined);
+    note.duration.includes("r") ? undefined : note.ids?.map((id) => hints[id]).find(isViolinHint);
   const marks = new Map<N, ViolinMarks | undefined>();
   const printed = printedMarks(notes.map(hintFor));
   notes.forEach((note, index) => marks.set(note, printed[index]));

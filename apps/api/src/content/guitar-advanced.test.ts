@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GUITAR_BARRE_CHORDS, GUITAR_CHORDS, chordPitchClasses, fretToMidi, GUITAR_HIGHEST_NOTE, GUITAR_LOWEST_NOTE } from "@keyboard-sensei/music-theory";
 import { lessonSchema, midiExerciseSchema } from "@keyboard-sensei/lesson-engine";
+import { isGuitarHint } from "@keyboard-sensei/shared-types";
 import { buildGuitarAdvancedLessons, guitarAdvancedExercises as exercises, guitarAdvancedLessons as lessons } from "./guitar-advanced.js";
 import { exercises as existingExercises, lessons as existingLessons } from "../content.js";
 
@@ -120,11 +121,12 @@ describe("guitar tiers 3-4: exercises", () => {
       const hints = e.techniqueHints!;
       for (const n of e.expected) {
         const h = hints[n.id];
-        expect(h, `${e.exerciseId}/${n.id}`).toBeDefined();
-        expect(fretToMidi(h!.string, h!.fret)).toBe(n.note);
-        expect(h!.fret).toBeGreaterThanOrEqual(0);
-        expect(h!.fret).toBeLessThanOrEqual(12);
-        if (h!.finger !== undefined) expect([0, 1, 2, 3, 4]).toContain(h!.finger);
+        expect(isGuitarHint(h), `${e.exerciseId}/${n.id}`).toBe(true);
+        if (!isGuitarHint(h)) continue;
+        expect(fretToMidi(h.string, h.fret)).toBe(n.note);
+        expect(h.fret).toBeGreaterThanOrEqual(0);
+        expect(h.fret).toBeLessThanOrEqual(12);
+        if (h.finger !== undefined) expect([0, 1, 2, 3, 4]).toContain(h.finger);
         expect(n.note).toBeGreaterThanOrEqual(GUITAR_LOWEST_NOTE);
         expect(n.note).toBeLessThanOrEqual(GUITAR_HIGHEST_NOTE);
       }
@@ -159,7 +161,9 @@ describe("guitar tiers 3-4: exercises", () => {
     for (const e of mono) {
       const perBar = new Map<number, number[]>();
       for (const n of e.expected) {
-        const f = e.techniqueHints![n.id]!.fret;
+        const hint = e.techniqueHints![n.id];
+        if (!isGuitarHint(hint)) throw new Error(`${e.exerciseId}/${n.id} needs a guitar hint`);
+        const f = hint.fret;
         if (f === 0) continue;
         const bar = Math.floor(n.startBeat / (e.beatsPerBar ?? 4));
         perBar.set(bar, [...(perBar.get(bar) ?? []), f]);
