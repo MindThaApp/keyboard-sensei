@@ -521,3 +521,527 @@ re-enable the permission.
   capability is declared and the privacy policy URL covers it.
 - Crash reports (Sentry) must never attach audio buffers; add audio objects to
   the redaction tests in `packages/shared-types/src/sentry.ts`.
+
+---
+
+## 5. Tuner
+
+A standalone screen (`/tune`, also reachable from every mic exercise and the
+instrument picker). Works **offline and without an account**; it is the
+natural free entry point (7).
+
+### 5.1 Chromatic mode
+
+- Big note name with octave, frequency in Hz (0.1 Hz), needle ±50 cents with a
+  green zone (±3 cents by default, configurable 1-10), and a strobe-style band
+  for fine work. Low-latency path from 4.4 (hop 512, window 4096 so low E and
+  low piano notes are stable).
+- Smoothing: median over ~5 frames plus hysteresis on the displayed note so the
+  name does not flicker between neighbours at ±50 cents.
+- "Hold" freezes the last stable reading; a short history trace shows drift
+  (useful for violin pegs that slip).
+- Optional **reference tone**: plays the target pitch (sine or sampled) for
+  tuning by ear, using the existing audio engine.
+
+### 5.2 Presets
+
+Each preset lists strings low to high with target pitches; the tuner
+auto-detects the nearest string, or the learner taps a string to lock it.
+
+| Instrument | Preset | Pitches |
+|---|---|---|
+| Guitar | Standard | E2 A2 D3 G3 B3 E4 |
+| Guitar | Drop D | D2 A2 D3 G3 B3 E4 |
+| Guitar | Half step down | Eb2 Ab2 Db3 Gb3 Bb3 Eb4 |
+| Guitar | Full step down | D2 G2 C3 F3 A3 D4 |
+| Guitar | Drop C | C2 G2 C3 F3 A3 D4 |
+| Guitar | DADGAD | D2 A2 D3 G3 A3 D4 |
+| Guitar | Open G | D2 G2 D3 G3 B3 D4 |
+| Guitar | Open D | D2 A2 D3 F#3 A3 D4 |
+| Guitar | Open E | E2 B2 E3 G#3 B3 E4 |
+| Violin | Standard | G3 D4 A4 E5 |
+| Piano | Chromatic + reference | All 88 keys; the target can be ET or the stretch curve from the Piano check (6) |
+
+Custom tunings (name + pitches) are saved per user. Capo setting for guitar
+(shifts targets and the displayed names). Presets are data in
+`packages/music-theory/src/tunings.ts`, shared with lesson content and chord
+grading.
+
+### 5.3 Reference pitch
+
+- **A4 = 440 Hz** default, adjustable **415-466 Hz** in 0.5 Hz steps (fine
+  0.1 Hz with long-press), with quick picks 440 / 442 / 443 / 432 / 415.
+- The same setting drives intonation grading (4.2), the reference tone and
+  the Piano check, so everything agrees.
+- Stored in `mp-tuner-settings` and synced to the account (it is a property of
+  the learner's ensemble, not the device).
+
+---
+
+## 6. Acoustic piano tuning
+
+### 6.1 Phase 1: "Piano check" (measurement only)
+
+Goal: tell the owner of an acoustic piano which notes are out of tune and by
+how much, so they can decide whether to call a technician. No tuning
+instructions in this phase.
+
+Flow:
+
+1. Choose **Quick check** (every A and C plus a few notes per octave, ~20
+   notes, ~3 minutes) or **Full check** (all 88 keys, or a smaller range for
+   short keyboards).
+2. The app shows the key to play on a keyboard graphic; the learner plays it
+   *mezzo-forte* and lets it ring; the app captures ~1.5 s of the steady part
+   and moves on automatically (with redo).
+3. Measurement per note: large FFT (16384-65536 points with zero padding, Hann
+   window), partial peaks with parabolic interpolation (sub-cent accuracy on a
+   steady tone), fundamental estimated from the partial series rather than
+   the first peak (in the bass the fundamental is weak or missing). From the
+   partials `f_n ≈ n·f0·sqrt(1 + B·n²)` the **inharmonicity coefficient B**
+   is fitted per note.
+4. Results:
+   - Keyboard heat map coloured by deviation: within ±5 cents green, 5-15
+     amber, > 15 red.
+   - Each note's deviation **vs equal temperament** at the chosen A4 and
+     **vs a typical stretch curve** (a Railsback-style curve; once enough notes
+     are measured, a curve derived from the piano's own B values). A well-tuned
+     piano is stretched, so judging only against ET would flag good treble
+     and bass notes as wrong; the stretch view is the default.
+   - **Overall pitch level** ("your piano is on average 18 cents flat"):
+     common on pianos not tuned for years and the most useful single number.
+   - Worst notes list, and "unison may be out" hints where partials are split
+     or the level beats (three strings of one note disagreeing).
+   - Plain-language verdict: "in good shape", "a tuning would help", "a pitch
+     raise is likely needed (more than ~25 cents flat)".
+5. Reports are kept on the device (and optionally saved to the account) so the
+   owner can compare before/after a technician visit.
+
+### 6.2 Phase 2: guided tuning aid
+
+Only after phase 1 is solid on real pianos. Adds a tuning workflow for owners
+who choose to tune themselves:
+
+- **Measure first:** B on a sample of notes across the keyboard → computed
+  tuning curve for this piano (octave stretch chosen so the important partials
+  match, e.g. 4:2 in the middle, wider 6:3 in the bass and 2:1 towards the top).
+- **Order:** temperament octave (around F3-F4) first, then up the treble by
+  octaves, then down the bass; the app shows which note is next.
+- **Per note:** live fine display (strobe-like, ±1 cent) against that note's
+  target; for trichords, guidance to mute side strings, tune the centre string,
+  then bring each unison in by eliminating beats.
+- **Pitch raise mode:** if the piano is far flat, a rough first pass with a
+  small calculated overpull, then a fine pass, with a clear warning about the
+  extra stress on strings.
+- **Stop conditions:** if a note will not hold, a pin turns too easily, or the
+  pitch jumps unpredictably, the app stops guiding that note and recommends a
+  technician.
+
+### 6.3 Safety note (shown in-app before phase 2, and in the phase 1 results)
+
+> Turning tuning pins changes the tension on strings that together hold many
+> tonnes of load. Use a proper **piano tuning lever (tuning hammer)** with a tip
+> that fits the pins exactly; never use pliers, wrenches or socket sets, which
+> damage pins and the pin block. Make very small movements, set the pin
+> rather than bending it, and never raise a string far above its target pitch.
+> Old or rusty strings can break and cause injury: wear eye protection, keep
+> your face away from the strings, and stop if a string or pin feels wrong.
+> Loose pins, cracked pin blocks, very old pianos and pianos far below pitch
+> need a professional.
+>
+> **For most pianos the best choice is a qualified piano technician.** Music
+> Portal's Piano check helps you know when to call one and what to tell them;
+> the tuning aid is for people who accept the risks above.
+
+Phase 2 does not ship without this note, an explicit "I understand" step, and
+a link to finding a local professional piano technician (e.g. through a
+national piano technicians' association).
+
+---
+
+## 7. Free vs paid (proposal)
+
+A proposal for discussion; **no prices in this document**. Principles:
+
+- One account, one entitlement, on every platform (web, Android, Windows).
+- **Nothing an existing user can use today is taken away from them.** Existing
+  accounts keep their current piano features free (grandfathered), whatever
+  the new split is for new accounts.
+- Free must be useful on its own: the tuner and a real start on every
+  instrument.
+
+| Feature | Free | Paid |
+|---|---|---|
+| Chromatic tuner, all presets, custom tunings, reference pitch | ✓ | |
+| Piano check (phase 1): quick check and summary verdict | ✓ | |
+| Piano check: full 88-key report, history, before/after compare | | ✓ |
+| Guided piano tuning aid (phase 2) | | ✓ |
+| Lessons, tiers 0-1 for each instrument (incl. mic grading) | ✓ | |
+| Lessons, tiers 2+ for each instrument | | ✓ |
+| Daily challenge, quizzes, streaks, XP | ✓ | |
+| Play-along: a rotating/free subset of the library | ✓ | |
+| Play-along: full library, own MIDI uploads, sheet scan | | ✓ (grandfathered for existing users) |
+| Detailed intonation and practice analytics | | ✓ |
+| MIDI and mic input, all platforms | ✓ | |
+| Offline lessons (downloaded content) | | ✓ |
+
+Implementation sketch: an `Entitlement` table (user, product, source:
+`play` / `msstore` / `web` / `grant`, period, status) checked on the server
+when lessons and songs are served; clients only hide/lock UI. Store rules
+differ: Google Play requires Play Billing for digital content bought inside
+the Android app; the Microsoft Store lets non-game apps use either Store
+add-ons or their own payment system. Purchases from any source unlock the same
+account. Store account ids and product ids stay out of this public repo.
+
+---
+
+## 8. Windows desktop app
+
+Goal: **Music Portal for Windows 10/11** in the Microsoft Store, with USB MIDI
+keyboards, Bluetooth LE MIDI where Windows supports it, and the microphone.
+
+### 8.1 Options
+
+**(a) Wrap the existing web app in a WebView2 host, packaged as MSIX.**
+A thin native shell (C#/.NET 8, WinUI 3 window with a single WebView2) loads
+the production build of `apps/web` from the package, like the Android
+Capacitor shell does. Two ways to get MIDI in:
+
+- **(a1) Web MIDI inside WebView2.** WebView2 is Chromium, so
+  `navigator.requestMIDIAccess` works and the existing `WebMidiAdapter` runs
+  unchanged. The host answers WebView2's `PermissionRequested` for MIDI and
+  microphone. Limits: Chromium's Windows MIDI backend sees class-compliant
+  USB devices but **not BLE MIDI**; on the classic Windows MIDI stack a port is
+  **single-client** (if a DAW holds the keyboard open, the app cannot), and
+  hot-plug relies on Chromium's device polling.
+- **(a2) Native MIDI bridged into the web view.** The host enumerates and opens
+  devices with **Windows MIDI Services** (the newer multi-client Windows MIDI
+  stack and SDK) where present, falling back to the WinRT
+  `Windows.Devices.Midi` API (`MidiInPort`, `DeviceWatcher`), which also
+  exposes paired **BLE MIDI** devices on Windows 10/11. Messages go to the page
+  with `CoreWebView2.PostWebMessageAsJson`; a `WindowsMidiAdapter` in
+  `packages/midi-engine` implements the existing `MidiAdapter`, mirroring
+  `CapacitorMidiAdapter` (same device/message/state events, reusing
+  `NativeClockSync` to map native timestamps to `performance.now()`).
+
+**(b) Native WinUI 3 / .NET app sharing lesson data.** Rebuild the UI in XAML
+and C#, use the same API and lesson JSON.
+
+| | (a) WebView2 + MSIX | (b) Native WinUI 3 |
+|---|---|---|
+| Code reuse | Whole app: lesson player, VexFlow/Verovio/OSMD notation, play-along renderer, scoring, mic DSP | Only data and API; scoring, notation and play-along rewritten or embedded in a web view anyway |
+| Feature parity | Same release as web/Android | Permanent lag; every feature built twice |
+| MIDI | Web MIDI (a1) day one; native bridge (a2) for BLE, multi-client, robust hot-plug | Native APIs directly |
+| Latency | Web MIDI: Chromium event timestamps. Bridge: native callback + one `postMessage` hop (low single-digit ms), well inside the 60 ms judging tolerance floor | Lowest |
+| Mic | `getUserMedia` + AudioWorklet in WebView2 (same DSP as web) | WASAPI + re-implemented DSP |
+| Size | Small host (few MB) + web build; WebView2 runtime is part of Windows 11 and present on most Windows 10 | Medium |
+| Effort | ~3-4 weeks incl. bridge and Store | Many months |
+
+**Recommendation: (a).** Ship with **(a2) the native bridge as the primary
+MIDI path**, keeping **(a1) Web MIDI as the fallback** (the adapter factory in
+`apps/web/src/native/hardwareMidi.ts` chooses: Windows native bridge if the
+host announces it, else Web MIDI, else the on-screen piano). Start with a
+one-day spike that checks Web MIDI and mic permission behaviour in the current
+WebView2 runtime; if the bridge slips, v1 can ship on (a1) with BLE listed as
+"coming soon". (b) is rejected: it doubles every future feature for a latency
+gain the scorer does not need. Electron was also considered and set aside: it
+ships its own Chromium (large download, its own update cadence), and it adds
+nothing WebView2 does not already give on Windows.
+
+### 8.2 Layout
+
+```
+apps/windows/
+  MusicPortal.sln
+  MusicPortal/                       WinUI 3 app (Windows App SDK, .NET 8), single-project MSIX
+    App.xaml(.cs), MainWindow.xaml(.cs)   one WebView2, window state, full screen
+    WebHost.cs                       virtual host mapping, permissions, navigation lock-down
+    Midi/MidiBridge.cs               device watcher, ports, message forwarding
+    Midi/MidiMessageParser.cs        port of the Android parser (same unit tests)
+    Package.appxmanifest             identity placeholders, capabilities
+    web/                             copy of apps/web/dist (build output, not committed)
+  MusicPortal.Tests/                 xUnit: parser, clock sync, bridge protocol
+  scripts/build-web.ps1              builds apps/web with the Windows flags and copies dist
+packages/midi-engine/src/windows.ts  WindowsMidiAdapter (JS side)
+```
+
+- **Page origin:** the web build is served from the package via
+  `SetVirtualHostNameToFolderMapping` on a fixed `https://` host name (e.g.
+  `https://app.musicportal.invalid`), which WebView2 treats as a secure
+  context (needed for Web MIDI, mic and the existing secure-context checks).
+  That origin is fixed forever, because local storage is keyed by it, and is
+  added to the API's `CORS_ORIGIN` list (as `https://localhost` is for Android).
+- **Navigation lock-down:** only the virtual host and the API origin load in the
+  view; other links open in the default browser (`NewWindowRequested`).
+- **Platform detection:** `apps/web/src/native/platform.ts` gains `windows`
+  (host injects a marker via `AddScriptToExecuteOnDocumentCreatedAsync`) so the
+  UI can show Windows-specific help text and choose the bridge adapter.
+
+### 8.3 MIDI: discovery, hot-plug, latency
+
+- **Discovery:** Windows MIDI Services SDK endpoint enumeration when the
+  service is present; otherwise `DeviceWatcher` on `MidiInPort.GetDeviceSelector()`.
+  Device list shape matches `NativeMidiDevice` (`id`, `name`, `transport`:
+  `usb` / `bluetooth` / `other`).
+- **BLE MIDI:** paired through Windows Settings → Bluetooth (the app shows a
+  short how-to and a "re-scan" button); after pairing it appears as a MIDI
+  device. In-app BLE scanning like Android's `BluetoothMidiPicker.tsx` is a
+  later step and depends on what the Windows MIDI Services SDK offers at that
+  point.
+- **Hot-plug:** watcher `Added` / `Removed` / `Updated` events re-open ports
+  and emit a devices event; the JS adapter rebinds exactly like
+  `WebMidiAdapter`'s `onstatechange` handling (a replugged device is a new
+  port). Test: unplug/replug during an exercise and during play-along must
+  resume input without a reload.
+- **Exclusive ports:** on the classic stack, show "Your keyboard is in use by
+  another app" when opening fails, instead of a silent empty device list.
+- **Latency:** native timestamps → `NativeClockSync` → `performance.now()`
+  domain; measure end-to-end (key press to on-screen highlight) on the
+  reference keyboard; target the same as Android (input judged within the
+  existing tolerances, visual response under ~30 ms on a typical laptop).
+- **Sound output** stays in the web audio engine; the existing output-latency
+  calibration applies unchanged.
+
+### 8.4 Microphone
+
+- `Package.appxmanifest`: `<DeviceCapability Name="microphone"/>`. The first
+  `getUserMedia` triggers Windows' consent prompt for the packaged app.
+- The host handles `CoreWebView2.PermissionRequested` for `Microphone` (allow
+  only for the app's own origin) and for MIDI.
+- If Windows privacy settings block the mic (Settings → Privacy & security →
+  Microphone), `getUserMedia` fails; the app shows a button that opens
+  `ms-settings:privacy-microphone`.
+
+### 8.5 Offline use
+
+- The UI is in the package, so the app always starts offline.
+- Tuner and Piano check need no network and no account.
+- Lesson content: add an offline cache (IndexedDB) of lesson JSON and
+  exercises, versioned by a content hash the seed computes and the API returns
+  (ETag on `GET /lessons`). Downloaded on sign-in and when the hash changes.
+- **Attempt outbox:** attempts made offline are stored with a client-generated
+  id and replayed when back online. The API accepts an optional
+  `clientAttemptId` and ignores duplicates; XP is already keyed by what earned
+  it, so a replay can never pay twice.
+- This work lives in `apps/web`, so the Android app gets the same offline
+  behaviour.
+
+### 8.6 MSIX packaging and Store requirements
+
+- **Packaging:** Windows App SDK single-project MSIX; build **x64** and
+  **arm64** (cross-compiled from x64 is fine) into one `.msixupload` for the
+  Store. Minimum OS: Windows 10 version 1809 (build 17763), the Windows App SDK
+  floor; target current Windows 11.
+- **Identity:** `Identity Name`, `Publisher` and `PublisherDisplayName` are
+  assigned by Partner Center. They are **not committed**: the manifest holds
+  placeholders and the build reads real values from a git-ignored
+  `apps/windows/Identity.props` locally or from CI secrets.
+- **Capabilities:** `runFullTrust` (standard for packaged desktop apps; the
+  Store asks for a short justification), `internetClient`, `microphone`. Add a
+  Bluetooth capability only if the BLE MIDI path is shown to need it on test
+  hardware.
+- **Dependencies:** Windows App SDK runtime (framework package dependency
+  handled by the Store); WebView2 Evergreen runtime (present on Windows 11; the
+  host checks at start-up and links to the installer on the rare Windows 10
+  machine without it).
+- **Store listing:** age rating via the **IARC questionnaire** in Partner Center
+  (no violence, no user-to-user chat; account sign-in and the feedback button
+  are the relevant answers; expect an all-ages rating); **privacy policy URL**
+  required (the existing `/privacy` page, updated per 4.8); screenshots at
+  required sizes, generated from the same Playwright flows used for the Play
+  listing; certification notes with a demo account for the reviewers.
+- **Certification:** run the Windows App Certification Kit locally before
+  every submission; Store policies require the app to work as described,
+  handle no network gracefully and not crash at launch.
+- **Updates:** the Store updates the package; the bundled web build means a
+  Windows release lags web deploys, so the API stays backward compatible
+  (8.8).
+
+### 8.7 Building and testing the Windows build
+
+The Windows app cannot be built in the Linux environment this repo is normally
+worked on. Two routes:
+
+**Local build (Windows 10/11 machine, x64; an arm64 device or VM for arm64
+testing):**
+
+1. Install Visual Studio 2022 with the *.NET desktop development* and *Windows
+   application development* (Windows App SDK / WinUI) workloads, the .NET 8
+   SDK, Git, Node.js 22 and pnpm 10.12.1 (`corepack enable && corepack prepare
+   pnpm@10.12.1 --activate`).
+2. Turn on **Developer Mode** (Settings → System → For developers) to allow
+   sideloading.
+3. `git clone`, then `pnpm install` at the repo root.
+4. `pwsh apps/windows/scripts/build-web.ps1 -ApiUrl https://<api domain>`:
+   builds `apps/web` with `VITE_API_URL` and copies `dist` into
+   `apps/windows/MusicPortal/web`.
+5. Copy `Identity.props.example` to `Identity.props` (test identity for local
+   builds).
+6. Debug run: open `apps/windows/MusicPortal.sln`, select x64, F5 (deploys the
+   package locally). Or from a shell:
+   `dotnet build apps/windows/MusicPortal -c Debug -p:Platform=x64`.
+7. Package: `dotnet publish apps/windows/MusicPortal -c Release
+   -p:Platform=x64 -p:GenerateAppxPackageOnBuild=true` (repeat for arm64), sign
+   with a local self-signed test certificate (never committed), trust it, and
+   install with `Add-AppxPackage`.
+8. Run the Windows App Certification Kit on the package.
+9. `dotnet test apps/windows/MusicPortal.Tests`.
+
+**CI:** a `windows.yml` workflow on a `windows-latest` runner builds the web
+bundle, runs the .NET tests and produces unsigned x64 + arm64 packages as
+artifacts. The Store signs on submission; submission itself stays manual.
+
+**Manual test matrix per release:** USB keyboard plugged in before launch /
+after launch / unplugged mid-exercise; BLE MIDI keyboard paired and reconnected
+after sleep; keyboard held by another app; mic allowed / denied / revoked in
+Settings while running; offline launch, offline lesson, reconnect and outbox
+replay; x64 and arm64; Windows 10 and Windows 11; 100% and 150% display scaling;
+touch screen.
+
+### 8.8 Keeping content and progress in sync with web and Android
+
+- **One backend.** All three clients use the same API and account; lessons come
+  from the API (seeded from `apps/api/src/content/*`), progress and XP are
+  server-authoritative, so a lesson finished on Windows is finished on Android.
+- **Same web bundle.** Windows and Android package a build of the same
+  `apps/web` commit; feature parity is by construction. Release notes per store
+  name the web commit they carry.
+- **Version skew.** Installed apps lag the server. The client sends
+  `X-Client-Version`; the API keeps old payload shapes working, and lesson
+  content can carry `minClientVersion`. A client that meets an unknown section
+  type or exercise input skips it with an "Update the app to see this" card
+  instead of failing the lesson.
+- **Synced settings.** Learner-level settings (active instrument, A4 reference,
+  custom tunings, interface mode) sync through the account via a small
+  `UserSetting` key/value table, generalising how `experience_mode` already
+  syncs. Device-level settings (latency, mic calibration, MIDI device ranges,
+  zoom) stay local per device by design.
+- **Offline merges** are append-only (attempts and XP), so there is nothing to
+  conflict: the outbox replays, the server dedupes by `clientAttemptId`.
+
+---
+
+## 9. Milestones, tests and risks
+
+Effort is rough, in focused developer-weeks for one person, excluding content
+authoring where noted. Order is build order; each milestone ships on its own.
+
+| # | Milestone | Effort | Depends on |
+|---|---|---|---|
+| M0 | Rename (UI, docs, legal, brand, listings) + storage migration framework and key-inventory test | 1 wk | - |
+| M1 | `PlayedInstrument` model, `Lesson.instrument` migration, instrument picker, Learn filtered, synced settings | 1-1.5 wk | M0 |
+| M2 | `packages/audio-analysis` (YIN/pYIN, onsets, segmentation) + AudioWorklet mic pipeline + calibration flow | 2-3 wk | - |
+| M3 | Tuner (chromatic, presets, A4, reference tone) | 1 wk | M2 |
+| M4 | Mic grading in the exercise player: `MicNoteSource`, intonation scoring, API schema fields, piano mic mode (single line, melody play-along) | 2 wk | M1, M2 |
+| M5 | Guitar v1: tab + staff, chord diagrams, fretboard, tiers 0-2 content | 2 wk eng + content | M4 |
+| M6 | Chord recognition (chroma, templates) + strum exercises | 2 wk | M2, M5 |
+| M7 | Violin v1: fingering/positions/bowing notation, fingerboard, tiers 0-2 content | 2 wk eng + content | M4 |
+| M8 | Android mic: `RECORD_AUDIO`, permission flow, device testing | 0.5-1 wk | M4 |
+| M9 | Piano check (phase 1) | 2 wk | M2 |
+| M10 | Offline content cache + attempt outbox | 2 wk | - |
+| M11 | Windows app: spike, host, bridge, MSIX, CI, Store submission | 3-4 wk | M10 (offline), M4 for mic |
+| M12 | Guitar and violin tiers 3-4 content | content | M5-M7 |
+| M13 | Entitlements and store billing (after the free/paid decision) | 2-3 wk | owner decision |
+| M14 | Guided piano tuning aid (phase 2) | 3-4 wk | M9 on real pianos |
+
+Content authoring (lesson text, exercises, arrangements, recordings for ▶
+Listen) is the largest single cost: plan roughly 1-2 days per lesson including
+review, and have a guitarist and a violinist review each tier before release.
+
+### 9.1 Test plan per milestone
+
+General rule as today: `pnpm typecheck`, `pnpm test`, web build, real-DB suite,
+migration-prefix check, on every milestone.
+
+- **M0:** storage migration unit tests with a fixture of every existing key
+  (values survive, nothing deleted, re-run is a no-op); key-inventory test;
+  CI grep gate for the old name outside the allow-list; screenshot check of
+  web, Android and legal pages.
+- **M1:** migration test (existing lessons default to piano); API filter tests;
+  unlock tests across instruments (a guitar lesson never unlocks from a piano
+  lesson); upgraded profile with no instrument set behaves exactly as today.
+- **M2 (pitch detection):** unit tests in `packages/audio-analysis` against
+  - **synthetic signals** generated in the test (deterministic, no binaries):
+    sines, sawtooth, Karplus-Strong plucks, bowed-like signals with vibrato, and
+    piano-like tones with known inharmonicity, at SNR 30/20/10 dB;
+  - **recorded sample files**: short mono 48 kHz WAVs in
+    `packages/audio-analysis/test/fixtures/` (own recordings, released with the
+    repo's licence; each < 10 s) with JSON labels (onset ms, MIDI note, cents,
+    chord symbol): guitar single notes per string, guitar open chords strummed,
+    violin open strings, scales in tune and deliberately ±20 cents, vibrato,
+    slurs, piano single notes across the range, a noisy-room take;
+  - **targets:** gross pitch error < 2% of voiced frames; median cents error
+    < 2 on sustained notes (synthetic < 0.5); onset F-measure ≥ 0.9 within
+    50 ms on guitar and violin fixtures; no notes reported on the silence and
+    noise-only fixtures; detection delay per onset measured and asserted
+    against 4.4;
+  - a performance test: frame processing well under the hop time on CI.
+- **M3:** tuner reading stability (standard deviation < 0.5 cents on a steady
+  synthetic tone), preset string auto-detect, A4 change shifts every target;
+  UI tests for the needle and states (Testing Library, as in existing
+  `*.test.tsx`).
+- **M4:** scorer tests with mic-shaped `PerformedNote[]` (sharp/flat issues,
+  intonation block, relaxed durations); server re-scores mic attempts
+  identically (cents fields survive the zod schema); **end-to-end in
+  Playwright** with Chromium's fake audio capture
+  (`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<fixture>.wav`)
+  playing a fixture into a real lesson and asserting the grade.
+- **M5 / M7:** notation snapshot tests (tab, chord diagrams, fingering, 8vb
+  clef); chord dictionary tests (diagram pitch classes = grading pitch
+  classes); content validation in `lesson-engine` (every exercise has the right
+  `input`, hints within range, playable on the instrument).
+- **M6:** chord top-1 accuracy ≥ 90% on the open-chord fixtures, wrong-chord
+  fixtures (e.g. C played for Am) graded wrong, no-strum fixture graded
+  no-strum; timing against beats.
+- **M8:** manual device matrix (at least one low-end and one current Android
+  device, plus the reference tablet): permission flow, processing constraints
+  honoured, measured mic latency recorded in the test log.
+- **M9:** synthetic piano tones with known detune and B: detune recovered within
+  1 cent, B within 10%; real-piano sessions compared with a reference tuning
+  device or a technician's measurement before release.
+- **M10:** outbox replay and dedupe (API test with duplicate
+  `clientAttemptId`); ETag/content-hash tests; offline Playwright run with
+  network blocked.
+- **MIDI device tests (M1, M4, M11):** `MockMidiAdapter` and
+  `WindowsMidiAdapter` unit tests with recorded message streams; parser tests
+  shared between Android and Windows; manual hot-plug and BLE tests on the
+  reference USB keyboard and one BLE MIDI keyboard/adapter.
+- **M11:** .NET unit tests (parser, clock sync, bridge protocol), the manual
+  matrix in 8.7, App Certification Kit pass, Store pre-submission checklist.
+- **M13:** entitlement checks server-side (locked content not served), store
+  receipt validation tests with sandbox purchases, grandfathering migration.
+- **M14:** curve computation tests; guided-flow UI tests; safety note shown and
+  acknowledged before any guidance.
+
+### 9.2 Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Mic grading feels unfair (noisy rooms, laptop/phone mics, AGC that ignores constraints) | Learners blame the app | Calibration, visible "too noisy" states, lenient beginner tolerances, never fail on unconfident frames; "Report a wrong grade" in the feedback button with the derived note list (not audio) |
+| Guitar octave errors and sympathetic strings | Wrong-note grades | Sub-harmonic checks, octave-only expectation tie-break, fixture coverage |
+| Violin bow noise and vibrato | Unstable cents | Steady-part median, vibrato-tolerant windows |
+| Polyphonic piano via mic | Not reliably gradeable | Scoped out: mic piano is single line and block-chord checks only; MIDI stays the full path |
+| Android WebView audio input latency and device variance | Timing grades off | Measured latency per device; wider timing windows on mic |
+| Web MIDI / BLE behaviour in WebView2 changes between runtime versions | MIDI breaks after a Windows update | Native bridge as primary path, Web MIDI as fallback; spike before committing |
+| Store name "Music Portal" unavailable; Play 30-character title limit | Listing delays | Reserve early; fall-back names; short-description wording (1.4) |
+| Rename breaks stored data | Lost settings/sign-ins | Ids, storage keys and volumes frozen (1.2); migration tests; key inventory |
+| Free/paid split upsets existing users | Bad reviews | Grandfathering; free tier stays useful |
+| Content volume and quality for two new instruments | Largest schedule risk | Ship tiers 0-2 first; expert review; reuse exercise generators where possible |
+| Licensing of guitar/violin repertoire and tabs | Takedowns | Public-domain and traditional material arranged in-house only; existing content-rights metadata on every notation section |
+| Piano tuning aid misuse | Damage or injury | Phase 1 first; safety note, explicit acknowledgement, stop conditions, technician recommendation |
+| Version skew between server and packaged clients | Broken lessons in old apps | `X-Client-Version`, `minClientVersion`, unknown-section fallback |
+
+---
+
+## Appendix A. Decisions needed from the owner
+
+1. Store names: Play name (30-character limit) and the Microsoft Store name to
+   reserve.
+2. Keep the current web domain or move to a new one (1.3 step 5).
+3. Free/paid split (section 7) and grandfathering scope.
+4. Whether the Windows app ships v1 on Web MIDI only if the native bridge is
+   late.
+5. Whether to rename the GitHub repository now or after launch.
+6. Priority between guitar and violin if both cannot land in the same release
+   (this plan builds guitar first: larger audience, and chord grading is the
+   harder new technique).
