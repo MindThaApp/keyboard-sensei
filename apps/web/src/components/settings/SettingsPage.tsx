@@ -6,6 +6,7 @@ import { useMidiContext } from "../midi/MidiContext";
 import MidiStatusBar from "../midi/MidiStatusBar";
 import VirtualPiano from "../piano/VirtualPiano";
 import InstrumentSection from "./InstrumentSection";
+import PlayedInstrumentSection from "./PlayedInstrumentSection";
 import SongLibrarySection from "./SongLibrarySection";
 import { NARRATION_VOICES } from "../../data/narrationVoices";
 import * as api from "../../services/api";
@@ -31,6 +32,7 @@ const TEST_NARRATION_SECTION_INDEX = 0;
 function GeneralSection() {
   return (
     <div className="space-y-6">
+      <PlayedInstrumentSection />
       <DailyGoalSection />
       <CrashReportingSection />
     </div>
@@ -429,7 +431,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "appearance", label: "Appearance" },
   { value: "account", label: "Account" },
-  { value: "instruments", label: "Instruments" },
+  { value: "instruments", label: "Sound" },
   { value: "midi", label: "Keyboard" },
   { value: "narration", label: "Narration" },
   { value: "library", label: "Library" },

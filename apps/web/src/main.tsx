@@ -9,6 +9,8 @@ import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { monitoring, startMonitoring } from "./monitoring";
 import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import ExperienceSync from "./contexts/ExperienceSync";
+import { InstrumentProvider } from "./contexts/InstrumentContext";
+import InstrumentSync from "./contexts/InstrumentSync";
 import { installNativeBackButton } from "./native/nativeShell";
 import { isNativeApp } from "./native/platform";
 import "./index.css";
@@ -20,15 +22,18 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <AppErrorBoundary>
       <AppearanceProvider>
         <ExperienceProvider>
+          <InstrumentProvider>
           <BrowserRouter>
             <AuthProvider>
               <MonitoringBridge />
               <ExperienceSync />
+              <InstrumentSync />
               <MidiProvider>
                 <App />
               </MidiProvider>
             </AuthProvider>
           </BrowserRouter>
+          </InstrumentProvider>
         </ExperienceProvider>
       </AppearanceProvider>
     </AppErrorBoundary>
