@@ -382,6 +382,57 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("played instruments (piano / guitar / violin)", () => {
+    it("defaults to nothing chosen (reads as piano), stores choices on the account and validates them", async () => {
+      const user = await createUserWithPassword();
+      const profile = async (token: string) => (await api("GET", "/users/me", { token })).body;
+      const before = await profile(user.token);
+      expect(before.played_instruments).toEqual([]);
+      expect(before.active_instrument).toBeNull();
+
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { played_instruments: ["piano", "guitar"], active_instrument: "guitar" } });
+      expect(set.status).toBe(200);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      const after = await profile(login.body.accessToken);
+      expect(after.played_instruments).toEqual(["piano", "guitar"]);
+      expect(after.active_instrument).toBe("guitar");
+
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { active_instrument: "banjo" } })).status).toBe(400);
+      expect((await profile(user.token)).active_instrument).toBe("guitar");
+    });
+
+    it("lists lessons per instrument; rows from before instruments existed are piano", async () => {
+      const user = await createUserWithPassword();
+      const all = await api("GET", "/lessons", { token: user.token });
+      const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
+      const guitar = await api("GET", "/lessons?instrument=guitar", { token: user.token });
+      expect(piano.status).toBe(200);
+      expect(piano.body.length).toBe(all.body.length);
+      expect(all.body.every((lesson: { instrument: string }) => lesson.instrument === "piano")).toBe(true);
+      expect(guitar.body).toEqual([]);
+      expect((await api("GET", "/lessons?instrument=banjo", { token: user.token })).status).toBe(400);
+    });
+
+    it("never opens a lesson from another instrument's progress", async () => {
+      const user = await createUserWithPassword();
+      const stamp = Date.now();
+      const guitarId = `guitar-test-${stamp}`;
+      const guitarLesson = { id: guitarId, instrument: "guitar", path: "classical-technical", level: "foundation", branch: "technique", tier: 0, skills: [], title: "Guitar test", estimatedMinutes: 5, objectives: ["x"], sections: [{ type: "markdown", title: "t", body: "b" }], unlockCriteria: { requiresLessonIds: ["lesson-01"], minScore: 70 }, skillRewards: {} };
+      const order = ((await m.prisma.lesson.aggregate({ _max: { order: true } }))._max.order ?? 0) + 1;
+      await m.prisma.lesson.create({ data: { id: guitarId, lesson_json: guitarLesson, path: "classical-technical", level: "foundation", branch: "technique", instrument: "guitar", order } });
+      try {
+        // Even with a piano prerequisite satisfied this is a plain prerequisite check; the
+        // guitar list holds only guitar lessons, and the piano list never includes it.
+        const guitar = await api("GET", "/lessons?instrument=guitar", { token: user.token });
+        expect(guitar.body.map((lesson: { id: string }) => lesson.id)).toEqual([guitarId]);
+        const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
+        expect(piano.body.some((lesson: { id: string }) => lesson.id === guitarId)).toBe(false);
+      } finally {
+        await m.prisma.lesson.delete({ where: { id: guitarId } });
+      }
+    });
+  });
+
   describe("experience mode (Simple / Advanced)", () => {
     it("is stored on the account, read back on a later sign-in, and validated", async () => {
       const user = await createUserWithPassword();

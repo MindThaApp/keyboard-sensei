@@ -11,6 +11,18 @@ const exerciseIdsOf = (lesson: Lesson) =>
   lesson.sections.flatMap((section) => (section.type === "midi-exercise" ? [section.exerciseId] : []));
 const byPath = (path: Lesson["path"]) => lessons.filter((lesson) => lesson.path === path);
 
+describe("instruments in seed content", () => {
+  it("treats a lesson with no instrument as piano and never mixes instruments in an unlock chain", () => {
+    const byId = new Map(lessons.map((lesson) => [lesson.id, lesson]));
+    const instrumentOf = (lesson: Lesson) => lesson.instrument ?? "piano";
+    for (const lesson of lessons) {
+      for (const id of lesson.unlockCriteria.requiresLessonIds) {
+        expect(instrumentOf(byId.get(id)!), `${lesson.id} requires ${id}`).toBe(instrumentOf(lesson));
+      }
+    }
+  });
+});
+
 describe("seed content", () => {
   it("contains valid lessons and exercises with unique ids", () => {
     for (const lesson of lessons) expect(() => validateLesson(lesson)).not.toThrow();
