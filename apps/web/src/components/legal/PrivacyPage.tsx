@@ -6,7 +6,7 @@ import PublicPageLayout, { CONTACT_EMAIL, Prose } from "./PublicPageLayout";
  * (apps/api/src/tts.ts, archive.ts, songs.ts, google.ts, mailer.ts). Keep it in step
  * with docs/play-data-safety.md, which answers the Play Console form from the same list.
  */
-export const PRIVACY_LAST_UPDATED = "23 October 2026";
+export const PRIVACY_LAST_UPDATED = "27 November 2026";
 
 export default function PrivacyPage() {
   return (
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <Prose>
         <p className="text-sm text-slate-500 dark:text-slate-400">Last updated {PRIVACY_LAST_UPDATED}</p>
         <p>
-          Midivory is a piano-learning app. This page explains, in plain English, what we store about you, why,
+          Music Portal (formerly Midivory) is an app for learning piano and other instruments. This page explains, in plain English, what we store about you, why,
           who else sees any of it, and how to delete it. We don't sell your data, show ads, or use analytics or
           tracking tools. The only diagnostic tool is the anonymous crash reporting described below, which you can turn off.
         </p>
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
         <h3>Things you add</h3>
         <ul>
           <li>MIDI files you upload, and the web address if you import one from a link.</li>
-          <li>Recordings you choose to save. These are MIDI note data from your keyboard, not audio. We never use your microphone.</li>
+          <li>Recordings you choose to save. These are MIDI note data from your keyboard, not audio (see Microphone below).</li>
           <li>Pieces you import from the public piano archive, on servers that offer it.</li>
           <li>Instrument sounds you upload.</li>
           <li>
@@ -55,6 +55,16 @@ export default function PrivacyPage() {
         </ul>
         <p>
           Your uploads, recordings and imports are private to your account. Other users can't see them.
+        </p>
+
+        <h3>Microphone</h3>
+        <p>
+          Some features (the tuner, and grading when you play an acoustic instrument) listen through your microphone. They
+          only listen while that screen is open, and only after you allow it. No audio leaves your device and no
+          recordings are kept: the sound is analysed on your device and then discarded. We receive the same kind of data
+          as when you play a MIDI keyboard (which notes you played and when), plus how far in tune each note was (in
+          cents) and the names of chords you strummed. You can withdraw microphone access at any time in your browser or
+          device settings.
         </p>
 
         <h3>On your device</h3>
@@ -161,7 +171,7 @@ export default function PrivacyPage() {
 
         <h2>Children</h2>
         <p>
-          Midivory isn't directed at children under 13. If a younger child wants to learn, a parent or guardian
+          Music Portal isn't directed at children under 13. If a younger child wants to learn, a parent or guardian
           should create and manage the account. If you think a child under 13 has given us personal data, email us and
           we'll delete it.
         </p>

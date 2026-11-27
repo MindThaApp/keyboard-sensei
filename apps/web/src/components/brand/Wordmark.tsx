@@ -1,10 +1,11 @@
 import { useId } from "react";
 
-/** The Ring: twelve keys around a glass hub, one lit red. Source of truth: brand/midivory-icon.svg. */
-const KEY_ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
-const LIT_KEY_ANGLE = 30;
+/** The Portal: a ring with an eighth note stepping through it, one red light on the rim. Source of truth: brand/music-portal-icon.svg. */
+const RING_PATH = "M23,54 a31,31 0 1 0 62,0 a31,31 0 1 0 -62,0 Z M29.5,54 a24.5,24.5 0 1 0 49,0 a24.5,24.5 0 1 0 -49,0 Z";
+const NOTE_PATH = "M42.92,67.3 a7.2,5.2 -22 1 1 13.36,-5.4 a7.2,5.2 -22 1 1 -13.36,5.4 Z M53.4,64 V37 H57.4 V64 Z M57.4,37 C57.4,43.5 67.6,45.6 67.6,54.2 C67.6,57.4 66.6,60 65.2,61.8 C66,55.6 62.4,51.6 57.4,50.6 Z";
+const SMALL_NOTE_PATH = "M12.5,21 a2.7,2 -22 1 1 5,-2 a2.7,2 -22 1 1 -5,2 Z M16.1,20.4 V10.4 H17.9 V20.4 Z M17.9,10.4 C17.9,12.6 21.2,13.4 21.2,16.4 C21.2,17.5 20.9,18.4 20.4,19 C20.6,16.9 19.6,15.6 17.9,15.2 Z";
 
-/** Below this size twelve keys blur into a spinner, so the mark drops to a ring and one red dot. */
+/** Below this size the gradients and glow are lost, so the mark uses the flat favicon drawing. */
 const SIMPLE_BELOW_PX = 40;
 
 export function BrandMark({ size = 32, className }: { size?: number; className?: string }) {
@@ -15,8 +16,9 @@ export function BrandMark({ size = 32, className }: { size?: number; className?:
     return (
       <svg viewBox="0 0 32 32" {...common}>
         <rect width="32" height="32" rx="7" fill="#17171A" />
-        <circle cx="16" cy="16" r="8.6" fill="none" stroke="#F4F1EA" strokeWidth="3.6" />
-        <circle cx="21.3" cy="8.4" r="3.4" fill="#D9475A" />
+        <circle cx="16" cy="16" r="10.4" fill="none" stroke="#F4F1EA" strokeWidth="2.6" />
+        <path fill="#F4F1EA" d={SMALL_NOTE_PATH} />
+        <circle cx="21.3" cy="7" r="3.2" fill="#D9475A" />
       </svg>
     );
   }
@@ -36,41 +38,26 @@ export function BrandMark({ size = 32, className }: { size?: number; className?:
           <stop offset="0" stopColor="#E35A6A" />
           <stop offset="1" stopColor="#9A2A35" />
         </linearGradient>
-        <linearGradient id={`${id}glass`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity=".45" />
-          <stop offset="1" stopColor="#fff" stopOpacity=".06" />
-        </linearGradient>
       </defs>
       <rect width="108" height="108" rx="24" fill={`url(#${id}bg)`} />
-      {KEY_ANGLES.map((angle) => (
-        <rect
-          key={angle}
-          x="50.2"
-          y="19"
-          width="7.6"
-          height="16"
-          rx="2.4"
-          fill={`url(#${id}${angle === LIT_KEY_ANGLE ? "red" : "ivory"})`}
-          transform={`rotate(${angle} 54 54)`}
-        />
-      ))}
-      <circle cx="54" cy="54" r="13" fill={`url(#${id}glass)`} stroke="#fff" strokeOpacity=".55" strokeWidth=".8" />
-      <circle cx="54" cy="54" r="4.2" fill="#B4323E" />
+      <path fill={`url(#${id}ivory)`} fillRule="evenodd" d={RING_PATH} />
+      <path fill={`url(#${id}ivory)`} d={NOTE_PATH} />
+      <circle cx="67.88" cy="29.97" r="5.2" fill={`url(#${id}red)`} />
     </svg>
   );
 }
 
-/** The symbol and the name. The name is always spelled "Midivory"; "ivory" is set in a lighter weight. */
+/** The symbol and the name. The name is always spelled "Music Portal"; "Portal" is set in a lighter weight. */
 export default function Wordmark({ size = "md", className = "" }: { size?: "md" | "lg"; className?: string }) {
   const large = size === "lg";
   return (
     <span className={`inline-flex items-center ${large ? "gap-3" : "gap-2"} ${className}`}>
       <BrandMark size={large ? 44 : 28} className="shrink-0" />
       <span
-        className={`font-display font-extrabold tracking-tighter ${large ? "text-3xl" : "text-lg"}`}
+        className={`font-display font-extrabold tracking-tighter whitespace-nowrap ${large ? "text-3xl" : "text-lg"}`}
         style={{ fontWeight: 800, letterSpacing: "-0.04em" }}
       >
-        Mid<span style={{ fontWeight: 500 }}>ivory</span>
+        Music <span style={{ fontWeight: 500 }}>Portal</span>
       </span>
     </span>
   );

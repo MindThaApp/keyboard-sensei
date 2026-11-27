@@ -1,7 +1,7 @@
 {
-  "name": "Midivory",
-  "short_name": "Midivory",
-  "description": "Midivory: Piano MIDI Player. Learn piano with short lessons and play-along songs, with your MIDI keyboard or the on-screen piano.",
+  "name": "Music Portal",
+  "short_name": "Music Portal",
+  "description": "Music Portal (formerly Midivory). Learn piano with short lessons and play-along songs, with your MIDI keyboard or the on-screen piano. Guitar, violin and a tuner are on the way.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

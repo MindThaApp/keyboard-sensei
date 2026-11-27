@@ -4,7 +4,8 @@ The Android app wraps the `apps/web` production build in a Capacitor 8 shell
 (`apps/mobile`). Everything the user sees is the same React app; the native
 side adds hardware MIDI, keep-awake, the back button and the Play packaging.
 
-- appId `com.midivory.app`, name "Midivory"
+- appId `com.midivory.app` (kept from the Midivory days: the Play listing and every
+  install are bound to it, so it never changes), name "Music Portal"
 - minSdk 24 (Android 7), targetSdk/compileSdk 36 (Android 16)
 - The page is served from `https://localhost` inside the app
 
@@ -128,7 +129,7 @@ minified) signed with the debug key, with:
   `192.168.4.4` (no subdomains, no cleartext).
 
 The CA certificate is not in git. Gradle copies it in when building `home`, from
-the file named by `MIDIVORY_HOME_CA` (the copy, `app/src/home/res/raw/`, is
+the file named by `MIDIVORY_HOME_CA` (an internal variable name, unchanged by the rename) (the copy, `app/src/home/res/raw/`, is
 gitignored). The build fails with a clear message if the variable is unset or
 the file is missing or not PEM. Release/Play builds never need it and are
 byte-for-byte unchanged (system CAs only).
@@ -207,7 +208,7 @@ keytool -genkeypair -v \
   -keystore keyboard-sensei-upload.jks \
   -alias upload \
   -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=Midivory, O=Midivory"
+  -dname "CN=Music Portal, O=Music Portal"
 ```
 
 `keytool` asks for the keystore password (and uses the same one for the key by
@@ -269,10 +270,11 @@ fingerprint production users present; register it too.
 
 1. Create a Google Play developer account (one-time fee; identity
    verification can take a few days).
-2. **Create app**: name "Midivory: Piano MIDI Player" (store title; the
-   installed app is just "Midivory"), short description starting "Piano MIDI
-   Player", app (not game), free, accept the
-   declarations.
+2. **Create app**: name "Music Portal: Piano & Guitar" (store title, 28 of the
+   30 allowed characters; the installed app is just "Music Portal"), short
+   description from `docs/store-listings.md`, app (not game), free, accept the
+   declarations. The existing listing (created under the app's former
+   name) is renamed in place: same package, ratings and reviews.
 3. Complete the **App content** forms: privacy policy URL (required; the app
    has accounts and stores practice history), data safety (account email,
    display name, practice history; data encrypted in transit; account

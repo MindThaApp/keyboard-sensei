@@ -1,4 +1,4 @@
-// Rasterises the Midivory icon PNGs from the SVG sources.
+// Rasterises the Music Portal icon PNGs from the SVG sources.
 //
 //   node brand/generate-sources.mjs
 //   PLAYWRIGHT_MODULE=/path/to/node_modules/playwright/index.mjs node brand/rasterize.mjs [contact-sheet-dir]
@@ -15,7 +15,7 @@ const { chromium } = await import(
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const res = path.join(root, "apps/mobile/android/app/src/main/res");
 const pub = path.join(root, "apps/web/public");
-const master = fs.readFileSync(path.join(root, "brand/midivory-icon.svg"), "utf8");
+const master = fs.readFileSync(path.join(root, "brand/music-portal-icon.svg"), "utf8");
 const favicon = fs.readFileSync(path.join(pub, "favicon.svg"), "utf8");
 
 /** The master with its width/height replaced, optionally with the mark shrunk into the safe zone. */
@@ -56,6 +56,39 @@ for (const [density, px] of Object.entries(legacy)) {
   await png(shaped(sized(master, px, { safe: true }), px, 0.5), px, path.join(dir, "ic_launcher_round.png"));
 }
 
+// Android splash screens: the mark at 40% of the short side, centred on the splash colour.
+const splashes = {
+  drawable: [480, 320],
+  "drawable-land-mdpi": [480, 320], "drawable-land-hdpi": [800, 480], "drawable-land-xhdpi": [1280, 720],
+  "drawable-land-xxhdpi": [1600, 960], "drawable-land-xxxhdpi": [1920, 1280],
+  "drawable-port-mdpi": [320, 480], "drawable-port-hdpi": [480, 800], "drawable-port-xhdpi": [720, 1280],
+  "drawable-port-xxhdpi": [960, 1600], "drawable-port-xxxhdpi": [1280, 1920],
+};
+for (const [dir, [w, h]] of Object.entries(splashes)) {
+  const mark = Math.round(Math.min(w, h) * 0.4);
+  await page.setViewportSize({ width: w, height: h });
+  await page.setContent(
+    `<body style="margin:0;width:${w}px;height:${h}px;background:#17171A;display:flex;align-items:center;justify-content:center">${sized(master, mark)}</body>`,
+  );
+  await page.screenshot({ path: path.join(res, dir, "splash.png"), clip: { x: 0, y: 0, width: w, height: h } });
+}
+
+// Windows (MSIX) logos, written once the Windows project exists (apps/windows/MusicPortal).
+const windowsAssets = path.join(root, "apps/windows/MusicPortal/Assets");
+if (fs.existsSync(path.dirname(windowsAssets))) {
+  const square = { "Square44x44Logo.png": 44, "Square150x150Logo.png": 150, "StoreLogo.png": 50, "LargeTile.png": 310 };
+  for (const [name, px] of Object.entries(square)) {
+    await png(sized(master, px, { safe: true }), px, path.join(windowsAssets, name));
+  }
+  // Wide tile: the mark centred on the background colour.
+  const wide = `<div style="width:310px;height:150px;background:linear-gradient(#26262A,#0B0B0D);display:flex;align-items:center;justify-content:center">${sized(master, 120, { safe: true })}</div>`;
+  await page.setViewportSize({ width: 310, height: 150 });
+  await page.setContent(`<body style="margin:0">${wide}</body>`);
+  await page.screenshot({ path: path.join(windowsAssets, "Wide310x150Logo.png"), clip: { x: 0, y: 0, width: 310, height: 150 } });
+} else {
+  console.log("rasterize: apps/windows/MusicPortal not found, skipping the Windows logos.");
+}
+
 // Contact sheet.
 const sheetDir = process.argv[2];
 if (sheetDir) {
@@ -73,7 +106,7 @@ if (sheetDir) {
       ${small(favicon, 64)}${small(favicon, 48)}${small(favicon, 32)}${small(favicon, 16)}
       <p style="margin:12px 0 8px">Wordmark</p>
       <div style="display:flex;align-items:center;gap:10px;font:800 28px -apple-system,system-ui,sans-serif;letter-spacing:-0.03em">
-        <span style="line-height:0;border-radius:8px;overflow:hidden">${sized(master, 36)}</span>Midivory</div>
+        <span style="line-height:0;border-radius:8px;overflow:hidden">${sized(master, 36)}</span>Music Portal</div>
     </section>`;
   };
   fs.mkdirSync(sheetDir, { recursive: true });
