@@ -16,3 +16,4 @@ export * from "./tunings.js";
 export * from "./guitar.js";
 export * from "./guitarChords.js";
 export * from "./chordSymbols.js";
+export * from "./guitarBarreChords.js";
