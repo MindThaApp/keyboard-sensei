@@ -1520,6 +1520,104 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("offline outbox and content cache (M10)", () => {
+    const totalXp = async (userId: string) =>
+      (await m.prisma.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }))._sum.amount ?? 0;
+
+    it("stores a replayed attempt once, pays XP once and dates it when it was played", async () => {
+      const user = await createUser();
+      const playedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "offline-attempt-0001", playedAt };
+
+      const first = await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body });
+      expect(first.status).toBe(201);
+      expect(first.body.score).toBeGreaterThanOrEqual(70);
+      const xpAfterFirst = await totalXp(user.id);
+      expect(xpAfterFirst).toBeGreaterThan(0);
+
+      const replay = await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body });
+      expect(replay.status).toBe(200);
+      expect(replay.body).toMatchObject({ duplicate: true, rewards: null, score: first.body.score });
+
+      const rows = await m.prisma.exerciseAttempt.findMany({ where: { user_id: user.id } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.client_attempt_id).toBe("offline-attempt-0001");
+      expect(rows[0]!.created_at.toISOString()).toBe(playedAt);
+      expect(await totalXp(user.id)).toBe(xpAfterFirst);
+      expect(await statusOf(user.token, "lesson-01")).not.toBe("locked");
+    });
+
+    it("dedupes concurrent replays of the same attempt", async () => {
+      const user = await createUser();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "offline-attempt-race" };
+      const results = await Promise.all(
+        [0, 1, 2].map(() => api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 200, 201]);
+      expect(await m.prisma.exerciseAttempt.count({ where: { user_id: user.id } })).toBe(1);
+    });
+
+    it("keeps attempt ids per user and rejects reuse for another exercise", async () => {
+      const [a, b] = [await createUser(), await createUser()];
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "shared-attempt-id" };
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: a.token, body })).status).toBe(201);
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: b.token, body })).status).toBe(201);
+      const other = m.content.exercises.find((item) => item.exerciseId !== "exercise-01")!.exerciseId;
+      const conflict = await api("POST", `/exercises/${other}/attempts`, { token: a.token, body });
+      expect(conflict.status).toBe(409);
+      expect(conflict.body.error.code).toBe("client_attempt_id_conflict");
+    });
+
+    it("attempts without a client id behave exactly as before", async () => {
+      const user = await createUser();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]) };
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })).status).toBe(201);
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })).status).toBe(201);
+      const rows = await m.prisma.exerciseAttempt.findMany({ where: { user_id: user.id } });
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row) => row.client_attempt_id === null)).toBe(true);
+    });
+
+    it("serves the offline bundle with a content-hash ETag and 304 while unchanged", async () => {
+      const user = await createUser();
+      const res = await fetch(`${baseUrl}/content/offline`, { headers: { authorization: `Bearer ${user.token}` } });
+      expect(res.status).toBe(200);
+      const bundle = await res.json();
+      const etag = res.headers.get("etag")!;
+      expect(etag).toBe(`"${bundle.contentHash}"`);
+      expect(bundle.lessons).toHaveLength(m.content.lessons.length);
+      const withExercises = bundle.lessons.find((entry: any) => entry.lesson.id === "lesson-01");
+      expect(withExercises.exercises.map((ex: any) => ex.exerciseId)).toContain("exercise-01");
+      // Answers never leave the server, offline or not.
+      const quizzes = bundle.lessons.flatMap((entry: any) => entry.lesson.sections.filter((s: any) => s.type === "quiz"));
+      expect(quizzes.length).toBeGreaterThan(0);
+      expect(quizzes.flatMap((q: any) => q.questions).every((q: any) => q.correctIndex === undefined)).toBe(true);
+
+      const again = await fetch(`${baseUrl}/content/offline`, {
+        headers: { authorization: `Bearer ${user.token}`, "if-none-match": etag },
+      });
+      expect(again.status).toBe(304);
+
+      // Progress is not content: completing a lesson keeps the hash.
+      await passEveryExercise(user.token, "lesson-01");
+      const version = await api("GET", "/content/version", { token: user.token });
+      expect(version.body.contentHash).toBe(bundle.contentHash);
+
+      // A content change (a retired lesson) changes it.
+      await m.prisma.lesson.update({ where: { id: "lesson-02" }, data: { retired_at: new Date() } });
+      const changed = await fetch(`${baseUrl}/content/offline`, {
+        headers: { authorization: `Bearer ${user.token}`, "if-none-match": etag },
+      });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).contentHash).not.toBe(bundle.contentHash);
+      await m.prisma.lesson.update({ where: { id: "lesson-02" }, data: { retired_at: null } });
+    });
+
+    it("requires sign-in for the bundle", async () => {
+      expect((await api("GET", "/content/offline")).status).toBe(401);
+    });
+  });
+
   describe("narration", () => {
     it("rejects a voice id outside the allow-list before any synthesis", async () => {
       const user = await createUser();

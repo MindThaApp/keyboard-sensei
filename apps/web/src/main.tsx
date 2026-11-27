@@ -14,8 +14,9 @@ import TunerSync from "./components/tuner/TunerSync";
 import ExperienceSync from "./contexts/ExperienceSync";
 import { InstrumentProvider } from "./contexts/InstrumentContext";
 import InstrumentSync from "./contexts/InstrumentSync";
+import OfflineStatusBanner from "./offline/OfflineStatusBanner";
 import { installNativeBackButton } from "./native/nativeShell";
-import { isNativeApp } from "./native/platform";
+import { isNativeApp, isWindowsApp } from "./native/platform";
 import "./index.css";
 
 startMonitoring();
@@ -32,6 +33,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <ExperienceSync />
               <InstrumentSync />
               <TunerSync />
+              <OfflineStatusBanner />
               <MidiProvider>
                 <App />
               </MidiProvider>
@@ -46,9 +48,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
 installNativeBackButton();
 
-// The Android app ships its pages inside the APK, so an offline-shell service
-// worker would only add a second, stale copy of them.
-if (import.meta.env.PROD && !isNativeApp() && "serviceWorker" in navigator) {
+// The Android and Windows apps ship their pages inside the package, so an
+// offline-shell service worker would only add a second, stale copy of them.
+if (import.meta.env.PROD && !isNativeApp() && !isWindowsApp() && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register("/sw.js");
   });

@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Copy to Identity.props (git-ignored) for local builds. For a Store build use
+    the values Partner Center shows under Product identity; never commit them.
+  -->
+  <PropertyGroup>
+    <MusicPortalIdentityName>MusicPortal.LocalTest</MusicPortalIdentityName>
+    <MusicPortalPublisher>CN=MusicPortalLocalTest</MusicPortalPublisher>
+    <MusicPortalPublisherDisplayName>Music Portal (local test)</MusicPortalPublisherDisplayName>
+  </PropertyGroup>
+</Project>

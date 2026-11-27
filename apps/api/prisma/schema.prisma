@@ -451,16 +451,20 @@ model Exercise {
 }
 
 model ExerciseAttempt {
-  id               String   @id @default(cuid())
-  user_id          String
-  exercise_id      String
-  submitted_events Json
-  performed_notes  Json
-  result           Json
-  created_at       DateTime @default(now())
-  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  exercise         Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  user_id           String
+  exercise_id       String
+  submitted_events  Json
+  performed_notes   Json
+  result            Json
+  created_at        DateTime @default(now())
+  /// Client-generated id for attempts queued offline and replayed later; a replay
+  /// with the same id for the same user is ignored. NULL for older clients.
+  client_attempt_id String?
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exercise          Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
 
+  @@unique([user_id, client_attempt_id])
   @@index([user_id])
 }
 

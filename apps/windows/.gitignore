@@ -1,0 +1,12 @@
+bin/
+obj/
+AppPackages/
+BundleArtifacts/
+*.user
+.vs/
+# The web build copied in by scripts/build-web.ps1
+MusicPortal/web/
+# Real package identity and signing material never go in the repository
+Identity.props
+*.pfx
+*.cer

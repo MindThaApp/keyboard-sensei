@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Music Portal for Windows: a WinUI 3 window hosting the web app (apps/web) in
+    WebView2, packaged as a single-project MSIX. See docs/windows.md.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>MusicPortal</RootNamespace>
+    <AssemblyName>MusicPortal</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- Unsigned by default: the Store signs on submission; sideload builds sign locally. -->
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <GenerateTemporaryStoreCertificate>false</GenerateTemporaryStoreCertificate>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+  </PropertyGroup>
+
+  <!-- Package identity (spec 8.6): Identity.props (git-ignored) locally, /p: properties in CI. -->
+  <Import Project="..\Identity.props" Condition="Exists('..\Identity.props')" />
+  <PropertyGroup>
+    <MusicPortalIdentityName Condition="'$(MusicPortalIdentityName)' == ''">MusicPortal.LocalBuild</MusicPortalIdentityName>
+    <MusicPortalPublisher Condition="'$(MusicPortalPublisher)' == ''">CN=MusicPortalLocalBuild</MusicPortalPublisher>
+    <MusicPortalPublisherDisplayName Condition="'$(MusicPortalPublisherDisplayName)' == ''">Music Portal (local build)</MusicPortalPublisherDisplayName>
+    <MusicPortalVersion Condition="'$(MusicPortalVersion)' == ''">1.0.0.0</MusicPortalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+    <Content Include="Assets\**\*.png" />
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The web build, copied in by scripts/build-web.ps1 (not committed). -->
+    <Content Include="web\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <!--
+    Writes obj\...\Package.appxmanifest with the identity properties in place of
+    the committed placeholders and packages that copy, so real identity values
+    never have to be written into a tracked file.
+  -->
+  <Target Name="MusicPortalIdentityManifest" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_MpManifestOut>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)Package.appxmanifest</_MpManifestOut>
+      <_MpManifest>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Package.appxmanifest'))</_MpManifest>
+      <_MpManifest>$(_MpManifest.Replace('Name="MusicPortal.LocalBuild"', 'Name="$(MusicPortalIdentityName)"'))</_MpManifest>
+      <!-- XML-escape the values (a display name may contain an ampersand). -->
+      <_MpPublisherXml>$(MusicPortalPublisher.Replace('&amp;', '&amp;amp;').Replace('&lt;', '&amp;lt;').Replace('&gt;', '&amp;gt;').Replace('"', '&amp;quot;'))</_MpPublisherXml>
+      <_MpDisplayNameXml>$(MusicPortalPublisherDisplayName.Replace('&amp;', '&amp;amp;').Replace('&lt;', '&amp;lt;').Replace('&gt;', '&amp;gt;'))</_MpDisplayNameXml>
+      <_MpManifest>$(_MpManifest.Replace('Publisher="CN=MusicPortalLocalBuild"', 'Publisher="$(_MpPublisherXml)"'))</_MpManifest>
+      <_MpManifest>$(_MpManifest.Replace('&lt;PublisherDisplayName&gt;Music Portal (local build)&lt;/PublisherDisplayName&gt;', '&lt;PublisherDisplayName&gt;$(_MpDisplayNameXml)&lt;/PublisherDisplayName&gt;'))</_MpManifest>
+      <_MpManifest>$(_MpManifest.Replace('Version="1.0.0.0" /&gt;', 'Version="$(MusicPortalVersion)" /&gt;'))</_MpManifest>
+    </PropertyGroup>
+    <MakeDir Directories="$(MSBuildProjectDirectory)\$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(_MpManifestOut)" Lines="$([MSBuild]::Escape($(_MpManifest)))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <AppxManifest Remove="@(AppxManifest)" />
+      <AppxManifest Include="$(_MpManifestOut)" />
+    </ItemGroup>
+    <Message Importance="high" Text="Package version $(MusicPortalVersion)" />
+  </Target>
+</Project>

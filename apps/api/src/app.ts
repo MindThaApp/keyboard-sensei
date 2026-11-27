@@ -50,6 +50,7 @@ import { createSentryTunnelRouter, parseAllowedDsns } from "./sentry-tunnel.js";
 import { reportServerError } from "./sentry.js";
 import { instrumentUploadRateLimit, omrUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
 import { omrRouter } from "./omr/omr-routes.js";
+import { offlineContentRouter, resolvePlayedAt } from "./offline-content.js";
 
 const updateProfileSchema = z
   .object({
@@ -138,6 +139,10 @@ const performanceSchema = z
     performedNotes: z.array(performedSchema).optional(),
     chordDetections: chordDetectionsSchema.optional(),
     tempoPct: tempoPctSchema.optional(),
+    // Offline outbox (spec 8.5): a client-generated id makes a replay idempotent, and
+    // playedAt is when the attempt really happened (clamped server-side).
+    clientAttemptId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
+    playedAt: z.string().datetime({ offset: true }).optional(),
   })
   .refine(
     (value) => [value.rawEvents, value.performedNotes, value.chordDetections].filter((part) => part !== undefined).length === 1,
@@ -274,6 +279,7 @@ app.use(adminCatalogueRouter());
 app.use(progressionRouter);
 app.use(challengeRouter);
 app.use(gamesRouter);
+app.use(offlineContentRouter((lesson, row) => sanitizeLesson(withTierColumns(lesson, row))));
 
 app.get("/users/me", async (req, res, next) => {
   try {
@@ -465,9 +471,38 @@ app.post("/lessons/:lessonId/sections/:sectionIndex/narrate", async (req, res, n
   }
 });
 
+async function findReplayedAttempt(db: typeof prisma, uid: string, clientAttemptId: string | undefined) {
+  if (!clientAttemptId) return null;
+  return db.exerciseAttempt.findUnique({
+    where: { user_id_client_attempt_id: { user_id: uid, client_attempt_id: clientAttemptId } },
+    select: { exercise_id: true, result: true },
+  });
+}
+
+function sendReplayedAttempt(res: Response, stored: { exercise_id: string; result: unknown }, exerciseId: string) {
+  if (stored.exercise_id !== exerciseId) {
+    res.status(409).json({
+      error: { code: "client_attempt_id_conflict", message: "This attempt id was already used for another exercise" },
+    });
+    return;
+  }
+  res.status(200).json({ ...(stored.result as object), rewards: null, duplicate: true });
+}
+
+const isUniqueViolation = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
 app.post("/exercises/:id/attempts", async (req, res, next) => {
   try {
     const input = performanceSchema.parse(req.body);
+    const uid = userId(req);
+    // An outbox replay of an attempt already stored: answer with the stored result and
+    // no rewards (XP is keyed by attempt id, so it could never pay twice anyway).
+    const replayed = await findReplayedAttempt(prisma, uid, input.clientAttemptId);
+    if (replayed) {
+      sendReplayedAttempt(res, replayed, req.params.id);
+      return;
+    }
     const row = await prisma.exercise.findUnique({
       where: { id: req.params.id },
       include: { lesson: true },
@@ -478,6 +513,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
     }
     const exercise = validateMidiExercise(row.exercise_json);
     const { performedNotes, result } = scoreAttempt(exercise, input);
+    const playedAt = resolvePlayedAt(input.playedAt, new Date());
     const uid = userId(req);
 
     const lesson = validateLesson(row.lesson.lesson_json);
@@ -485,30 +521,44 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       section.type === "midi-exercise" ? [section.exerciseId] : [],
     );
 
-    const attempt = await prisma.$transaction(async (tx) => {
-      const created = await tx.exerciseAttempt.create({
-        data: {
-          user_id: uid,
-          exercise_id: row.id,
-          submitted_events: json(input),
-          performed_notes: json(performedNotes),
-          result: json(result),
-        },
+    let attempt;
+    try {
+      attempt = await prisma.$transaction(async (tx) => {
+        const created = await tx.exerciseAttempt.create({
+          data: {
+            user_id: uid,
+            exercise_id: row.id,
+            submitted_events: json(input),
+            performed_notes: json(performedNotes),
+            result: json(result),
+            ...(input.clientAttemptId ? { client_attempt_id: input.clientAttemptId, created_at: playedAt } : {}),
+          },
+        });
+        // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
+        const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
+        await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
+        return created;
       });
-      // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
-      const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
-      await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
-      return created;
-    });
+    } catch (error) {
+      // Two replays of the same attempt raced; the other one stored it.
+      const raced = isUniqueViolation(error) ? await findReplayedAttempt(prisma, uid, input.clientAttemptId) : null;
+      if (!raced) throw error;
+      sendReplayedAttempt(res, raced, row.id);
+      return;
+    }
 
     const rewards = await rewardsOrNull(() =>
-      rewardExerciseAttempt(prisma, {
-        userId: uid,
-        attemptId: attempt.id,
-        exerciseId: row.id,
-        lessonId: row.lesson_id,
-        practiceSeconds: exerciseSeconds(performedNotes),
-      }),
+      rewardExerciseAttempt(
+        prisma,
+        {
+          userId: uid,
+          attemptId: attempt.id,
+          exerciseId: row.id,
+          lessonId: row.lesson_id,
+          practiceSeconds: exerciseSeconds(performedNotes),
+        },
+        playedAt,
+      ),
     );
     res.status(201).json({ ...result, rewards });
   } catch (e) {

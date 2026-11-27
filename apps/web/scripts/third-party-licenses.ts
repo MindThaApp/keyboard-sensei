@@ -138,6 +138,8 @@ export function collectPackageLicenses(): PackageLicense[] {
     cwd: REPO_ROOT,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    // On Windows pnpm is a .cmd shim, which only runs through a shell.
+    shell: process.platform === "win32",
   });
   const byLicense = JSON.parse(raw) as Record<string, PnpmLicenseEntry[]>;
   const packages: PackageLicense[] = [];
