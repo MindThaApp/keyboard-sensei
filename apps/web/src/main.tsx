@@ -11,6 +11,7 @@ import { ExperienceProvider } from "./contexts/ExperienceContext";
 import { monitoring, startMonitoring } from "./monitoring";
 import { AppErrorBoundary, MonitoringBridge } from "./monitoring/MonitoringBridge";
 import TunerSync from "./components/tuner/TunerSync";
+import { I18nProvider, initI18n } from "./i18n";
 import ExperienceSync from "./contexts/ExperienceSync";
 import { InstrumentProvider } from "./contexts/InstrumentContext";
 import InstrumentSync from "./contexts/InstrumentSync";
@@ -21,7 +22,10 @@ import "./index.css";
 
 startMonitoring();
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const root = ReactDOM.createRoot(document.getElementById("root")!);
+
+// Load the device language first so the first paint is already translated.
+void initI18n().finally(() => root.render(
   <React.StrictMode>
     <AppErrorBoundary>
       <AppearanceProvider>
@@ -35,7 +39,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <TunerSync />
               <OfflineStatusBanner />
               <MidiProvider>
-                <App />
+                <I18nProvider>
+                  <App />
+                </I18nProvider>
               </MidiProvider>
             </AuthProvider>
           </BrowserRouter>
@@ -44,7 +50,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       </AppearanceProvider>
     </AppErrorBoundary>
   </React.StrictMode>,
-);
+));
 
 installNativeBackButton();
 

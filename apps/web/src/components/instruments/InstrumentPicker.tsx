@@ -1,11 +1,12 @@
+import { t, useT } from "../../i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../../services/api";
 import { pianoSynth } from "../../utils/synth";
 
 const CATEGORY_LABELS: Record<api.InstrumentCategory, string> = {
-  piano: "Pianos",
-  keys: "Keys",
-  more: "More",
+  get piano() { return t("instr.cat.piano"); },
+  get keys() { return t("instr.cat.keys"); },
+  get more() { return t("instr.cat.more"); },
 };
 
 let cachedInstruments: api.InstrumentInfo[] | null = null;
@@ -39,6 +40,7 @@ interface InstrumentPickerProps {
 }
 
 export default function InstrumentPicker({ compact = false, onSelected }: InstrumentPickerProps) {
+  useT();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -86,7 +88,7 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
     void pianoSynth.useInstrument(id);
   }
 
-  const buttonLabel = selected?.name ?? "Piano (basic)";
+  const buttonLabel = selected?.name ?? t("instr.basic");
 
   return (
     <div ref={rootRef} className="relative">
@@ -100,15 +102,15 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
         }
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="Change instrument"
+        title={t("instr.change")}
       >
-        {compact ? `Sound: ${buttonLabel}` : buttonLabel}
+        {compact ? t("instr.sound", { name: buttonLabel }) : buttonLabel}
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          {loading && <p className="px-2 py-1 text-xs text-slate-500">Loading instruments…</p>}
+          {loading && <p className="px-2 py-1 text-xs text-slate-500">{t("instr.loading")}</p>}
           {error && <p role="alert" className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400">{error}</p>}
-          <div role="listbox" aria-label="Instrument voices" className="max-h-96 overflow-y-auto">
+          <div role="listbox" aria-label={t("instr.voices")} className="max-h-96 overflow-y-auto">
             <button
               type="button"
               role="option"
@@ -116,8 +118,8 @@ export default function InstrumentPicker({ compact = false, onSelected }: Instru
               onClick={() => selectInstrument(null)}
               className={`w-full rounded px-2 py-1.5 text-left ${selectedId === null ? "bg-felt-50 dark:bg-felt-900/40" : "hover:bg-slate-50 dark:hover:bg-slate-800"}`}
             >
-              <span className="block text-sm font-medium">Piano (basic)</span>
-              <span className="block text-xs text-slate-500 dark:text-slate-400">The default sound; no download needed.</span>
+              <span className="block text-sm font-medium">{t("instr.basic")}</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">{t("instr.basicHint")}</span>
             </button>
             {(["piano", "keys"] as const).map((category) => (
               <div key={category} className="mt-2">

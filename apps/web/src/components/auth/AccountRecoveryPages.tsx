@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { t, tRich, useT } from "../../i18n";
 import { useAuth } from "../../contexts/AuthContext";
 import * as api from "../../services/api";
 import PublicPageLayout from "../legal/PublicPageLayout";
@@ -17,6 +18,7 @@ function Notice({ tone, children }: { tone: "ok" | "error"; children: React.Reac
 
 /** Asks for an email and always answers the same way, whether or not it has an account. */
 export function ForgotPasswordPage() {
+  useT();
   const [params] = useSearchParams();
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [sent, setSent] = useState(false);
@@ -31,44 +33,43 @@ export function ForgotPasswordPage() {
       await api.forgotPassword(email);
       setSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : t("auth.somethingWrong"));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <PublicPageLayout title="Forgot your password?">
+    <PublicPageLayout title={t("auth.recover.title")}>
       <div className="card max-w-md space-y-4 p-5">
         {sent ? (
           <>
             <Notice tone="ok">
-              If an account uses {email}, we've sent it a link to choose a new password. The link works once and expires in
-              30 minutes.
+              {t("auth.recover.sent", { email })}
             </Notice>
-            <p className="text-sm text-slate-600 dark:text-slate-300">Nothing arrived? Check your spam folder, or try again in a few minutes.</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{t("auth.recover.spam")}</p>
           </>
         ) : (
           <form onSubmit={(e) => void submit(e)} className="space-y-3">
-            <p className="text-sm text-slate-600 dark:text-slate-300">Enter the email you signed up with and we'll send you a reset link.</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{t("auth.recover.prompt")}</p>
             <input
-              aria-label="Email"
+              aria-label={t("common.email")}
               className="input"
               type="email"
               autoComplete="email"
-              placeholder="Email"
+              placeholder={t("common.email")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
             {error && <Notice tone="error">{error}</Notice>}
             <button type="submit" className="primary-button w-full" disabled={busy || !email}>
-              {busy ? "Sending…" : "Send reset link"}
+              {busy ? t("auth.recover.sending") : t("auth.recover.send")}
             </button>
           </form>
         )}
         <Link to="/" className="block text-sm text-felt-700 underline dark:text-felt-300">
-          Back to sign in
+          {t("auth.backToSignIn")}
         </Link>
       </div>
     </PublicPageLayout>
@@ -77,6 +78,7 @@ export function ForgotPasswordPage() {
 
 /** The emailed link lands here: /reset-password?token=… */
 export function ResetPasswordPage() {
+  useT();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const [password, setPassword] = useState("");
@@ -102,47 +104,47 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <PublicPageLayout title="Choose a new password">
+    <PublicPageLayout title={t("auth.reset.title")}>
       <div className="card max-w-md space-y-4 p-5">
         {!token ? (
           <Notice tone="error">
-            This link is missing its token. Open the link from the email again, or <Link to="/forgot-password">request a new one</Link>.
+            {tRich("auth.reset.missingToken", { link: (c) => <Link to="/forgot-password">{c}</Link> })}
           </Notice>
         ) : done ? (
           <>
-            <Notice tone="ok">Your password has been changed.</Notice>
+            <Notice tone="ok">{t("auth.reset.done")}</Notice>
             <Link to="/" className="primary-button inline-block">
-              Sign in
+              {t("auth.signIn")}
             </Link>
           </>
         ) : (
           <form onSubmit={(e) => void submit(e)} className="space-y-3">
             <input
-              aria-label="New password"
+              aria-label={t("auth.newPassword")}
               className="input"
               type="password"
               autoComplete="new-password"
-              placeholder="New password (8+ characters)"
+              placeholder={t("auth.newPasswordHint")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
             <input
-              aria-label="Repeat new password"
+              aria-label={t("auth.repeatPassword")}
               className="input"
               type="password"
               autoComplete="new-password"
-              placeholder="Repeat new password"
+              placeholder={t("auth.repeatPassword")}
               value={repeat}
               onChange={(e) => setRepeat(e.target.value)}
             />
-            {mismatch && <Notice tone="error">The passwords don't match.</Notice>}
+            {mismatch && <Notice tone="error">{t("auth.mismatch")}</Notice>}
             {error && (
               <Notice tone="error">
-                {error} <Link to="/forgot-password">Request a new link</Link>
+                {error} <Link to="/forgot-password">{t("auth.requestNewLink")}</Link>
               </Notice>
             )}
             <button type="submit" className="primary-button w-full" disabled={busy || password.length < 8 || password !== repeat}>
-              {busy ? "Saving…" : "Set new password"}
+              {busy ? t("auth.saving") : t("auth.setPassword")}
             </button>
           </form>
         )}
@@ -153,11 +155,12 @@ export function ResetPasswordPage() {
 
 /** The confirmation link lands here: /verify-email?token=… — confirming signs you in. */
 export function VerifyEmailPage() {
+  useT();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const { acceptSession } = useAuth();
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(token ? null : "This link is missing its token. Open the link from the email again.");
+  const [error, setError] = useState<string | null>(token ? null : t("auth.verify.missingToken"));
   // Tokens are single-use: redeem once even though StrictMode mounts effects twice.
   const redeeming = useRef<string | null>(null);
 
@@ -171,22 +174,22 @@ export function VerifyEmailPage() {
         // A new account goes through onboarding, like any other sign-up.
         navigate("/welcome/assessment?from=signup", { replace: true });
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not confirm the email"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : t("auth.verify.failed")));
   }, [token, acceptSession, navigate]);
 
   return (
-    <PublicPageLayout title="Confirming your email">
+    <PublicPageLayout title={t("auth.verify.title")}>
       <div className="card max-w-md space-y-4 p-5">
         {error ? (
           <>
             <Notice tone="error">{error}</Notice>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Sign in to send a new confirmation link. <Link to="/">Go to sign in</Link>
+              {t("auth.verify.signInHint")} <Link to="/">{t("auth.verify.goSignIn")}</Link>
             </p>
           </>
         ) : (
           <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
-            One moment…
+            {t("auth.oneMoment")}
           </p>
         )}
       </div>

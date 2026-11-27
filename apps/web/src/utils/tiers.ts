@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { TIER_NAMES, type LessonListItem, type SkillChip, type TierId } from "@keyboard-sensei/shared-types";
 
 /** Learn's filter: the three learning paths, as a way to narrow the tier list. */
@@ -50,7 +51,7 @@ export function groupByTier(allLessons: readonly LessonListItem[], filter: Learn
     if (lessons.length === 0 && inCourse) continue;
     groups.push({
       tier,
-      name: TIER_NAMES[tier],
+      name: t(`lesson.tier.${tier}`) || TIER_NAMES[tier],
       lessons,
       completed: lessons.filter((lesson) => lesson.progress.status === "completed").length,
       comingSoon: !inCourse,

@@ -1,3 +1,4 @@
+import { t, getLocale, useT } from "../../i18n";
 import type { ReactNode } from "react";
 import type { LevelInfo } from "../../services/api";
 import { levelTitle } from "../ui/glossary";
@@ -87,9 +88,9 @@ export function LevelBar({ level, className = "" }: { level: LevelInfo; classNam
  * minute reads "under 1 min" so it never rounds up to "1 min" while the chip says 0.
  */
 export const formatMinutes = (minutes: number): string => {
-  if (minutes > 0 && minutes < 1) return "under 1 min";
+  if (minutes > 0 && minutes < 1) return t("time.underMinute");
   const whole = Math.floor(minutes);
-  return whole >= 60 ? `${Math.floor(whole / 60)}h ${whole % 60}m` : `${whole} min`;
+  return whole >= 60 ? t("time.hoursMinutes", { h: Math.floor(whole / 60), m: whole % 60 }) : t("time.minutes", { n: whole });
 };
 
 export type DayState = "met" | "frozen" | "practised" | "none";
@@ -103,12 +104,12 @@ export interface WeekDay {
 }
 
 const describeDay = (day: WeekDay): string => {
-  const date = new Date(`${day.day}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
-  if (day.isFuture) return `${date}: upcoming`;
-  if (day.state === "met") return `${date}: goal met (${formatMinutes(day.minutes)})`;
-  if (day.state === "frozen") return `${date}: missed, covered by a day-off pass`;
-  if (day.state === "practised") return `${date}: ${formatMinutes(day.minutes)}, goal not met`;
-  return `${date}: no practice`;
+  const date = new Date(`${day.day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: "long", day: "numeric", month: "short" });
+  if (day.isFuture) return t("week.upcoming", { date });
+  if (day.state === "met") return t("week.met", { date, time: formatMinutes(day.minutes) });
+  if (day.state === "frozen") return t("week.frozen", { date });
+  if (day.state === "practised") return t("week.practised", { date, time: formatMinutes(day.minutes) });
+  return t("week.none", { date });
 };
 
 /** Seven labelled dots for the current week, Monday first. */
