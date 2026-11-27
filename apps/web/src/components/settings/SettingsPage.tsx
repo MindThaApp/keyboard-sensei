@@ -1,3 +1,5 @@
+import LanguageSection from "./LanguageSection";
+import { t, useT } from "../../i18n";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
@@ -31,6 +33,7 @@ const TEST_NARRATION_SECTION_INDEX = 0;
 function GeneralSection() {
   return (
     <div className="space-y-6">
+      <LanguageSection />
       <DailyGoalSection />
       <CrashReportingSection />
     </div>
@@ -38,6 +41,7 @@ function GeneralSection() {
 }
 
 function AccountSection() {
+  useT();
   const { user, setUser, acceptSession } = useAuth();
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [savingName, setSavingName] = useState(false);
@@ -66,9 +70,9 @@ function AccountSection() {
     try {
       const updated = await api.updateProfile(displayName);
       setUser(updated);
-      setNameStatus("Saved.");
+      setNameStatus(t("settings.saved"));
     } catch (err) {
-      setNameError(err instanceof Error ? err.message : "Could not save display name.");
+      setNameError(err instanceof Error ? err.message : t("settings.nameFailed"));
     } finally {
       setSavingName(false);
     }
@@ -81,11 +85,11 @@ function AccountSection() {
     setPasswordStatus(null);
     try {
       await api.changePassword(currentPassword, newPassword);
-      setPasswordStatus("Password updated.");
+      setPasswordStatus(t("settings.passwordUpdated"));
       setCurrentPassword("");
       setNewPassword("");
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : "Could not change password.");
+      setPasswordError(err instanceof Error ? err.message : t("settings.passwordFailed"));
     } finally {
       setSavingPassword(false);
     }
@@ -99,9 +103,9 @@ function AccountSection() {
     try {
       const body = await api.signOutAll();
       acceptSession({ accessToken: body.accessToken, user: body.user });
-      setSignOutStatus("Signed out everywhere else. You stay signed in on this device.");
+      setSignOutStatus(t("settings.signedOutElsewhere"));
     } catch (err) {
-      setSignOutError(err instanceof Error ? err.message : "Could not sign out other devices.");
+      setSignOutError(err instanceof Error ? err.message : t("settings.signOutFailed"));
     } finally {
       setSigningOutAll(false);
     }
@@ -109,11 +113,11 @@ function AccountSection() {
 
   return (
     <div className="space-y-6">
-      <ListGroup header="Account" footer={user?.email} aria-label="Display name">
+      <ListGroup header={t("settings.account")} footer={user?.email} aria-label={t("settings.displayName")}>
         <li className="ks-row">
           <form onSubmit={(e) => void handleSaveName(e)} className="settings-row">
             <label htmlFor="display-name" className="settings-row__title">
-              Display name
+              {t("settings.displayName")}
             </label>
             <div className="settings-row__body">
               <input
@@ -125,7 +129,7 @@ function AccountSection() {
                 style={{ flex: "1 1 12rem", width: "auto" }}
               />
               <Button type="submit" variant="filled" disabled={savingName || !displayName.trim()}>
-                Save
+                {t("common.save")}
               </Button>
             </div>
             {nameStatus && <p className="settings-status m-0">{nameStatus}</p>}
@@ -138,22 +142,22 @@ function AccountSection() {
         </li>
       </ListGroup>
 
-      <ListGroup header="Change password" aria-label="Change password">
+      <ListGroup header={t("settings.changePassword")} aria-label={t("settings.changePassword")}>
         <li className="ks-row">
           <form onSubmit={(e) => void handleChangePassword(e)} className="settings-row">
             <input
-              aria-label="Current password"
+              aria-label={t("settings.currentPassword")}
               type="password"
-              placeholder="Current password"
+              placeholder={t("settings.currentPassword")}
               autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="settings-field"
             />
             <input
-              aria-label="New password"
+              aria-label={t("auth.newPassword")}
               type="password"
-              placeholder="New password (8+ characters)"
+              placeholder={t("auth.newPasswordHint")}
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -161,7 +165,7 @@ function AccountSection() {
             />
             <div className="settings-row__body">
               <Button type="submit" variant="filled" disabled={savingPassword || !currentPassword || newPassword.length < 8}>
-                Update password
+                {t("settings.updatePassword")}
               </Button>
             </div>
             {passwordStatus && <p className="settings-status m-0">{passwordStatus}</p>}
@@ -175,14 +179,14 @@ function AccountSection() {
       </ListGroup>
 
       <ListGroup
-        header="Sessions"
-        footer="Ends your sign-in on every phone, tablet and browser. This device stays signed in."
-        aria-label="Sessions"
+        header={t("settings.sessions")}
+        footer={t("settings.sessionsHint")}
+        aria-label={t("settings.sessions")}
       >
         <SettingsRow>
           <div>
             <Button variant="gray" loading={signingOutAll} onClick={() => void handleSignOutAll()}>
-              Sign out of all devices
+              {t("settings.signOutAll")}
             </Button>
           </div>
           <p aria-live="polite" className="m-0">
@@ -286,13 +290,13 @@ function NarrationSection() {
   return (
     <div className="space-y-6">
       <ListGroup
-        header="Narration voice"
+        header={t("settings.narrationVoice")}
         footer={
           narrationPaused
-            ? "Read-aloud is paused for now. Voice samples still work."
-            : "Pick a voice to have lesson text read aloud."
+            ? t("settings.narrationPaused")
+            : t("settings.narrationPick")
         }
-        aria-label="Narration voice"
+        aria-label={t("settings.narrationVoice")}
       >
         {NARRATION_VOICES.map((voice) => {
           const isSelected = user?.narration_voice_id === voice.id;
@@ -327,11 +331,11 @@ function NarrationSection() {
       )}
 
       {user?.narration_voice_id && (
-        <ListGroup aria-label="Test narration">
+        <ListGroup aria-label={t("settings.testNarration")}>
           <SettingsRow>
             <div>
               <Button variant="gray" onClick={() => void handleTestNarration()} disabled={testLoading || narrationPaused}>
-                {testLoading ? "Generating…" : testPlaying ? "Pause test narration" : "Test my voice on a real lesson"}
+                {testLoading ? t("settings.generating") : testPlaying ? t("settings.pauseTest") : t("settings.testVoice")}
               </Button>
             </div>
             {testError && (
@@ -369,27 +373,27 @@ function MidiSection() {
   return (
     <div className="space-y-6">
       <ListGroup
-        header="Keyboard connection"
-        footer="Connect a real keyboard, or test with the on-screen piano below. Both work the same way in every lesson."
-        aria-label="Keyboard connection"
+        header={t("settings.kbConnection")}
+        footer={t("settings.kbConnectionHint")}
+        aria-label={t("settings.kbConnection")}
       >
-        <SettingsRow value={<>Last note: {lastNote ?? "none yet"}</>}>
+        <SettingsRow value={<>{t("settings.lastNote", { note: lastNote ?? t("settings.noneYet") })}</>}>
           <MidiStatusBar />
         </SettingsRow>
       </ListGroup>
 
       <ListGroup
-        header="My keyboard"
+        header={t("settings.myKeyboard")}
         footer={
           devices[0]?.name
             ? `${devices[0].name}: ${midiNoteToName(deviceRange.lowestNote)}-${midiNoteToName(deviceRange.highestNote)} (${deviceRangePreference.mode}; ${currentDeviceKey ?? "unknown device key"})${sustainPedalDown ? ". Sustain pedal down." : ""}`
             : "Connect a keyboard to save this preference for that device."
         }
-        aria-label="My keyboard"
+        aria-label={t("settings.myKeyboard")}
       >
-        <SettingsRow title="Keyboard size">
+        <SettingsRow title={t("settings.kbSize")}>
           <select
-            aria-label="My keyboard"
+            aria-label={t("settings.myKeyboard")}
             value={deviceRangePreference.mode === "explicit" ? String(deviceRangePreference.keys) : "auto"}
             onChange={(e) => {
               if (e.target.value === "auto") setDeviceRangePreference(autoRangePreference(deviceRange));
@@ -397,7 +401,7 @@ function MidiSection() {
             }}
             className="settings-field"
           >
-            <option value="auto">Learn from what I play</option>
+            <option value="auto">{t("settings.kbAuto")}</option>
             {KEYBOARD_SIZE_OPTIONS.map((option) => (
               <option key={option.keys} value={option.keys}>
                 {option.label}
@@ -405,10 +409,10 @@ function MidiSection() {
             ))}
           </select>
         </SettingsRow>
-        <ListRow title="Recalibrate" subtitle="Press your lowest and highest keys" onClick={startCalibration} disabled={!devices[0]} accessory="chevron" />
+        <ListRow title={t("settings.recalibrate")} subtitle={t("settings.recalibrateHint")} onClick={startCalibration} disabled={!devices[0]} accessory="chevron" />
         <SettingsRow>
           <Toggle
-            label="Highlight notes as I play them"
+            label={t("settings.highlight")}
             checked={highlightEnabled}
             onChange={(checked) => {
               setHighlightEnabled(checked);
@@ -425,21 +429,16 @@ function MidiSection() {
 
 type SettingsTab = "general" | "account" | "appearance" | "instruments" | "midi" | "narration" | "library";
 
-const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "appearance", label: "Appearance" },
-  { value: "account", label: "Account" },
-  { value: "instruments", label: "Instruments" },
-  { value: "midi", label: "Keyboard" },
-  { value: "narration", label: "Narration" },
-  { value: "library", label: "Library" },
-];
+const SETTINGS_TAB_VALUES: SettingsTab[] = ["general", "appearance", "account", "instruments", "midi", "narration", "library"];
+const settingsTabs = (): { value: SettingsTab; label: string }[] =>
+  SETTINGS_TAB_VALUES.map((value) => ({ value, label: t(`settings.tab.${value}`) }));
 
 function isSettingsTab(value: string | null): value is SettingsTab {
-  return SETTINGS_TABS.some((tab) => tab.value === value);
+  return SETTINGS_TAB_VALUES.some((tab) => tab === value);
 }
 
 export default function SettingsPage() {
+  useT();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const activeTab: SettingsTab = isSettingsTab(params.get("tab")) ? (params.get("tab") as SettingsTab) : "general";
@@ -459,18 +458,18 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {cameFromPlay && (
         <Link to={backTo} className="inline-flex min-h-11 items-center text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
-          ← Back to songs
+          {t("settings.backToSongs")}
         </Link>
       )}
-      <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">Settings</h1>
+      <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-slate-100">{t("settings.title")}</h1>
       <SegmentedControl<SettingsTab>
-        aria-label="Settings sections"
-        options={SETTINGS_TABS}
+        aria-label={t("settings.sections")}
+        options={settingsTabs()}
         value={activeTab}
         onChange={selectTab}
         block
       />
-      <h2 className="sr-only">{SETTINGS_TABS.find((tab) => tab.value === activeTab)?.label}</h2>
+      <h2 className="sr-only">{settingsTabs().find((tab) => tab.value === activeTab)?.label}</h2>
       {activeTab === "general" && <GeneralSection />}
       {activeTab === "account" && <AccountSection />}
       {activeTab === "appearance" && <AppearanceSection />}

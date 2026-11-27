@@ -1,13 +1,14 @@
+import { t } from "../i18n";
 import type { LessonListItem } from "@keyboard-sensei/shared-types";
 
 /** Display names for curriculum levels, keyed by the API's level slug. */
 export const LEVEL_LABEL: Record<string, string> = {
-  foundation: "Foundation",
-  elementary: "Elementary",
-  intermediate: "Intermediate",
-  "late-intermediate": "Late Intermediate",
-  advanced: "Advanced",
-  virtuoso: "Virtuoso",
+  get foundation() { return t("level.foundation"); },
+  get elementary() { return t("level.elementary"); },
+  get intermediate() { return t("level.intermediate"); },
+  get "late-intermediate"() { return t("level.lateIntermediate"); },
+  get advanced() { return t("level.advanced"); },
+  get virtuoso() { return t("level.virtuoso"); },
 };
 
 /** Human-readable level name; unknown slugs are title-cased rather than shown raw. */
