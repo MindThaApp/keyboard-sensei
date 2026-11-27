@@ -60,7 +60,7 @@ export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty
 export type ExerciseTempoPct = number;
 export interface RawMidiEvent { note: number; velocity: number; type: "noteon" | "noteoff"; timestampMs: number }
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
-export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown";
+export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown" | "sharp" | "flat";
 export interface ScoringMistake { noteId: string | null; expectedNote: number | null; performedNote: number | null; chordGroupId: string | null; issue: ScoringIssue }
 /**
  * How evenly the notes were played, for exercises that opt in (see ExerciseDynamics).
@@ -116,3 +116,24 @@ export interface AttemptSummary { id: string; exerciseId: string; lessonId: stri
 export interface AttemptsResponse { attempts: AttemptSummary[] }
 export interface ApiErrorResponse { error: { code: string; message: string; details?: unknown } }
 export * from "./sentry.js";
+
+// --- Music Portal: mic grading (M4). Additive; see docs/specs/MUSIC-PORTAL.md 2.4 and 4. ---
+// Unions are written inline (not via the PlayedInstrument / ExerciseInput aliases) so this
+// block merges with the other milestones' declarations without a duplicate alias.
+export interface MidiExercise {
+  /** Absent = "piano". */
+  instrument?: "piano" | "guitar" | "violin";
+  /** Absent = "midi". */
+  input?: "midi" | "mic-mono" | "mic-chord" | "any";
+  /** mic-mono only: a pitch-correct note further than this from equal temperament is sharp/flat. */
+  intonationToleranceCents?: number;
+}
+/**
+ * Mic-only data rides in optional fields, so the scorer and the server re-score treat a
+ * mic note exactly like a MIDI note. `centsOffset`: the steady part's median offset from
+ * `note` in equal temperament at the learner's A4. `pitchConfidence`: 0-1.
+ */
+export interface PerformedNote { centsOffset?: number; pitchConfidence?: number; source?: "midi" | "mic" }
+/** Summary of pitch-correct mic notes: mean absolute cents and the share inside the tolerance. */
+export interface IntonationResult { meanAbsCents: number; withinTolerancePct: number; toleranceCents: number; measuredNotes: number; score: number }
+export interface ScoringResult { intonation?: IntonationResult }

@@ -52,9 +52,8 @@ deletes their account (backups: up to 14 days more).
 
 Not collected (answer **No**): Location (approximate or precise), Financial info,
 Health and fitness, Messages, Photos other than feedback screenshots, Videos, Voice
-or sound recordings (microphone features analyse sound on the device; no audio is
-transmitted or stored, so "Audio" is not collected. `RECORD_AUDIO` is declared and
-explained in the listing from the release that ships them), Files and docs, Calendar,
+or sound recordings (the microphone is analysed on the device and never recorded
+or transmitted; see "Microphone" below), Files and docs, Calendar,
 Contacts, Web browsing history, Search history (the song search runs on the
 device), Installed apps, Device or other IDs,
 Race/ethnicity, Political or religious beliefs, Sexual orientation, Other info.
@@ -87,3 +86,27 @@ changes before launch.
 - Delete account URL: `https://<your domain>/delete-account`
 - Contact email: replace `privacy@YOURDOMAIN` in
   `apps/web/src/components/legal/PublicPageLayout.tsx` (`CONTACT_EMAIL`) first.
+
+## Microphone (`RECORD_AUDIO`)
+
+Mic grading, the tuner and the piano check listen through the microphone. The
+app declares `RECORD_AUDIO` (plus `MODIFY_AUDIO_SETTINGS`, which the WebView's
+audio capture asks for alongside it) and requests it at runtime only when the
+learner opens one of those features, after an in-app explanation: "Music Portal
+listens to grade your playing. Sound is analysed on this device and never
+recorded or uploaded."
+
+- **Audio is not collected.** Sound is analysed in memory on the device and
+  discarded. No recording is stored, uploaded or shared, so Audio → "Voice or
+  sound recordings" stays **No**.
+- What a mic attempt sends is the same kind of data a MIDI attempt sends (note
+  numbers and times), plus the pitch offset in cents and a confidence value per
+  note. That is already covered by App activity → App interactions above.
+- Crash reports never include audio: sample buffers are removed by the shared
+  Sentry filter (`packages/shared-types/src/sentry.ts`).
+- Refusing the permission leaves every MIDI feature working; the app explains
+  how to turn it back on in system settings.
+- Listing text for the permission: "Microphone: used to hear your playing for
+  grading and tuning. Sound is processed on your device and never recorded or
+  uploaded."
+
