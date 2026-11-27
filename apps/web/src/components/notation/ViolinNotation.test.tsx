@@ -85,3 +85,79 @@ describe("violin notation rendering (snapshot)", () => {
     expect(container.querySelectorAll(".vf-stavetie").length).toBe(0);
   });
 });
+
+import { applyViolinHints } from "../../utils/violinNotation";
+import { notationFor } from "../midi/MidiExercise";
+
+describe("violin exercise notation", () => {
+  const exercise = {
+    exerciseId: "t", tempoBpm: 60, difficulty: "beginner" as const, simultaneityWindowMs: 80, timingToleranceMs: 250, durationTolerancePercent: 50,
+    instrument: "violin" as const,
+    expected: [
+      { id: "a", note: 55, startBeat: 0, durationBeats: 1, hand: "right" as const, finger: null, chordGroupId: null, voice: "melody" as const },
+      { id: "b", note: 57, startBeat: 1, durationBeats: 1, hand: "right" as const, finger: null, chordGroupId: null, voice: "melody" as const },
+      { id: "c", note: 62, startBeat: 2, durationBeats: 1, hand: "right" as const, finger: null, chordGroupId: null, voice: "melody" as const },
+      { id: "d", note: 64, startBeat: 3, durationBeats: 1, hand: "right" as const, finger: null, chordGroupId: null, voice: "melody" as const },
+    ],
+    techniqueHints: {
+      a: { string: "G" as const, finger: 0 as const, position: 1, bow: "down" as const },
+      b: { string: "G" as const, finger: 1 as const, position: 1, bow: "up" as const },
+      c: { string: "D" as const, finger: 0 as const, position: 1, bow: "down" as const, slur: "start" as const },
+      d: { string: "D" as const, finger: 1 as const, position: 1, slur: "end" as const },
+    },
+  };
+
+  it("puts G3 on one treble staff (no bass staff for a violin)", () => {
+    const data = notationFor(exercise) as { grandStaff?: boolean; clef?: string };
+    expect(data.grandStaff).toBeUndefined();
+    expect(data.clef).toBe("treble");
+  });
+
+  it("prints string numerals only where the string changes, and slurs and bows as authored", () => {
+    const data = notationFor(exercise) as { measures: { notes: { violin?: unknown }[] }[] };
+    const marks = data.measures.flatMap((m) => m.notes.map((n) => n.violin));
+    expect(marks).toMatchInlineSnapshot(`
+      [
+        {
+          "bow": "down",
+          "finger": 0,
+          "string": "G",
+        },
+        {
+          "bow": "up",
+          "finger": 1,
+        },
+        {
+          "bow": "down",
+          "finger": 0,
+          "slur": "start",
+          "string": "D",
+        },
+        {
+          "finger": 1,
+          "slur": "end",
+        },
+      ]
+    `);
+  });
+
+  it("prints a position label on a first note above first position and when it changes", () => {
+    const staff = {
+      measures: [{ notes: [
+        { ids: ["a"], duration: "q" }, { ids: ["b"], duration: "q" }, { ids: ["c"], duration: "q" },
+      ] }],
+    };
+    const out = applyViolinHints(staff, {
+      a: { string: "A", finger: 1, position: 3 },
+      b: { string: "A", finger: 2, position: 3 },
+      c: { string: "A", finger: 1, position: 1 },
+    });
+    expect(out.measures[0]!.notes.map((n) => (n as { violin?: { position?: number } }).violin?.position)).toEqual([3, undefined, 1]);
+  });
+
+  it("does not mutate its input", () => {
+    const staff = { measures: [{ notes: [{ ids: ["a"], duration: "q" }] }] };
+    applyViolinHints(staff, { a: { string: "G", finger: 0, position: 1 } });
+    expect(staff.measures[0]!.notes[0]).toEqual({ ids: ["a"], duration: "q" });
+  });
+});

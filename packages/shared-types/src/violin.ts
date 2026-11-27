@@ -14,4 +14,6 @@ export interface ViolinHint {
   /** 1-7. */
   position: number;
   bow?: ViolinBow;
+  /** Draws a slur from the "start" note to the "end" note (same bar). Slurred notes share one bow. */
+  slur?: "start" | "end";
 }
