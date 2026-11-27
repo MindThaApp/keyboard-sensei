@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chordBassPitchClass, chordMidiNotes, chordPitchClasses, defaultFretting, fretToMidi, fretsForMidi, GUITAR_CHORDS, guitarChord } from "./index";
+import { chordBassPitchClass, chordMidiNotes, chordPitchClasses, defaultFretting, fretToMidi, fretsForMidi, GUITAR_CHORDS, guitarChord } from "./index.js";
 
 describe("fretboard", () => {
   it("maps open strings and frets to sounding pitch", () => {
