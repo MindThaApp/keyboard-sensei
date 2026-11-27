@@ -16,6 +16,7 @@ COPY packages/lesson-engine/package.json packages/lesson-engine/package.json
 COPY packages/playalong-core/package.json packages/playalong-core/package.json
 COPY packages/challenge-gen/package.json packages/challenge-gen/package.json
 COPY packages/audio-analysis/package.json packages/audio-analysis/package.json
+COPY packages/piano-tuning/package.json packages/piano-tuning/package.json
 COPY patches patches
 
 RUN pnpm install --no-frozen-lockfile

@@ -45,6 +45,8 @@ const TunerPage = lazy(() => import("./components/tuner/TunerPage"));
 
 const PianoCheckPage = lazy(() => import("./components/pianoCheck/PianoCheckPage"));
 const KitPreview = import.meta.env.DEV ? lazy(() => import("./components/ui/KitPreview")) : null;
+// Guided piano tuning aid: loaded only when opened.
+const PianoTuningAidPage = lazy(() => import("./components/tuning/PianoTuningAidPage"));
 
 /**
  * Pages that work signed in or out, outside the app shell: the policies and account
@@ -225,6 +227,14 @@ function AppShell() {
           {/* New screens: register their routes here, above the redirects. */}
           <Route path="/practice/notes" element={<NoteReadingGame />} />
           <Route path="/challenge" element={<DailyChallengePage />} />
+          <Route
+            path="/tune/piano-tuning"
+            element={
+              <Suspense fallback={null}>
+                <PianoTuningAidPage />
+              </Suspense>
+            }
+          />
           {KitPreview && (
             <Route
               path="/dev/kit"

@@ -212,6 +212,7 @@ export default defineConfig({
       { find: /^@keyboard-sensei\/midi-engine\/web$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/web.ts") },
       { find: /^@keyboard-sensei\/midi-engine\/capacitor$/, replacement: path.resolve(workspaceRoot, "packages/midi-engine/src/capacitor.ts") },
       { find: /^@keyboard-sensei\/music-theory$/, replacement: path.resolve(workspaceRoot, "packages/music-theory/src/index.ts") },
+      { find: /^@keyboard-sensei\/piano-tuning$/, replacement: path.resolve(workspaceRoot, "packages/piano-tuning/src/index.ts") },
       { find: /^@keyboard-sensei\/playalong-core$/, replacement: path.resolve(workspaceRoot, "packages/playalong-core/src/index.ts") },
       { find: /^@keyboard-sensei\/audio-analysis$/, replacement: path.resolve(workspaceRoot, "packages/audio-analysis/src/index.ts") },
       { find: /^@keyboard-sensei\/piano-check$/, replacement: path.resolve(workspaceRoot, "packages/piano-check/src/index.ts") },

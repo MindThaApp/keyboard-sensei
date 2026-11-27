@@ -36,7 +36,8 @@
       "@keyboard-sensei/audio-analysis": ["../../packages/audio-analysis/src/index.ts"],
       "@keyboard-sensei/audio-analysis/testing": ["../../packages/audio-analysis/src/testing/index.ts"],
       "@keyboard-sensei/piano-check": ["../../packages/piano-check/src/index.ts"],
-      "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"]
+      "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"],
+      "@keyboard-sensei/piano-tuning": ["../../packages/piano-tuning/src/index.ts"]
     }
   },
   "include": ["src", "scripts"],

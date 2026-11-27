@@ -21,6 +21,7 @@
     "@keyboard-sensei/midi-engine": "workspace:*",
     "@keyboard-sensei/music-theory": "workspace:*",
     "@keyboard-sensei/piano-check": "workspace:*",
+    "@keyboard-sensei/piano-tuning": "workspace:*",
     "@keyboard-sensei/playalong-core": "workspace:*",
     "@keyboard-sensei/shared-types": "workspace:*",
     "@sentry/capacitor": "4.4.0",
