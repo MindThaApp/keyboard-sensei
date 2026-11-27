@@ -17,6 +17,7 @@ import {
 } from "../../utils/keyboardRange";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 import AudioLatencySection from "./AudioLatencySection";
+import MicSetupSection from "./MicSetupSection";
 import DailyGoalSection from "./DailyGoalSection";
 import CrashReportingSection from "./CrashReportingSection";
 import DeleteAccountSection from "./DeleteAccountSection";
@@ -479,6 +480,7 @@ export default function SettingsPage() {
         <>
           <MidiSection />
           <AudioLatencySection />
+          <MicSetupSection />
         </>
       )}
       {activeTab === "narration" && <NarrationSection />}

@@ -144,6 +144,7 @@ describe("TunerPage", () => {
     // Locked to D4: an A4 reads as 700 cents sharp of the target, clamped on the needle.
     expect(screen.getByTestId("tuner-note").textContent).toBe("D4");
     expect(parseFloat(screen.getByTestId("tuner-cents").textContent!)).toBeCloseTo(700, 0);
+    expect(screen.getByTestId("tuner-playing").textContent).toBe("You're playing A4: tune down towards D4");
   });
 
   it("chromatic mode names any note", async () => {

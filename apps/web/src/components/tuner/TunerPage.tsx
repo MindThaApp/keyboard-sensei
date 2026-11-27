@@ -76,6 +76,11 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
           {" · "}
           <span data-testid="tuner-cents">{cents === null ? "– cents" : `${cents > 0 ? "+" : ""}${cents.toFixed(1)} cents`}</span>
         </div>
+        {match && reading && reading.name !== match.string.label && (
+          <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="tuner-playing">
+            You're playing {reading.name}: {match.cents < 0 ? "tune up" : "tune down"} towards {match.string.label}
+          </p>
+        )}
         <TunerNeedle cents={cents} greenZone={settings.greenZoneCents} active={reading !== null} />
         <StrobeBand cents={cents} />
         <DriftTrace history={view.history} now={view.history[view.history.length - 1]?.time ?? 0} greenZone={settings.greenZoneCents} />
