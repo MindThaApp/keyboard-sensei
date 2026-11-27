@@ -176,8 +176,12 @@ export default defineConfig({
   worker: {
     format: "es",
     rollupOptions: {
-      // A stable name for the engraver worker, so the service worker can skip it.
-      output: { entryFileNames: "assets/verovio-worker-[hash].js" },
+      // A stable name for the engraver worker, so the service worker can skip it. The mic
+      // AudioWorklet is small and needed offline (tuner), so it gets its own name and is precached.
+      output: {
+        entryFileNames: (chunk: { name: string }) =>
+          chunk.name.includes("micAnalyser") ? "assets/mic-analyser-[hash].js" : "assets/verovio-worker-[hash].js",
+      },
     },
   },
   plugins: [
