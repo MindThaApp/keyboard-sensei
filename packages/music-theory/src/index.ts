@@ -14,3 +14,4 @@ export function midiNoteToName(note: number): string {
 }
 export * from "./guitar.js";
 export * from "./guitarChords.js";
+export * from "./guitarBarreChords.js";
