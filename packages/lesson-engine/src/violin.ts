@@ -1,4 +1,4 @@
-import type { MidiExercise } from "@keyboard-sensei/shared-types";
+import { isViolinHint, type MidiExercise } from "@keyboard-sensei/shared-types";
 import { FINGER_PATTERNS, VIOLIN_OPEN_STRING, VIOLIN_RANGE, fingeringSounds, type FingerPatternId } from "@keyboard-sensei/music-theory/violin";
 
 export interface ViolinValidationOptions {
@@ -48,6 +48,10 @@ export function violinExerciseProblems(exercise: MidiExercise, options: ViolinVa
     const hint = hints[note.id];
     if (!hint) {
       fail(`${note.id} has no fingering hint`);
+      return;
+    }
+    if (!isViolinHint(hint)) {
+      fail(`${note.id} has a non-violin fingering hint`);
       return;
     }
     const open = VIOLIN_OPEN_STRING[hint.string];

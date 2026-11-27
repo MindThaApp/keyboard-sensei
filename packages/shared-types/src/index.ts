@@ -146,6 +146,11 @@ export interface ScoringResult { intonation?: IntonationResult }
 export type ExerciseInput = "midi" | "mic-mono" | "mic-chord" | "any";
 /** A guitar fretting: string 1 = high e ... 6 = low E; fret 0 = open. */
 export interface GuitarHint { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number; finger?: 0 | 1 | 2 | 3 | 4 }
+/** Guitar hints number their strings (1-6); violin hints name them ("G" | "D" | "A" | "E"). */
+export const isGuitarHint = (hint: GuitarHint | ViolinHint | null | undefined): hint is GuitarHint =>
+  typeof hint?.string === "number";
+export const isViolinHint = (hint: GuitarHint | ViolinHint | null | undefined): hint is ViolinHint =>
+  typeof hint?.string === "string";
 /** One chord to strum. `pitchClasses` come from the shared chord dictionary, so what is drawn is what is graded. */
 export interface ChordTarget { id: string; symbol: string; pitchClasses: number[]; bassPitchClass?: number; startBeat: number; durationBeats: number }
 /** What the chord detector heard for one strum (labels only, never audio). */

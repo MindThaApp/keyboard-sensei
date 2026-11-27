@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import { GUITAR_CHORDS, STANDARD_TUNING, chordBassPitchClass, chordPitchClasses, fretToMidi, parseChordSymbol } from "@keyboard-sensei/music-theory";
-import type { Lesson } from "@keyboard-sensei/shared-types";
+import { isGuitarHint, type Lesson } from "@keyboard-sensei/shared-types";
 import { exercises as allExercises, lessons as allLessons } from "./content.js";
 import { validateTiers } from "./content/tiers.js";
 
@@ -77,9 +77,10 @@ describe("guitar course (tiers 0-2)", () => {
         // every note has a hint, the hint sounds exactly the expected pitch, and it is within the first position
         for (const note of exercise.expected) {
           const hint = exercise.techniqueHints?.[note.id];
-          expect(hint, `${exercise.exerciseId} ${note.id}`).toBeDefined();
-          expect(fretToMidi(hint!.string, hint!.fret), `${exercise.exerciseId} ${note.id}`).toBe(note.note);
-          expect(hint!.fret).toBeLessThanOrEqual(5);
+          expect(isGuitarHint(hint), `${exercise.exerciseId} ${note.id}`).toBe(true);
+          if (!isGuitarHint(hint)) continue;
+          expect(fretToMidi(hint.string, hint.fret), `${exercise.exerciseId} ${note.id}`).toBe(note.note);
+          expect(hint.fret).toBeLessThanOrEqual(5);
         }
         for (const note of exercise.expected) expect(note.note).toBeGreaterThanOrEqual(STANDARD_TUNING[0]!);
       }
