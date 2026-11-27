@@ -734,3 +734,5 @@ export const updateExperienceMode = (experience_mode: "simple" | "advanced") =>
   request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ experience_mode }) });
 export const updateInstruments = (played_instruments: PlayedInstrument[], active_instrument: PlayedInstrument) =>
   request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ played_instruments, active_instrument }) });
+export const updateTunerA4 = (tuner_a4_hz: number) =>
+  request<AuthUser>("/users/me", { method: "PATCH", body: JSON.stringify({ tuner_a4_hz }) });

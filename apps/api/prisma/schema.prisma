@@ -44,6 +44,9 @@ model User {
   played_instruments String[]           @default([])
   /// The instrument that scopes Learn and Today; NULL = piano.
   active_instrument  String?
+  // Tuner reference A4 in Hz (415-466), synced: a property of the learner's ensemble,
+  // not the device. NULL until set (reads as 440).
+  tuner_a4_hz        Float?
   created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]

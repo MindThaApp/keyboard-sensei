@@ -59,6 +59,7 @@ const updateProfileSchema = z
     experience_mode: z.enum(["simple", "advanced"]).optional(),
     played_instruments: z.array(z.enum(["piano", "guitar", "violin"])).max(3).optional(),
     active_instrument: z.enum(["piano", "guitar", "violin"]).nullable().optional(),
+    tuner_a4_hz: z.number().min(415).max(466).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
 
@@ -73,6 +74,7 @@ const PROFILE_SELECT = {
   experience_mode: true,
   played_instruments: true,
   active_instrument: true,
+  tuner_a4_hz: true,
   google_sub: true,
 } as const;
 

@@ -433,6 +433,23 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("tuner reference pitch (A4)", () => {
+    it("is stored on the account, validated to 415-466 Hz, and can be cleared", async () => {
+      const user = await createUserWithPassword();
+      const a4 = async (token: string) => (await api("GET", "/users/me", { token })).body.tuner_a4_hz;
+      expect(await a4(user.token)).toBeNull();
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 442.5 } });
+      expect(set.status).toBe(200);
+      expect(set.body.tuner_a4_hz).toBe(442.5);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      expect(await a4(login.body.accessToken)).toBe(442.5);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 400 } })).status).toBe(400);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 500 } })).status).toBe(400);
+      expect(await a4(user.token)).toBe(442.5);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: null } })).body.tuner_a4_hz).toBeNull();
+    });
+  });
+
   describe("experience mode (Simple / Advanced)", () => {
     it("is stored on the account, read back on a later sign-in, and validated", async () => {
       const user = await createUserWithPassword();
