@@ -63,8 +63,11 @@
       <_MpManifestOut>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)Package.appxmanifest</_MpManifestOut>
       <_MpManifest>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Package.appxmanifest'))</_MpManifest>
       <_MpManifest>$(_MpManifest.Replace('Name="MusicPortal.LocalBuild"', 'Name="$(MusicPortalIdentityName)"'))</_MpManifest>
-      <_MpManifest>$(_MpManifest.Replace('Publisher="CN=MusicPortalLocalBuild"', 'Publisher="$([System.Security.SecurityElement]::Escape($(MusicPortalPublisher)))"'))</_MpManifest>
-      <_MpManifest>$(_MpManifest.Replace('&lt;PublisherDisplayName&gt;Music Portal (local build)&lt;/PublisherDisplayName&gt;', '&lt;PublisherDisplayName&gt;$([System.Security.SecurityElement]::Escape($(MusicPortalPublisherDisplayName)))&lt;/PublisherDisplayName&gt;'))</_MpManifest>
+      <!-- XML-escape the values (a display name may contain an ampersand). -->
+      <_MpPublisherXml>$(MusicPortalPublisher.Replace('&amp;', '&amp;amp;').Replace('&lt;', '&amp;lt;').Replace('&gt;', '&amp;gt;').Replace('"', '&amp;quot;'))</_MpPublisherXml>
+      <_MpDisplayNameXml>$(MusicPortalPublisherDisplayName.Replace('&amp;', '&amp;amp;').Replace('&lt;', '&amp;lt;').Replace('&gt;', '&amp;gt;'))</_MpDisplayNameXml>
+      <_MpManifest>$(_MpManifest.Replace('Publisher="CN=MusicPortalLocalBuild"', 'Publisher="$(_MpPublisherXml)"'))</_MpManifest>
+      <_MpManifest>$(_MpManifest.Replace('&lt;PublisherDisplayName&gt;Music Portal (local build)&lt;/PublisherDisplayName&gt;', '&lt;PublisherDisplayName&gt;$(_MpDisplayNameXml)&lt;/PublisherDisplayName&gt;'))</_MpManifest>
       <_MpManifest>$(_MpManifest.Replace('Version="1.0.0.0" /&gt;', 'Version="$(MusicPortalVersion)" /&gt;'))</_MpManifest>
     </PropertyGroup>
     <MakeDir Directories="$(MSBuildProjectDirectory)\$(IntermediateOutputPath)" />
