@@ -69,6 +69,8 @@ export const PATH_NAMES: Record<string, string> = {
   "classical-technical": "Foundations",
   "sightreading-intensive": "Reading & Rhythm",
   "modern-chords": "Chords & Pop",
+  "violin-foundations": "Violin foundations",
+  "violin-technique": "Violin technique",
 };
 
 /** Player-level tier names shown to learners (the API's first tier is called Novice). */

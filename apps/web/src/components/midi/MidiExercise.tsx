@@ -8,7 +8,8 @@ import { coveredNoteIds, groupByStart } from "./exerciseCoverage";
 import type { FocusModeApi } from "../../hooks/useFocusMode";
 import NotationRenderer from "../notation/NotationRenderer";
 import { COUNT_IN_BEATS, useExerciseAttempt, type RecordingClock } from "./useExerciseAttempt";
-import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { engrave, type EngravedStaff, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { applyViolinHints } from "../../utils/violinNotation";
 import { estimateKey, type KeyInfo } from "../../utils/keySignature";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
 
@@ -82,7 +83,8 @@ export function notationFor(exercise: MidiExerciseDef, key?: KeyInfo) {
   const input: EngraveInputNote[] = exercise.expected.map((event) => ({
     id: event.id,
     midi: event.note,
-    staff: event.note >= 60 ? "treble" : "bass",
+    // A violin reads one treble staff all the way down to G3, on ledger lines.
+    staff: event.note >= 60 || exercise.instrument === "violin" ? "treble" : "bass",
     startBeat: event.startBeat * quartersPerBeat,
     endBeat: (event.startBeat + event.durationBeats) * quartersPerBeat,
   }));
@@ -96,7 +98,10 @@ export function notationFor(exercise: MidiExerciseDef, key?: KeyInfo) {
     showKeySignature: key !== undefined,
   });
   if (staves.length === 2) return { grandStaff: true, treble: engraved.treble, bass: engraved.bass };
-  return { ...engraved[staves[0]] };
+  const single = { ...engraved[staves[0]] };
+  return exercise.instrument === "violin" && exercise.techniqueHints
+    ? (applyViolinHints(single as EngravedStaff, exercise.techniqueHints) as typeof single)
+    : single;
 }
 
 function SubmetricBar({ label, value }: { label: string; value: number }) {

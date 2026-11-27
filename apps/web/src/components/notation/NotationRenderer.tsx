@@ -12,9 +12,13 @@ import {
   Dot,
   Fraction,
   Tuplet,
+  Annotation,
+  Articulation,
+  Modifier,
   type RenderContext,
 } from "vexflow";
 import { midiToVexKey, type NoteData } from "../../utils/measureNotation";
+import { violinLabels } from "../../utils/violinNotation";
 import { displayAccidentals, keyFromSpec } from "../../utils/keySignature";
 
 /** VexFlow ticks per whole note (Tables.RESOLUTION, which the typings do not export). */
@@ -220,6 +224,18 @@ interface LaidSystem {
   width: number;
 }
 
+/** Violin finger numbers, string numerals, position labels and bowing marks (see utils/violinNotation). */
+function addViolinMarks(staveNote: StaveNote, n: NoteData): void {
+  const { above, bowCode } = violinLabels(n.violin);
+  for (const text of above) {
+    const label = new Annotation(text);
+    label.setVerticalJustification(Annotation.VerticalJustify.TOP);
+    label.setFont("Arial", text.endsWith("pos.") ? 10 : 12, text.endsWith("pos.") ? "italic" : "bold");
+    staveNote.addModifier(label, 0);
+  }
+  if (bowCode) staveNote.addModifier(new Articulation(bowCode).setPosition(Modifier.Position.ABOVE), 0);
+}
+
 function buildStaveNote(n: NoteData, clef: string, accidentals: (string | null)[]): StaveNote {
   const isRest = n.duration.includes("r");
   const staveNote = new StaveNote({
@@ -243,6 +259,7 @@ function buildStaveNote(n: NoteData, clef: string, accidentals: (string | null)[
   });
   const dots = dotsFromDuration(n.duration);
   for (let i = 0; i < dots; i++) Dot.buildAndAttach([staveNote], { all: true });
+  if (!isRest) addViolinMarks(staveNote, n);
   return staveNote;
 }
 
@@ -271,6 +288,7 @@ function buildMeasureNotes(
   const notes: StaveNote[] = [];
   const noteEntries: { note: StaveNote; ids?: string[] }[] = [];
   const tupletGroups = new Map<number, StaveNote[]>();
+  let slurStart: StaveNote | null = null;
   measure.notes.forEach((n, i) => {
     const staveNote = buildStaveNote(n, state.clef, accidentals[i]);
     notes.push(staveNote);
@@ -287,6 +305,11 @@ function buildMeasureNotes(
         ties.push(new StaveTie({ first_note: previous.note, first_indices: indices, last_indices: indices }));
         ties.push(new StaveTie({ last_note: staveNote, first_indices: indices, last_indices: indices }));
       }
+    }
+    if (n.violin?.slur === "start") slurStart = staveNote;
+    else if (n.violin?.slur === "end" && slurStart) {
+      ties.push(new StaveTie({ first_note: slurStart, last_note: staveNote, first_indices: [0], last_indices: [0] }));
+      slurStart = null;
     }
     state.previous = { note: staveNote, data: n, system };
   });
