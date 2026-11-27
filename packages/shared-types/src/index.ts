@@ -1,3 +1,4 @@
+import type { ViolinHint } from "./violin.js";
 /** What a learner plays. Not the sampled sound (that is an "Instrument" in the sound bank). */
 export type PlayedInstrument = "piano" | "guitar" | "violin";
 export const PLAYED_INSTRUMENTS: readonly PlayedInstrument[] = ["piano", "guitar", "violin"];
@@ -8,7 +9,7 @@ export const isPlayedInstrument = (value: unknown): value is PlayedInstrument =>
 export const lessonInstrument = (lesson: { instrument?: PlayedInstrument | null }): PlayedInstrument =>
   lesson.instrument ?? DEFAULT_PLAYED_INSTRUMENT;
 
-export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "guitar-foundations" | "guitar-chords-rhythm";
+export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "guitar-foundations" | "guitar-chords-rhythm" | "violin-foundations" | "violin-technique";
 export type LevelId = "foundation" | "elementary" | "intermediate" | "late-intermediate" | "advanced" | "virtuoso";
 export type BranchId = "technique" | "theory" | "repertoire";
 
@@ -53,7 +54,7 @@ export interface ExerciseKey { fifths: number; mode: "major" | "minor" }
  * the same loudness. Velocity is never scored unless an exercise asks for it.
  */
 export interface ExerciseDynamics { evenVolume?: boolean; balancedChords?: boolean }
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
+export interface MidiExercise { instrument?: PlayedInstrument; input?: ExerciseInput; intonationToleranceCents?: number; techniqueHints?: Record<string, GuitarHint | ViolinHint>; exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
 /** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
  * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
  * 25-200 BPM slider. The API accepts [10, 250]. */
@@ -150,7 +151,8 @@ export interface MidiExercise {
   instrument?: PlayedInstrument;
   input?: ExerciseInput;
   chordTargets?: ChordTarget[];
-  techniqueHints?: Record<string, GuitarHint>;
+  techniqueHints?: Record<string, GuitarHint | ViolinHint>;
 }
 export interface ChordResult { targetId: string; symbol: string; outcome: "right" | "wrong-chord" | "no-strum"; heard: string | null; timing: "on-time" | "early" | "late" | null }
 export interface ScoringResult { chordResults?: ChordResult[] }
+export * from "./violin.js";

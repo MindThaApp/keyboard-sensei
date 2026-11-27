@@ -71,6 +71,8 @@ export const PATH_NAMES: Record<string, string> = {
   "modern-chords": "Chords & Pop",
   "guitar-foundations": "Guitar basics",
   "guitar-chords-rhythm": "Guitar chords & rhythm",
+  "violin-foundations": "Violin foundations",
+  "violin-technique": "Violin technique",
 };
 
 /** Player-level tier names shown to learners (the API's first tier is called Novice). */

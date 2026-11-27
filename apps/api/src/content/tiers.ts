@@ -1,5 +1,6 @@
 import type { Lesson, SkillChip, TierId } from "@keyboard-sensei/shared-types";
 import { GUITAR_LESSON_TIERS } from "./guitar-tiers.js";
+import { VIOLIN_LESSON_TIERS } from "./violin.js";
 
 interface TierAssignment {
   tier: TierId;
@@ -8,6 +9,7 @@ interface TierAssignment {
 
 const at = (tier: TierId, skills: SkillChip[]): TierAssignment => ({ tier, skills });
 
+
 /**
  * Tier and skill chips for every lesson, keyed by the permanent lesson id.
  * Tiers 6 and 7 are intentionally empty (the UI shows them as "Coming soon").
@@ -15,6 +17,7 @@ const at = (tier: TierId, skills: SkillChip[]): TierAssignment => ({ tier, skill
  * prerequisites are always in the same or an earlier tier (checked by validateTiers).
  */
 export const LESSON_TIERS: Record<string, TierAssignment> = {
+  ...(Object.fromEntries(Object.entries(VIOLIN_LESSON_TIERS).map(([id, a]) => [id, at(a.tier as TierId, [...a.skills] as SkillChip[])])) as Record<string, TierAssignment>),
   // Tier 0: first steps
   "lesson-01": at(0, ["technique"]),
   "lesson-02": at(0, ["technique", "five-finger"]),

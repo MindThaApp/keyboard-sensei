@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { midiToVexKey } from "../../utils/measureNotation";
 import { useMidiContext } from "../midi/MidiContext";
 import NotationRenderer from "./NotationRenderer";
+import { ViolinFingerboard } from "../instruments/ViolinFingerboard";
+import { fingerboardFromData } from "../../utils/violinNotation";
 
 interface NoteData {
   ids?: string[];
@@ -88,6 +90,14 @@ export default function LiveNotationSection({ data, title }: { data: Record<stri
   );
 
   const activeNoteIds = useMemo(() => activeNoteIdsForHeldPitches(heldMidiNotes, data), [heldMidiNotes, data]);
+  const fingerboard = fingerboardFromData(data);
+  if (fingerboard) {
+    return (
+      <div className="py-2">
+        <ViolinFingerboard marks={fingerboard.marks} pattern={fingerboard.pattern} title={title ?? "Violin fingerboard"} />
+      </div>
+    );
+  }
   return (
     <div role="img" aria-label={`Sheet music${title ? `: ${title}` : ""}`}>
       <NotationRenderer data={data} title={title} activeNoteIds={activeNoteIds} />
