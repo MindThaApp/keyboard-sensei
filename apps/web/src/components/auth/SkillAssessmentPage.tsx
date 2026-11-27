@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { MidiExercise as MidiExerciseDef, ScoringResult } from "@keyboard-sensei/shared-types";
@@ -74,14 +75,14 @@ interface Choice<T extends string> {
 }
 
 const PLAYED_CHOICES: Choice<PlayedBefore>[] = [
-  { value: "never", title: "Never, or just a little", hint: "We'll start with a few guided steps." },
-  { value: "yes", title: "Yes, I can already play", hint: "We'll check where to start you." },
+  { value: "never", get title() { return t("assess.neverTitle"); }, get hint() { return t("assess.neverHint"); } },
+  { value: "yes", get title() { return t("assess.yesTitle"); }, get hint() { return t("assess.yesHint"); } },
 ];
 
 const DEVICE_CHOICES: Choice<OnboardingDevice>[] = [
-  { value: "screen", title: "The on-screen keyboard", hint: "Tap or click the keys." },
-  { value: "plugged", title: "A keyboard plugged in", hint: "A digital piano or keyboard on a USB cable." },
-  { value: "bluetooth", title: "A keyboard over Bluetooth", hint: "Paired wirelessly." },
+  { value: "screen", get title() { return t("assess.screenTitle"); }, get hint() { return t("assess.screenHint"); } },
+  { value: "plugged", get title() { return t("assess.pluggedTitle"); }, get hint() { return t("assess.pluggedHint"); } },
+  { value: "bluetooth", get title() { return t("assess.btTitle"); }, get hint() { return t("assess.btHint"); } },
 ];
 
 /** One question with big tappable answers. */
@@ -174,25 +175,25 @@ export default function SkillAssessmentPage({
   };
 
   if (stage === "played") {
-    return <Question id="q-played" heading="Have you played piano before?" choices={PLAYED_CHOICES} onPick={answerPlayed} />;
+    return <Question id="q-played" heading={t("assess.qPlayed")} choices={PLAYED_CHOICES} onPick={answerPlayed} />;
   }
   if (stage === "device") {
-    return <Question id="q-device" heading="What will you play on?" choices={DEVICE_CHOICES} onPick={answerDevice} />;
+    return <Question id="q-device" heading={t("assess.qDevice")} choices={DEVICE_CHOICES} onPick={answerDevice} />;
   }
   if (stage === "intro") {
     return (
       <section className="mx-auto max-w-xl space-y-4 py-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-            Quick check (optional)
+            {t("assess.badge")}
           </p>
-          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
+          <h1 className="mt-1 font-display text-2xl font-semibold">{t("assess.title")}</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            3 short tasks. Strong, consistent results unlock the first four lessons; otherwise you start at lesson 1.
+            {t("assess.intro")}
           </p>
         </div>
         <Button variant="filled" size="lg" onClick={() => setStage("tasks")}>
-          Start
+          {t("assess.start")}
         </Button>
         <button
           type="button"
@@ -202,7 +203,7 @@ export default function SkillAssessmentPage({
             goToFirstSteps(device);
           }}
         >
-          I'm new — skip this
+          {t("assess.imNew")}
         </button>
       </section>
     );
@@ -237,18 +238,18 @@ function AssessmentTasks({ onFinish, onSkip }: { onFinish(scores: number[]): voi
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-              Quick check (optional)
+              {t("assess.badge")}
             </p>
             <StepIndicator index={index} currentDone={result !== null} />
           </div>
-          <h1 className="mt-1 font-display text-2xl font-semibold">Find your starting point</h1>
+          <h1 className="mt-1 font-display text-2xl font-semibold">{t("assess.title")}</h1>
         </div>
         <button
           type="button"
           className="min-h-[44px] shrink-0 text-sm text-felt-700 underline dark:text-felt-300"
           onClick={onSkip}
         >
-          Skip the check
+          {t("assess.skip")}
         </button>
       </div>
       <MidiStatusBar />
@@ -262,7 +263,7 @@ function AssessmentTasks({ onFinish, onSkip }: { onFinish(scores: number[]): voi
       />
       {result && (
         <Button variant="filled" onClick={next}>
-          {index === prompts.length - 1 ? "See placement" : "Next task"}
+          {index === prompts.length - 1 ? t("assess.seePlacement") : t("assess.nextTask")}
         </Button>
       )}
     </div>

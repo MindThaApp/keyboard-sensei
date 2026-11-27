@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RegistrationForm } from "./AuthPage";
@@ -12,6 +13,7 @@ import { parseScoresParam } from "./onboardingParams";
  * page can still re-apply them to the newly registered account.
  */
 export default function SaveProgressPage() {
+  useT();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const scores = parseScoresParam(params.get("scores"));
@@ -22,20 +24,20 @@ export default function SaveProgressPage() {
     <div className="mx-auto flex max-w-md items-center py-6">
       <section className="card w-full space-y-4 p-6">
         <div>
-          <h1 className="text-xl font-semibold">Save your progress</h1>
+          <h1 className="text-xl font-semibold">{t("save.title")}</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Create your own account to save progress going forward. Demo progress is shared and will not be migrated.
+            {t("save.intro")}
           </p>
         </div>
         <RegistrationForm
-          submitLabel="Create account and continue"
+          submitLabel={t("save.submit")}
           onRegistered={() =>
             void applyAssessmentPlacement(scores)
               .then(() => {
                 resetProgress();
                 navigate("/welcome/goal", { replace: true });
               })
-              .catch((e) => setError(e instanceof Error ? e.message : "Unable to apply placement"))
+              .catch((e) => setError(e instanceof Error ? e.message : t("save.placementFailed")))
           }
         />
         {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
@@ -44,7 +46,7 @@ export default function SaveProgressPage() {
           className="w-full text-sm text-felt-700 underline dark:text-felt-300"
           onClick={() => navigate("/", { replace: true })}
         >
-          Skip, keep using demo
+          {t("save.skip")}
         </button>
       </section>
     </div>
