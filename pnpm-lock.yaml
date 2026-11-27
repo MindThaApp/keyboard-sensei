@@ -259,6 +259,9 @@ importers:
 
   packages/lesson-engine:
     dependencies:
+      '@keyboard-sensei/music-theory':
+        specifier: workspace:*
+        version: link:../music-theory
       '@keyboard-sensei/shared-types':
         specifier: workspace:*
         version: link:../shared-types

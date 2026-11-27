@@ -1,5 +1,5 @@
 import type { ViolinHint } from "@keyboard-sensei/shared-types";
-import { VIOLIN_STRING_NUMERAL, ordinal, type ViolinStringName } from "@keyboard-sensei/music-theory/violin";
+import { VIOLIN_STRING_NUMERAL, ordinal, printedMarks, type FingerPatternId, type ViolinStringName } from "@keyboard-sensei/music-theory/violin";
 
 /**
  * Violin marks on one note of a lesson's notation data (`NoteData.violin`).
@@ -39,31 +39,49 @@ interface HintedNote { ids?: string[]; duration: string; violin?: ViolinMarks }
 interface HintedStaff<N extends HintedNote> { measures: { notes: N[] }[] }
 
 /**
- * Copies an exercise's violin hints onto the engraved notes (matched by note id),
- * deciding what to print so the staff stays readable:
- *  - the finger number on every note;
- *  - the string numeral on the first note and wherever the string changes;
- *  - "Nth pos." on the first note when it is not first position, and wherever the position changes;
- *  - the bow direction and slur ends as authored.
+ * Copies an exercise's violin hints onto the engraved notes (matched by note id); what gets
+ * printed is decided by `printedMarks` (music-theory) so lessons and the player agree.
  * Pure: returns a new staff and leaves the input alone.
  */
 export function applyViolinHints<N extends HintedNote, T extends HintedStaff<N>>(staff: T, hints: Record<string, ViolinHint>): T {
-  let previous: ViolinHint | null = null;
+  const notes = staff.measures.flatMap((measure) => measure.notes);
+  const hintFor = (note: N): ViolinHint | undefined =>
+    note.duration.includes("r") ? undefined : note.ids?.map((id) => hints[id]).find((h): h is ViolinHint => h !== undefined);
+  const marks = new Map<N, ViolinMarks | undefined>();
+  const printed = printedMarks(notes.map(hintFor));
+  notes.forEach((note, index) => marks.set(note, printed[index]));
   return {
     ...staff,
     measures: staff.measures.map((measure) => ({
       ...measure,
-      notes: measure.notes.map((note) => {
-        const hint = note.ids?.map((id) => hints[id]).find((h): h is ViolinHint => h !== undefined);
-        if (!hint || note.duration.includes("r")) return note;
-        const marks: ViolinMarks = { finger: hint.finger };
-        if (!previous || previous.string !== hint.string) marks.string = hint.string;
-        if ((!previous && hint.position > 1) || (previous && previous.position !== hint.position)) marks.position = hint.position;
-        if (hint.bow) marks.bow = hint.bow;
-        if (hint.slur) marks.slur = hint.slur;
-        previous = hint;
-        return { ...note, violin: marks };
-      }),
+      notes: measure.notes.map((note) => (marks.get(note) ? { ...note, violin: marks.get(note) } : note)),
     })),
   };
+}
+
+export interface FingerboardData {
+  pattern?: FingerPatternId;
+  marks: { string: ViolinStringName; finger: 0 | 1 | 2 | 3 | 4; offset: number }[];
+}
+
+const STRING_NAMES = ["G", "D", "A", "E"];
+
+/**
+ * Reads a lesson's `{ fingerboard: { pattern?, marks } }` notation data. Returns null when the
+ * data is not a fingerboard diagram (so ordinary staff notation is untouched); throws away
+ * marks that are not well formed rather than drawing nonsense.
+ */
+export function fingerboardFromData(data: Record<string, unknown>): FingerboardData | null {
+  const raw = data.fingerboard;
+  if (!raw || typeof raw !== "object") return null;
+  const { pattern, marks } = raw as { pattern?: unknown; marks?: unknown };
+  if (!Array.isArray(marks)) return null;
+  const good = marks.filter(
+    (mark): mark is FingerboardData["marks"][number] =>
+      !!mark && typeof mark === "object" &&
+      STRING_NAMES.includes((mark as { string?: string }).string ?? "") &&
+      Number.isInteger((mark as { finger?: number }).finger) && (mark as { finger: number }).finger >= 0 && (mark as { finger: number }).finger <= 4 &&
+      typeof (mark as { offset?: unknown }).offset === "number",
+  );
+  return { ...(pattern === "high2" || pattern === "low2" || pattern === "low1" ? { pattern } : {}), marks: good };
 }

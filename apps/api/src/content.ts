@@ -10,6 +10,7 @@ import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
 import { tierOf, withTier, validateTiers } from "./content/tiers.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
+import { violinLessons, violinExercises } from "./content/violin.js";
 
 /**
  * Exercises scored on dynamics as well (see ExerciseDynamics), because their
@@ -35,6 +36,7 @@ export const exercises: MidiExercise[] = [
   ...keyExercises,
   ...readingExercises,
   ...modernExercises,
+  ...violinExercises,
 ].map((exercise) => (DYNAMICS_OPT_IN[exercise.exerciseId] ? { ...exercise, dynamics: DYNAMICS_OPT_IN[exercise.exerciseId] } : exercise));
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
@@ -65,7 +67,10 @@ const readingPath = chainLessons(byTier(readingLessons), ["lesson-11"]);
 // Modern Chords opens after the foundation assessment (lesson 12), which covers triads.
 const modernPath = chainLessons(byTier(modernLessons), ["lesson-12"]);
 
-export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath]
+// Violin opens straight away: no piano lesson is a prerequisite. Its chain is its own.
+const violinPath = chainLessons(byTier(violinLessons));
+
+export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath, ...violinPath]
   .map(withPractice)
   .map(withTier)
   .map((lesson) => ({ ...lesson, estimatedMinutes: estimateLessonMinutes(lesson, exerciseById) }));

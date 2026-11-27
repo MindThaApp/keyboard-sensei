@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { exercises, lessons } from "./content.js";
+import { exercises as allExercises, lessons as allLessons } from "./content.js";
+
+// Piano ids are frozen here. Other instruments freeze theirs in their own content tests.
+const lessons = allLessons.filter((lesson) => !lesson.instrument);
+const exercises = allExercises.filter((exercise) => !exercise.instrument);
 
 /**
  * Content ids are database keys. UserProgress, ExerciseAttempt and QuizAttempt rows on

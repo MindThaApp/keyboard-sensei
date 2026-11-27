@@ -39,7 +39,8 @@ describe("seed content", () => {
       });
     }
     expect(lessons[0]!.unlockCriteria.requiresLessonIds).toEqual([]);
-    expect(lessons.filter((lesson) => lesson.unlockCriteria.requiresLessonIds.length === 0)).toEqual([lessons[0]]);
+    // The piano course opens with one lesson; each other instrument has its own first lesson.
+    expect(lessons.filter((lesson) => lesson.unlockCriteria.requiresLessonIds.length === 0 && !lesson.instrument)).toEqual([lessons[0]]);
     expect(byPath("sightreading-intensive")[0]!.unlockCriteria.requiresLessonIds).toEqual(["lesson-11"]);
   });
 
@@ -154,7 +155,7 @@ describe("authoring helpers", () => {
 describe("lesson tiers", () => {
   const countsByTier = () => {
     const counts: Record<number, number> = {};
-    for (const lesson of lessons) counts[lesson.tier] = (counts[lesson.tier] ?? 0) + 1;
+    for (const lesson of lessons.filter((item) => !item.instrument)) counts[lesson.tier] = (counts[lesson.tier] ?? 0) + 1;
     return counts;
   };
 
@@ -211,7 +212,7 @@ describe("lesson tiers", () => {
   });
 
   it("keeps the first-steps tier to the six foundation lessons", () => {
-    expect(lessons.filter((lesson) => lesson.tier === 0).map((lesson) => lesson.id)).toEqual([
+    expect(lessons.filter((lesson) => lesson.tier === 0 && !lesson.instrument).map((lesson) => lesson.id)).toEqual([
       "lesson-01",
       "lesson-02",
       "lesson-03",

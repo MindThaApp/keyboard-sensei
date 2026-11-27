@@ -161,3 +161,19 @@ describe("violin exercise notation", () => {
     expect(staff.measures[0]!.notes[0]).toEqual({ ids: ["a"], duration: "q" });
   });
 });
+
+import { fingerboardFromData } from "../../utils/violinNotation";
+
+describe("fingerboardFromData", () => {
+  it("is null for ordinary staff notation", () => {
+    expect(fingerboardFromData({ clef: "treble", notes: [] })).toBeNull();
+    expect(fingerboardFromData({ fingerboard: "nope" })).toBeNull();
+  });
+
+  it("keeps well-formed marks and drops the rest", () => {
+    const data = fingerboardFromData({
+      fingerboard: { pattern: "high2", marks: [{ string: "A", finger: 1, offset: 2 }, { string: "Z", finger: 1, offset: 2 }, { string: "A", finger: 9, offset: 2 }, null] },
+    });
+    expect(data).toEqual({ pattern: "high2", marks: [{ string: "A", finger: 1, offset: 2 }] });
+  });
+});

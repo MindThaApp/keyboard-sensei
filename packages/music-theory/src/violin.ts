@@ -111,3 +111,43 @@ export function stopFraction(semitones: number): number {
 export function fingerboardY(semitones: number, scalePx: number): number {
   return stopFraction(semitones) * scalePx;
 }
+
+/** The part of a violin hint that decides what is printed on the staff. */
+export interface HintLike {
+  string: ViolinStringName;
+  finger: 0 | 1 | 2 | 3 | 4;
+  position: number;
+  bow?: "down" | "up";
+  slur?: "start" | "end";
+}
+
+/** What is printed on one note (see the web renderer's `ViolinMarks`). */
+export interface PrintedMarks {
+  finger: 0 | 1 | 2 | 3 | 4;
+  string?: ViolinStringName;
+  position?: number;
+  bow?: "down" | "up";
+  slur?: "start" | "end";
+}
+
+/**
+ * Decides what to print for a line of notes (in playing order) so the staff stays readable:
+ *  - the finger number on every note;
+ *  - the string numeral on the first note and wherever the string changes;
+ *  - "Nth pos." on the first note when it is not first position, and wherever the position changes;
+ *  - the bow direction and slur ends as authored.
+ * `undefined` entries (rests, unhinted notes) are skipped and keep their place in the output.
+ */
+export function printedMarks(hints: readonly (HintLike | undefined)[]): (PrintedMarks | undefined)[] {
+  let previous: HintLike | null = null;
+  return hints.map((hint) => {
+    if (!hint) return undefined;
+    const marks: PrintedMarks = { finger: hint.finger };
+    if (!previous || previous.string !== hint.string) marks.string = hint.string;
+    if ((!previous && hint.position > 1) || (previous && previous.position !== hint.position)) marks.position = hint.position;
+    if (hint.bow) marks.bow = hint.bow;
+    if (hint.slur) marks.slur = hint.slur;
+    previous = hint;
+    return marks;
+  });
+}
