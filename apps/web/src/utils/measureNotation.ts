@@ -1,3 +1,4 @@
+import type { ViolinMarks } from "./violinNotation";
 /**
  * One tickable on a staff, in the shape NotationRenderer draws. Lesson
  * content authors these by hand; utils/engraving.ts produces them from
@@ -13,6 +14,8 @@ export interface NoteData {
   tuplet?: number;
   /** A whole-bar rest: its length in quarter notes, so a "wr" fills a 3/4 or 6/8 bar exactly. */
   barRest?: number;
+  /** Violin fingering, string, position, bowing and slur marks. */
+  violin?: ViolinMarks;
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { ViolinHint } from "./violin.js";
 export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "violin-foundations" | "violin-technique";
 export type PlayedInstrument = "piano" | "guitar" | "violin";
 export type ExerciseInput = "midi" | "mic-mono" | "mic-chord" | "any";
