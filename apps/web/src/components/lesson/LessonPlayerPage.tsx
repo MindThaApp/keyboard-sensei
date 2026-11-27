@@ -1,3 +1,4 @@
+import GuitarSection, { isGuitarSection } from "../notation/GuitarSection";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
@@ -186,6 +187,7 @@ export default function LessonPlayerPage() {
             case "theory-card":
               return <TheoryCardSectionView key={sectionIndex} section={section} lessonId={lesson.id} sectionIndex={sectionIndex} />;
             case "notation":
+              if (isGuitarSection(section.vexflowData)) return <GuitarSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
               return <LiveNotationSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
             case "quiz":
               return <QuizSectionView key={sectionIndex} section={section} />;
