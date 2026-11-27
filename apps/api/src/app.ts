@@ -16,6 +16,7 @@ import type {
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
 import { pairRawMidiEvents, scoreExercise } from "@keyboard-sensei/midi-engine";
+import { chordDetectionsSchema, detectionsAsPerformedNotes, isChordExercise, scoreChordAttempt } from "./chord-attempts.js";
 import {
   calculateAssessmentPlacement,
   lessonCompletion,
@@ -135,12 +136,25 @@ const performanceSchema = z
   .object({
     rawEvents: z.array(rawEventSchema).optional(),
     performedNotes: z.array(performedSchema).optional(),
+    chordDetections: chordDetectionsSchema.optional(),
     tempoPct: tempoPctSchema.optional(),
   })
   .refine(
-    (value) => (value.rawEvents === undefined) !== (value.performedNotes === undefined),
-    "Supply exactly one of rawEvents or performedNotes",
+    (value) => [value.rawEvents, value.performedNotes, value.chordDetections].filter((part) => part !== undefined).length === 1,
+    "Supply exactly one of rawEvents, performedNotes or chordDetections",
   );
+
+/** Score an attempt: strums (mic-chord exercises) by their chord detections, everything else by notes. */
+function scoreAttempt(exercise: MidiExercise, input: z.infer<typeof performanceSchema>) {
+  if (isChordExercise(exercise) !== (input.chordDetections !== undefined)) {
+    throw Object.assign(new Error("Strum exercises take chordDetections; note exercises take rawEvents or performedNotes"), { statusCode: 400 });
+  }
+  if (input.chordDetections) {
+    return { performedNotes: detectionsAsPerformedNotes(input.chordDetections), result: scoreChordAttempt(exercise, input.chordDetections, input.tempoPct) };
+  }
+  const performedNotes = (input.performedNotes ?? pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
+  return { performedNotes, result: scoreExercise({ exercise, performedNotes, tempoPct: input.tempoPct }) };
+}
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 
@@ -463,9 +477,7 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       return;
     }
     const exercise = validateMidiExercise(row.exercise_json);
-    const performedNotes = (input.performedNotes ??
-      pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    const result = scoreExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
+    const { performedNotes, result } = scoreAttempt(exercise, input);
     const uid = userId(req);
 
     const lesson = validateLesson(row.lesson.lesson_json);
@@ -697,14 +709,13 @@ app.post("/practice/score", async (req, res, next) => {
         exercise: z.unknown(),
         rawEvents: z.array(rawEventSchema).optional(),
         performedNotes: z.array(performedSchema).optional(),
+        chordDetections: chordDetectionsSchema.optional(),
         tempoPct: tempoPctSchema.optional(),
       })
       .parse(req.body);
     const performance = performanceSchema.parse(body);
     const exercise = validateMidiExercise(body.exercise) as MidiExercise;
-    const performedNotes = (performance.performedNotes ??
-      pairRawMidiEvents(performance.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    res.json(scoreExercise({ exercise, performedNotes, tempoPct: performance.tempoPct }));
+    res.json(scoreAttempt(exercise, performance).result);
   } catch (e) {
     next(e);
   }

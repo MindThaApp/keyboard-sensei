@@ -9,3 +9,4 @@ export * from "./segmenter.js";
 export * from "./tracker.js";
 export * from "./tuner.js";
 export * from "./yin.js";
+export * from "./chord/index.js";

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { validateLesson, validateMidiExercise } from "@keyboard-sensei/lesson-engine";
 import type { Lesson } from "@keyboard-sensei/shared-types";
-import { DYNAMICS_OPT_IN, exercises, lessons } from "./content.js";
+import { DYNAMICS_OPT_IN, exercises as allExercises, lessons as allLessons } from "./content.js";
 import { estimateLessonMinutes, midi, vexKey } from "./content/build.js";
 import { LEGACY_PREREQUISITES } from "./content/legacy-prerequisites.js";
 import { validateTiers } from "./content/tiers.js";
 
+// The piano course. Guitar content has its own paths and its own checks (guitar-content.test.ts);
+// a guitar lesson never unlocks from a piano lesson, so the piano invariants below exclude it.
+const lessons = allLessons.filter((lesson) => (lesson.instrument ?? "piano") === "piano");
+const exercises = allExercises.filter((exercise) => (exercise.instrument ?? "piano") === "piano");
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
 const exerciseIdsOf = (lesson: Lesson) =>
   lesson.sections.flatMap((section) => (section.type === "midi-exercise" ? [section.exerciseId] : []));

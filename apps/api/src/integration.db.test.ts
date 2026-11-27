@@ -1730,13 +1730,16 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const res = await api("GET", "/lessons", { token: user.token });
       expect(res.status).toBe(200);
       const perTier = new Map<number, number>();
+      const guitarPerTier = new Map<number, number>();
       for (const item of res.body as Array<{ id: string; tier: number; skills: string[] }>) {
         const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
         expect(item.tier, item.id).toBe(expected.tier);
         expect(item.skills, item.id).toEqual(expected.skills);
-        perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
+        const counts = expected.instrument === "guitar" ? guitarPerTier : perTier;
+        counts.set(item.tier, (counts.get(item.tier) ?? 0) + 1);
       }
       expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
+      expect([...guitarPerTier.entries()].sort()).toEqual([[0, 4], [1, 6], [2, 6]]);
       const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
       expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
     });

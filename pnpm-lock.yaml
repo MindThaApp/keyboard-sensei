@@ -252,6 +252,13 @@ importers:
         version: 5.4.21(@types/node@20.19.43)
 
   packages/audio-analysis:
+    dependencies:
+      '@keyboard-sensei/music-theory':
+        specifier: workspace:*
+        version: link:../music-theory
+      '@keyboard-sensei/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
     devDependencies:
       typescript:
         specifier: ^5.8.3

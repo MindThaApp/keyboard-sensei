@@ -8,7 +8,7 @@ export const isPlayedInstrument = (value: unknown): value is PlayedInstrument =>
 export const lessonInstrument = (lesson: { instrument?: PlayedInstrument | null }): PlayedInstrument =>
   lesson.instrument ?? DEFAULT_PLAYED_INSTRUMENT;
 
-export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive";
+export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "guitar-foundations" | "guitar-chords-rhythm";
 export type LevelId = "foundation" | "elementary" | "intermediate" | "late-intermediate" | "advanced" | "virtuoso";
 export type BranchId = "technique" | "theory" | "repertoire";
 
@@ -60,7 +60,7 @@ export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty
 export type ExerciseTempoPct = number;
 export interface RawMidiEvent { note: number; velocity: number; type: "noteon" | "noteoff"; timestampMs: number }
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
-export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown" | "sharp" | "flat";
+export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown" | "sharp" | "flat" | "wrong-chord" | "no-strum";
 export interface ScoringMistake { noteId: string | null; expectedNote: number | null; performedNote: number | null; chordGroupId: string | null; issue: ScoringIssue }
 /**
  * How evenly the notes were played, for exercises that opt in (see ExerciseDynamics).
@@ -137,3 +137,20 @@ export interface PerformedNote { centsOffset?: number; pitchConfidence?: number;
 /** Summary of pitch-correct mic notes: mean absolute cents and the share inside the tolerance. */
 export interface IntonationResult { meanAbsCents: number; withinTolerancePct: number; toleranceCents: number; measuredNotes: number; score: number }
 export interface ScoringResult { intonation?: IntonationResult }
+// --- Music Portal: guitar (M5) and chord grading (M6). Additive; see docs/specs/MUSIC-PORTAL.md 2.4. ---
+export type ExerciseInput = "midi" | "mic-mono" | "mic-chord" | "any";
+/** A guitar fretting: string 1 = high e ... 6 = low E; fret 0 = open. */
+export interface GuitarHint { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number; finger?: 0 | 1 | 2 | 3 | 4 }
+/** One chord to strum. `pitchClasses` come from the shared chord dictionary, so what is drawn is what is graded. */
+export interface ChordTarget { id: string; symbol: string; pitchClasses: number[]; bassPitchClass?: number; startBeat: number; durationBeats: number }
+/** What the chord detector heard for one strum (labels only, never audio). */
+export interface ChordDetection { onsetMs: number; label: string | null; confidence: number; runnerUp?: { label: string; confidence: number } | null }
+export interface Lesson { instrument?: PlayedInstrument }
+export interface MidiExercise {
+  instrument?: PlayedInstrument;
+  input?: ExerciseInput;
+  chordTargets?: ChordTarget[];
+  techniqueHints?: Record<string, GuitarHint>;
+}
+export interface ChordResult { targetId: string; symbol: string; outcome: "right" | "wrong-chord" | "no-strum"; heard: string | null; timing: "on-time" | "early" | "late" | null }
+export interface ScoringResult { chordResults?: ChordResult[] }
