@@ -62,25 +62,11 @@ jobs:
           MUSICPORTAL_PUBLISHER: ${{ secrets.MUSICPORTAL_PUBLISHER || vars.MUSICPORTAL_PUBLISHER || 'CN=MusicPortalLocalBuild' }}
           MUSICPORTAL_PUBLISHER_DISPLAY_NAME: ${{ secrets.MUSICPORTAL_PUBLISHER_DISPLAY_NAME || vars.MUSICPORTAL_PUBLISHER_DISPLAY_NAME || 'Music Portal (local build)' }}
           MUSICPORTAL_VERSION: 1.0.${{ github.run_number }}.0
-        run: |
-          $out = Join-Path $env:GITHUB_WORKSPACE 'out\'
-          msbuild apps/windows/MusicPortal/MusicPortal.csproj /restore /m /v:minimal `
-            /p:Configuration=Release /p:Platform=x64 `
-            /p:AppxBundle=Always /p:AppxBundlePlatforms="x64|arm64" `
-            /p:UapAppxPackageBuildMode=StoreUpload /p:AppxPackageSigningEnabled=false `
-            /p:GenerateAppxPackageOnBuild=true /p:AppxPackageDir=$out `
-            "/p:MusicPortalIdentityName=$env:MUSICPORTAL_IDENTITY_NAME" `
-            "/p:MusicPortalPublisher=$env:MUSICPORTAL_PUBLISHER" `
-            "/p:MusicPortalPublisherDisplayName=$env:MUSICPORTAL_PUBLISHER_DISPLAY_NAME" `
-            "/p:MusicPortalVersion=$env:MUSICPORTAL_VERSION"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $upload = Get-ChildItem $out -Recurse -Filter *.msixupload
-          if (-not $upload) { Get-ChildItem $out -Recurse | Select-Object FullName; throw 'No .msixupload produced' }
-          $upload | ForEach-Object { "{0} ({1:N1} MB)" -f $_.Name, ($_.Length / 1MB) }
+        run: ./apps/windows/scripts/package-store.ps1 -Version $env:MUSICPORTAL_VERSION -OutDir out
 
       - uses: actions/upload-artifact@v4
         with:
           name: music-portal-windows-msixupload
-          path: out/**/*.msixupload
+          path: out/*.msixupload
           if-no-files-found: error
           retention-days: 14

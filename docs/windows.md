@@ -19,6 +19,7 @@ apps/windows/
     web/                        copy of apps/web/dist (build output, not committed)
   MusicPortal.Tests/            xUnit: parser, bridge protocol, host policy, timestamps
   scripts/build-web.ps1         builds apps/web for the app and copies dist
+  scripts/package-store.ps1     x64 + arm64 MSIX, bundle, .msixupload
   scripts/rasterize-assets.mjs  tile/store logos, splash and AppIcon.ico from the brand SVG
   Identity.props.example        copy to Identity.props (git-ignored) for local builds
 ```
@@ -105,8 +106,11 @@ SDK"). MIDI, including paired Bluetooth LE MIDI, needs no capability.
    /p:AppxPackageSigningEnabled=true /p:PackageCertificateKeyFile=<your test .pfx>`
    (a self-signed test certificate whose subject matches `MusicPortalPublisher`;
    never commit it), trust the certificate, then `Add-AppxPackage`.
-8. Run the Windows App Certification Kit on the package.
-9. `dotnet test apps/windows/MusicPortal.Tests` (these also run on Linux and macOS).
+8. Store package: `pwsh apps/windows/scripts/package-store.ps1 -Version 1.0.N.0`
+   builds x64 and arm64, bundles them (`makeappx bundle`) and writes
+   `out/MusicPortal_<version>.msixupload` (unsigned; the Store signs it).
+9. Run the Windows App Certification Kit on the package.
+10. `dotnet test apps/windows/MusicPortal.Tests` (these also run on Linux and macOS).
 
 Icons: `node apps/windows/scripts/rasterize-assets.mjs` re-renders `Assets/` from
 `brand/music-portal-icon.svg` (or the current icon until that exists).
