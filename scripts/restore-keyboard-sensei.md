@@ -1,4 +1,7 @@
-# Restore Midivory backups
+# Restore Music Portal backups
+
+Music Portal was called Midivory; the database, volumes and file names below
+keep their original `keyboard-sensei` / `keyboard_sensei` names on purpose.
 
 Restore the PostgreSQL custom-format dump while the API is stopped or in maintenance:
 

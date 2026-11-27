@@ -1,6 +1,6 @@
 # Operations
 
-Deploying, maintaining and backing up the live Midivory server, plus the
+Deploying, maintaining and backing up the live Music Portal server (formerly Midivory), plus the
 engineering lessons the codebase has accumulated. Local development setup is in
 the [README](../README.md).
 
@@ -298,7 +298,7 @@ when `NODE_ENV=production` and no SMTP is set. Any SMTP service works (a
 transactional provider such as Postmark, Amazon SES, Brevo or Mailgun, or a
 mailbox's SMTP). Set in `.env.deploy`: `SMTP_HOST`, `SMTP_PORT` (587 for STARTTLS,
 465 with `SMTP_SECURE=true`), `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`
-(e.g. `Midivory <no-reply@yourdomain>`) and `APP_URL` (the public web
+(e.g. `Music Portal <no-reply@yourdomain>`) and `APP_URL` (the public web
 origin, used for the links). Add SPF and DKIM records for the sending domain as
 the provider instructs, or the emails land in spam.
 
@@ -338,9 +338,9 @@ the same route.
 
 What to create in [Google Cloud Console](https://console.cloud.google.com/):
 
-1. **Project**: create one, e.g. "Midivory".
+1. **Project**: create one, e.g. "Music Portal".
 2. **OAuth consent screen** (Google Auth Platform → Branding / Audience / Data access):
-   - App name: Midivory. User support email: your address. App logo: optional
+   - App name: Music Portal. User support email: your address. App logo: optional
      (a logo triggers brand verification).
    - App domain: home page `https://<your domain>/`, privacy policy
      `https://<your domain>/privacy`, terms `https://<your domain>/terms`.
@@ -350,7 +350,7 @@ What to create in [Google Cloud Console](https://console.cloud.google.com/):
      "Testing" only listed test users can sign in.
    - Scopes: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
      only. These are non-sensitive, so no Google verification review is needed.
-3. **Web client** (Clients → Create client → Web application), e.g. "Midivory web":
+3. **Web client** (Clients → Create client → Web application), e.g. "Music Portal web":
    - Authorised JavaScript origins: `https://<your domain>`, plus
      `http://localhost:5173` for development. (Google sign-in won't work on the
      LAN address `https://<deploy-host>:8181`: Google doesn't accept IP addresses

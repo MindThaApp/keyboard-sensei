@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="512" height="512">
+  <defs>
+    <linearGradient id="p-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#26262A"/><stop offset="1" stop-color="#0B0B0D"/></linearGradient>
+    <radialGradient id="p-glow" cx=".5" cy=".5" r=".5"><stop offset=".55" stop-color="#B4323E" stop-opacity="0"/><stop offset="1" stop-color="#B4323E" stop-opacity=".25"/></radialGradient>
+    <linearGradient id="p-ivory" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#DAD7CF"/></linearGradient>
+    <linearGradient id="p-red" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E35A6A"/><stop offset="1" stop-color="#9A2A35"/></linearGradient>
+  </defs>
+  <g id="background"><rect width="108" height="108" fill="url(#p-bg)"/><circle cx="54" cy="54" r="40" fill="url(#p-glow)"/></g>
+  <g id="foreground">
+    <path id="ring" fill="url(#p-ivory)" fill-rule="evenodd" d="M23,54 a31,31 0 1 0 62,0 a31,31 0 1 0 -62,0 Z M29.5,54 a24.5,24.5 0 1 0 49,0 a24.5,24.5 0 1 0 -49,0 Z"/>
+    <path id="note" fill="url(#p-ivory)" d="M42.92,67.3 a7.2,5.2 -22 1 1 13.36,-5.4 a7.2,5.2 -22 1 1 -13.36,5.4 Z M53.4,64 V37 H57.4 V64 Z M57.4,37 C57.4,43.5 67.6,45.6 67.6,54.2 C67.6,57.4 66.6,60 65.2,61.8 C66,55.6 62.4,51.6 57.4,50.6 Z"/>
+    <circle id="light" cx="67.88" cy="29.97" r="5.2" fill="url(#p-red)"/>
+  </g>
+</svg>
