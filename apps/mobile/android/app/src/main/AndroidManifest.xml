@@ -57,4 +57,13 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <!-- Microphone: mic grading, the tuner and the piano check. Sound is analysed on the
+         device and never recorded or uploaded. Requested at runtime only when the
+         learner opens a mic feature, after an explanation screen. MODIFY_AUDIO_SETTINGS
+         is what the WebView's audio capture asks for alongside it. Optional hardware so
+         the app still installs on devices without a microphone (MIDI works everywhere). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 </manifest>
