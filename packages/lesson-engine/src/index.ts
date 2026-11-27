@@ -24,7 +24,18 @@ const expectedNote = z.object({id:z.string().min(1),note:z.number().int().min(0)
 export const midiExerciseSchema = z.object({exerciseId:z.string().min(1),tempoBpm:z.number().positive(),difficulty:z.enum(["beginner","intermediate","advanced"]),simultaneityWindowMs:z.number().positive(),timingToleranceMs:z.number().positive(),durationTolerancePercent:z.number().positive(),scoring:z.enum(["timed","untimed"]).optional(),beatsPerBar:z.number().int().positive().optional(),beatUnit:z.number().int().positive().optional(),keySignature:z.object({fifths:z.number().int().min(-7).max(7),mode:z.enum(["major","minor"])}).optional(),dynamics:z.object({evenVolume:z.boolean().optional(),balancedChords:z.boolean().optional()}).optional(),expected:z.array(expectedNote).min(1)});
 
 export function validateLesson(lesson: unknown): Lesson { return lessonSchema.parse(lesson) as Lesson }
-export function validateMidiExercise(exercise: unknown): MidiExercise { return midiExerciseSchema.parse(exercise) as MidiExercise }
+/**
+ * Mic grading fields (docs/specs/MUSIC-PORTAL.md 2.4). Kept apart from the base schema so
+ * an exercise stored before them validates exactly as before; zod strips unknown keys, so
+ * without these the server would silently drop them.
+ */
+export const micExerciseFields = {
+  instrument: z.enum(["piano", "guitar", "violin"]).optional(),
+  input: z.enum(["midi", "mic-mono", "mic-chord", "any"]).optional(),
+  intonationToleranceCents: z.number().positive().max(50).optional(),
+};
+const micAwareExerciseSchema = midiExerciseSchema.extend(micExerciseFields);
+export function validateMidiExercise(exercise: unknown): MidiExercise { return micAwareExerciseSchema.parse(exercise) as MidiExercise }
 export function isLessonUnlocked({lesson,completedLessonIds,scoresByLessonId}:{lesson:Lesson;completedLessonIds:string[];scoresByLessonId:Record<string,number>}): boolean {
   return lesson.unlockCriteria.requiresLessonIds.every(id => completedLessonIds.includes(id) && (scoresByLessonId[id] ?? 0) >= lesson.unlockCriteria.minScore);
 }
