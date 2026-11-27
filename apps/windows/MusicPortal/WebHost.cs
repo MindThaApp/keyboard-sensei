@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 using Microsoft.Web.WebView2.Core;
 using MusicPortal.Midi;
 using Windows.System;
@@ -19,11 +18,11 @@ public sealed class WebHost : IDisposable
     private readonly CoreWebView2 core;
     private readonly string webRoot;
     private readonly HostPolicy policy;
-    private readonly DispatcherQueue dispatcher;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher;
     private readonly string version;
     private MidiBridge? midi;
 
-    public WebHost(CoreWebView2 core, string webRoot, string? apiUrl, DispatcherQueue dispatcher, string version)
+    public WebHost(CoreWebView2 core, string webRoot, string? apiUrl, Microsoft.UI.Dispatching.DispatcherQueue dispatcher, string version)
     {
         this.core = core;
         this.webRoot = webRoot;
