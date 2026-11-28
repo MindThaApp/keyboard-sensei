@@ -44,10 +44,10 @@ export const PATH_NAMES: Record<string, string> = {
   get "classical-technical"() { return t("path.foundations"); },
   get "sightreading-intensive"() { return t("path.reading"); },
   get "modern-chords"() { return t("path.chords"); },
-  "guitar-foundations": "Guitar basics",
-  "guitar-chords-rhythm": "Guitar chords & rhythm",
-  "violin-foundations": "Violin foundations",
-  "violin-technique": "Violin technique",
+  get "guitar-foundations"() { return t("path.guitarFoundations"); },
+  get "guitar-chords-rhythm"() { return t("path.guitarChordsRhythm"); },
+  get "violin-foundations"() { return t("path.violinFoundations"); },
+  get "violin-technique"() { return t("path.violinTechnique"); },
 };
 
 /** Player-level tier names shown to learners (the API's first tier is called Novice). */

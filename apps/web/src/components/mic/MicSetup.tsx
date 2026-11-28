@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n";
 import {
   assessLevel,
   detectMainsHum,
@@ -32,12 +33,12 @@ import { MicPermissionNotice } from "./MicPermissionNotice";
 type Step = "device" | "level" | "noise" | "latency" | "check" | "done";
 const STEPS: Step[] = ["device", "level", "noise", "latency", "check", "done"];
 const STEP_TITLES: Record<Step, string> = {
-  device: "Choose your microphone",
-  level: "Check the level",
-  noise: "Measure the room",
-  latency: "Measure the delay",
-  check: "Instrument check (optional)",
-  done: "All set",
+  get device() { return t("mic.setup.step.device"); },
+  get level() { return t("mic.setup.step.level"); },
+  get noise() { return t("mic.setup.step.noise"); },
+  get latency() { return t("mic.setup.step.latency"); },
+  get check() { return t("mic.setup.step.check"); },
+  get done() { return t("mic.setup.step.done"); },
 };
 
 export const NOISE_SECONDS = 2;
@@ -47,11 +48,11 @@ const CLICK_LEAD_S = 0.4;
 const TAP_CLICKS = 8;
 
 const LEVEL_TEXT: Record<LevelStatus, string> = {
-  silent: "Play a few notes…",
-  "too-quiet": "Too quiet: move closer or turn the input up",
-  good: "Good level",
-  "too-loud": "Very loud: move back a little or turn the input down",
-  clipping: "Clipping: turn the input down",
+  get silent() { return t("mic.setup.level.silent"); },
+  get "too-quiet"() { return t("mic.setup.level.tooQuiet"); },
+  get good() { return t("mic.setup.level.good"); },
+  get "too-loud"() { return t("mic.setup.level.tooLoud"); },
+  get clipping() { return t("mic.setup.level.clipping"); },
 };
 
 function useFrames(session: MicSession | null, listener: (frame: MicFrame) => void) {
@@ -77,7 +78,7 @@ export default function MicSetup({ onClose }: { onClose?: () => void }) {
   if (!session || !draft) {
     return (
       <MicPermissionNotice
-        purpose="Set up your microphone once so lessons and the tuner hear you clearly: this takes about a minute."
+        purpose={t("mic.setup.purpose")}
         onAllow={() => void mic.start()}
         busy={mic.state.status === "starting"}
         error={mic.state.status === "error" ? mic.state : null}
@@ -87,7 +88,7 @@ export default function MicSetup({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="space-y-3" aria-live="polite">
-      <ol className="flex flex-wrap gap-1 text-xs text-slate-500" aria-label="Steps">
+      <ol className="flex flex-wrap gap-1 text-xs text-slate-500" aria-label={t("mic.setup.steps")}>
         {STEPS.map((s, i) => (
           <li key={s} aria-current={s === step ? "step" : undefined} className={s === step ? "font-semibold text-slate-900 dark:text-slate-100" : ""}>
             {i + 1}. {STEP_TITLES[s]}
@@ -130,8 +131,7 @@ export default function MicSetup({ onClose }: { onClose?: () => void }) {
       )}
       {draft.processingSuspected && (
         <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-700 dark:bg-amber-950">
-          Your device seems to be cleaning up the microphone sound (noise suppression or automatic gain). Grading may be less
-          reliable; an external or headset mic often helps.
+          {t("mic.setup.processing")}
         </p>
       )}
     </div>
@@ -147,8 +147,8 @@ function DeviceStep({ current, onPick, onNext }: { current: MicSession; onPick: 
     <div className="space-y-2 text-sm">
       {devices.length > 1 ? (
         <label className="flex flex-wrap items-center gap-2">
-          Input
-          <select value={current.deviceId} onChange={e => onPick(e.target.value)} aria-label="Microphone input">
+          {t("mic.setup.input")}
+          <select value={current.deviceId} onChange={e => onPick(e.target.value)} aria-label={t("mic.setup.inputLabel")}>
             {devices.map(d => (
               <option key={d.deviceId} value={d.deviceId}>
                 {d.label}
@@ -157,10 +157,10 @@ function DeviceStep({ current, onPick, onNext }: { current: MicSession; onPick: 
           </select>
         </label>
       ) : (
-        <p>Using {current.deviceLabel || "your microphone"}.</p>
+        <p>{current.deviceLabel ? t("mic.setup.using", { device: current.deviceLabel }) : t("mic.setup.usingDefault")}</p>
       )}
       <button type="button" className="primary-button" onClick={onNext}>
-        Next
+        {t("common.next")}
       </button>
     </div>
   );
@@ -171,7 +171,7 @@ function LevelMeter({ levelDb, gateDb }: { levelDb: number; gateDb: number }) {
   const zoneStart = ((-30 + 70) / 70) * 100;
   const zoneEnd = ((-6 + 70) / 70) * 100;
   return (
-    <div className="relative h-4 w-full overflow-hidden rounded bg-slate-200 dark:bg-slate-800" role="meter" aria-label="Input level" aria-valuemin={-70} aria-valuemax={0} aria-valuenow={Number.isFinite(levelDb) ? Math.round(levelDb) : -70}>
+    <div className="relative h-4 w-full overflow-hidden rounded bg-slate-200 dark:bg-slate-800" role="meter" aria-label={t("mic.setup.inputLevel")} aria-valuemin={-70} aria-valuemax={0} aria-valuenow={Number.isFinite(levelDb) ? Math.round(levelDb) : -70}>
       <div className="absolute inset-y-0 bg-emerald-500/30" style={{ left: `${zoneStart}%`, width: `${zoneEnd - zoneStart}%` }} />
       <div className={`absolute inset-y-0 left-0 ${levelDb > gateDb ? "bg-felt-600" : "bg-slate-400"}`} style={{ width: `${pct}%` }} />
     </div>
@@ -192,11 +192,11 @@ function LevelStep({ session, gateDb, onDone }: { session: MicSession; gateDb: n
   });
   return (
     <div className="space-y-2 text-sm">
-      <p>Play a few notes at your normal loudness. The bar should reach the green zone without hitting the end.</p>
+      <p>{t("mic.setup.levelIntro")}</p>
       <LevelMeter levelDb={levelDb} gateDb={gateDb} />
       <p data-testid="level-status">{LEVEL_TEXT[status]}</p>
       <button type="button" className="primary-button" onClick={() => onDone(status)} disabled={status === "silent"}>
-        Next
+        {t("common.next")}
       </button>
     </div>
   );
@@ -236,7 +236,7 @@ function NoiseStep({ session, onDone }: { session: MicSession; onDone: (result: 
   useEffect(() => (running ? session.onSamples((_, block) => samples.current.push(block)) : undefined), [running, session]);
   return (
     <div className="space-y-2 text-sm">
-      <p>Stay quiet for two seconds so the app can hear what your room sounds like without you.</p>
+      <p>{t("mic.setup.noiseIntro")}</p>
       <button
         type="button"
         className="primary-button"
@@ -250,7 +250,7 @@ function NoiseStep({ session, onDone }: { session: MicSession; onDone: (result: 
           setRunning(true);
         }}
       >
-        {running ? "Listening to the room…" : "Measure the room"}
+        {running ? t("mic.setup.listeningRoom") : t("mic.setup.step.noise")}
       </button>
     </div>
   );
@@ -331,22 +331,22 @@ function LatencyStep({ session, onDone }: { session: MicSession; onDone: (result
 
   return (
     <div className="space-y-2 text-sm">
-      {mode !== "tap" && <p>The app plays a few clicks through your speakers and listens for them. Turn the volume up and take headphones off for this step.</p>}
-      {mode === "tap" && <p>Play one short note exactly on each click (the first one is a count-in).</p>}
+      {mode !== "tap" && <p>{t("mic.setup.latencyIntro")}</p>}
+      {mode === "tap" && <p>{t("mic.setup.tapIntro")}</p>}
       {mode === "failed" && (
-        <p role="alert">The clicks did not come back clearly (headphones, or a quiet speaker). Try the tap-along instead, or skip.</p>
+        <p role="alert">{t("mic.setup.clicksFailed")}</p>
       )}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="primary-button" disabled={mode === "loopback" || mode === "tap"} onClick={() => setMode("loopback")}>
-          {mode === "loopback" ? "Listening for clicks…" : "Measure the delay"}
+          {mode === "loopback" ? t("mic.setup.listeningClicks") : t("mic.setup.step.latency")}
         </button>
         {mode === "failed" && (
           <button type="button" className="secondary-button" onClick={() => setMode("tap")}>
-            Tap along instead
+            {t("mic.setup.tapInstead")}
           </button>
         )}
         <button type="button" className="secondary-button" onClick={() => onDone({ latencyMs: DEFAULT_MIC_LATENCY_MS, latencyMethod: "default" })}>
-          Skip
+          {t("common.skip")}
         </button>
       </div>
     </div>
@@ -358,17 +358,17 @@ function CheckStep({ session, onNext }: { session: MicSession; onNext: () => voi
   useFrames(session, frame => {
     if (frame.frequency !== null && frame.voicedProbability > 0.6) {
       const { midi, cents } = nearestNote(frame.frequency);
-      setHeard(`${noteName(midi)} (${cents > 0 ? "+" : ""}${cents.toFixed(0)} cents)`);
+      setHeard(`${noteName(midi)} (${t("tuner.cents", { cents: `${cents > 0 ? "+" : ""}${cents.toFixed(0)}` })})`);
     }
   });
   return (
     <div className="space-y-2 text-sm">
-      <p>Play an A, or your open strings. You should see the note you play.</p>
+      <p>{t("mic.setup.checkIntro")}</p>
       <p className="text-2xl font-semibold tabular-nums" data-testid="check-heard">
         {heard ?? "…"}
       </p>
       <button type="button" className="primary-button" onClick={onNext}>
-        {heard ? "Looks right" : "Skip"}
+        {heard ? t("mic.setup.looksRight") : t("common.skip")}
       </button>
     </div>
   );
@@ -378,23 +378,23 @@ function DoneStep({ calibration, onSave }: { calibration: MicCalibration; onSave
   return (
     <div className="space-y-2 text-sm">
       <dl className="grid grid-cols-2 gap-1">
-        <dt>Room noise</dt>
+        <dt>{t("mic.setup.roomNoise")}</dt>
         <dd className="tabular-nums">{calibration.noiseFloorDb.toFixed(0)} dB</dd>
-        <dt>Noise gate</dt>
+        <dt>{t("mic.setup.noiseGate")}</dt>
         <dd className="tabular-nums" data-testid="done-gate">{calibration.gateDb.toFixed(0)} dB</dd>
-        <dt>Mic delay</dt>
+        <dt>{t("mic.setup.micDelay")}</dt>
         <dd className="tabular-nums" data-testid="done-latency">
-          {calibration.latencyMs} ms{calibration.latencyMethod === "default" ? " (typical value)" : ""}
+          {t(calibration.latencyMethod === "default" ? "mic.setup.msTypical" : "mic.setup.ms", { ms: calibration.latencyMs })}
         </dd>
         {calibration.humHz && (
           <>
-            <dt>Mains hum</dt>
-            <dd>{calibration.humHz} Hz (filtered out)</dd>
+            <dt>{t("mic.setup.mainsHum")}</dt>
+            <dd>{t("mic.setup.humFiltered", { hz: calibration.humHz })}</dd>
           </>
         )}
       </dl>
       <button type="button" className="primary-button" onClick={onSave}>
-        Save
+        {t("common.save")}
       </button>
     </div>
   );

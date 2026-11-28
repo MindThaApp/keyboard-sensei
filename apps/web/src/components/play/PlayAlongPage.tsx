@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { t } from "../../i18n";
 import {
   finalScore,
   practiceMultiplier,
@@ -724,10 +725,10 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     </StripGroup>
   );
   const micGroup = (
-    <StripGroup caption="Input" disabled={practiceLocked} hint={stoppedHint}>
+    <StripGroup caption={t("mic.playAlong.input")} disabled={practiceLocked} hint={stoppedHint}>
       <LedToggle
-        label={phone ? "Mic" : "Acoustic piano (mic)"}
-        title="Play the melody on an acoustic piano: the microphone listens, one note at a time"
+        label={phone ? t("mic.playAlong.mic") : t("mic.playAlong.acoustic")}
+        title={t("mic.playAlong.title")}
         pressed={playMic.on}
         onChange={playMic.setOn}
       />

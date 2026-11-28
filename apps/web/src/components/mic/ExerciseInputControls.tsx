@@ -1,11 +1,12 @@
 import { SegmentedControl } from "../ui";
+import { t } from "../../i18n";
 import MicInputPanel, { MicStatusPill } from "./MicInputPanel";
 import type { ExerciseInputState } from "./useExerciseInput";
 import type { ExerciseInputMode } from "./exerciseInput";
 
 const OPTIONS: { value: ExerciseInputMode; label: string }[] = [
-  { value: "midi", label: "Keyboard" },
-  { value: "mic", label: "Microphone" },
+  { value: "midi", get label() { return t("mic.mode.keyboard"); } },
+  { value: "mic", get label() { return t("mic.mode.microphone"); } },
 ];
 
 /**
@@ -22,7 +23,7 @@ export default function ExerciseInputControls({ input, locked }: { input: Exerci
       <div className="flex flex-wrap items-center gap-2">
         {canChoose && (
           <SegmentedControl
-            aria-label="Play with"
+            aria-label={t("mic.mode.playWith")}
             options={OPTIONS}
             value={mode}
             onChange={(value: ExerciseInputMode) => { if (!locked) setMode(value) }}
@@ -32,7 +33,7 @@ export default function ExerciseInputControls({ input, locked }: { input: Exerci
       </div>
       {mode === "mic" && <MicInputPanel mic={mic} onUseKeyboard={eligibility.midi ? () => setMode("midi") : undefined} />}
       {mode === "mic" && canChoose && mic.status === "on" && (
-        <p className="text-xs text-slate-500">Acoustic piano mode grades one note at a time. Play the line on its own; chords and two-hand pieces need a MIDI keyboard.</p>
+        <p className="text-xs text-slate-500">{t("mic.mode.acousticHint")}</p>
       )}
     </div>
   );

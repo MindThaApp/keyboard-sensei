@@ -244,21 +244,21 @@ export default function LessonListPage() {
   return (
     <div className="space-y-8">
       {!promptDone && (
-        <section className="card space-y-3 p-5" aria-label="Choose your instrument">
-          <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">What do you play?</h2>
+        <section className="card space-y-3 p-5" aria-label={t("played.choose")}>
+          <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{t("played.question")}</h2>
           <InstrumentChoice onDone={dismissPrompt} />
           <button type="button" className="text-sm text-slate-600 underline dark:text-slate-300" onClick={dismissPrompt}>
-            Not now
+            {t("played.notNow")}
           </button>
         </section>
       )}
       {played.length > 1 && (
-        <p className="text-sm text-slate-600 dark:text-slate-300">Learning {INSTRUMENT_LABEL[active]}. Change it in Settings.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("played.learning", { instrument: INSTRUMENT_LABEL[active] })}</p>
       )}
       {lessons.length === 0 && (
         <section className="card p-6 text-center">
-          <h1 className="text-2xl font-semibold">{INSTRUMENT_LABEL[active]} lessons are coming soon</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Switch instrument in Settings to keep learning in the meantime.</p>
+          <h1 className="text-2xl font-semibold">{t("played.comingSoon", { instrument: INSTRUMENT_LABEL[active] })}</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{t("played.comingSoonHint")}</p>
         </section>
       )}
       {nextLesson && (

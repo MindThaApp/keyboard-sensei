@@ -1,4 +1,5 @@
 import type { Band } from "@keyboard-sensei/piano-check";
+import { t } from "../../i18n";
 
 const WHITE = [0, 2, 4, 5, 7, 9, 11];
 const COLORS: Record<Band | "none" | "current", string> = {
@@ -32,9 +33,9 @@ export default function KeyboardMap({ low, high, bands, current, onPick }: Keybo
   }
   const width = Math.max(1, whiteIndex);
   const fill = (m: number) => (m === current ? COLORS.current : bands.has(m) ? COLORS[bands.get(m)!] : COLORS.none);
-  const label = (m: number) => `Key ${m}${bands.has(m) ? `, ${bands.get(m)}` : ""}`;
+  const label = (m: number) => `${t("pianoCheck.key", { n: m })}${bands.has(m) ? `, ${t(`pianoCheck.band.${bands.get(m)}`)}` : ""}`;
   return (
-    <svg viewBox={`0 0 ${width} 5`} role="img" aria-label="Keyboard" style={{ width: "100%", height: "auto" }}>
+    <svg viewBox={`0 0 ${width} 5`} role="img" aria-label={t("pianoCheck.keyboard")} style={{ width: "100%", height: "auto" }}>
       {keys.filter((k) => !k.black).map((k) => (
         <rect key={k.midi} x={k.x + 0.04} y={0} width={0.92} height={5} rx={0.12} fill={fill(k.midi)} stroke="#8e8e93" strokeWidth={0.03}
           onClick={() => onPick?.(k.midi)} aria-label={label(k.midi)} />

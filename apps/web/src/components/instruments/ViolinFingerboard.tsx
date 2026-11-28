@@ -1,4 +1,5 @@
 import { FINGER_PATTERNS, VIOLIN_OPEN_STRING, VIOLIN_STRINGS, VIOLIN_STRING_NUMERAL, fingerboardY, type FingerPatternId, type ViolinStringName } from "@keyboard-sensei/music-theory/violin";
+import { t } from "../../i18n";
 
 /** A finger placement to light up. `offset` is semitones above the open string (0 = open). */
 export interface FingerboardMark {
@@ -61,7 +62,7 @@ interface Props {
  * the notes being practised. Display only (it is not an input device); the role the
  * on-screen piano plays for piano lessons.
  */
-export function ViolinFingerboard({ marks, pattern, title = "Violin fingerboard" }: Props) {
+export function ViolinFingerboard({ marks, pattern, title = t("violin.fingerboard") }: Props) {
   const g = fingerboardGeometry;
   return (
     <svg

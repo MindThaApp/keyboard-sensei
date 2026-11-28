@@ -1,3 +1,5 @@
+import { t } from "../../i18n";
+
 /**
  * Strobe-like fine display: a band of stripes that drifts right when the note is
  * sharp and left when flat, faster the further off it is, and stands still in
@@ -9,7 +11,7 @@ export default function FineDisplay({ cents, toleranceCents }: { cents: number |
   const speed = cents === null ? 0 : Math.min(8, Math.abs(cents));
   const duration = speed > 0.05 ? `${(4 / speed).toFixed(2)}s` : "0s";
   const label =
-    cents === null ? "Waiting for the note" : inTune ? "In tune" : cents > 0 ? "Sharp: lower it a little" : "Flat: raise it a little";
+    cents === null ? t("tuningAid.fine.waiting") : inTune ? t("tuner.inTune") : cents > 0 ? t("tuningAid.fine.sharp") : t("tuningAid.fine.flat");
   return (
     <div className="space-y-2" aria-live="polite">
       <div

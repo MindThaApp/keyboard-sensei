@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { t } from "./i18n";
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate, useSearchParams } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
@@ -164,7 +165,7 @@ function AppShell() {
 
   if (!auth.authenticated && location.pathname.replace(/\/+$/, "") === "/tune") {
     return (
-      <PublicPageLayout title="Tuner" wide>
+      <PublicPageLayout title={t("tuner.title")} wide>
         <Suspense fallback={null}>
           <TunerPage hideTitle />
         </Suspense>
