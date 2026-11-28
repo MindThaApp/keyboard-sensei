@@ -11,6 +11,8 @@ export interface MicProcessorOptions {
   profile: AnalysisProfileId;
   gateDb?: number;
   humHz?: number | null;
+  /** Pitch is also estimated this far under the gate (frames stay gated), to tell "too quiet" from silence. */
+  quietPitchDb?: number;
 }
 
 /** A frame as posted to the main thread (no audio, just derived numbers). */
@@ -79,6 +81,7 @@ export class MicProcessorCore {
         profile: this.options.profile,
         gateDb: this.options.gateDb,
         humHz: this.options.humHz ?? null,
+        quietPitchDb: this.options.quietPitchDb,
         startTime: blockTime,
       });
     }

@@ -78,6 +78,8 @@ export interface MicPipelineOptions {
   deviceId?: string;
   gateDb?: number;
   humHz?: number | null;
+  /** See MicProcessorOptions.quietPitchDb. */
+  quietPitchDb?: number;
 }
 
 /** The parts of the pipeline the UI uses; tests substitute a fake. */
@@ -140,7 +142,7 @@ export const openMicSession: OpenMicSession = async (options) => {
     numberOfOutputs: 1,
     channelCount: 1,
     channelCountMode: "explicit",
-    processorOptions: { profile: options.profile, gateDb: options.gateDb, humHz: options.humHz ?? null },
+    processorOptions: { profile: options.profile, gateDb: options.gateDb, humHz: options.humHz ?? null, quietPitchDb: options.quietPitchDb },
   });
   // Keep the node pulled by the graph without sending the mic to the speakers.
   const sink = context.createGain();

@@ -1,93 +1,76 @@
-import { FrameAnalyser, MIC_PROFILES, type AnalysisFrame, type MicProfile } from "@keyboard-sensei/audio-analysis";
+import type { AnalysisProfileId, MicCalibration } from "@keyboard-sensei/audio-analysis";
+import { lastMicDeviceId, micCalibrationFor, rememberMicDevice } from "./micCalibrationStore";
+import { QUIET_PITCH_DB, type MicNoteFrame } from "./micNoteSource";
+import { openMicSession, type MicSession, type OpenMicSession } from "./micPipeline";
+import type { MicFrame } from "./micProcessorCore";
 
 /**
- * Microphone capture for mic grading: getUserMedia with voice processing off
- * (docs/specs/MUSIC-PORTAL.md 4.1), analysed into frames on the performance.now()
- * clock. This is the one place grading touches the audio pipeline; the AudioWorklet
- * "mic-analyser" pipeline replaces the ScriptProcessor here without changing
- * MicCapture's interface.
+ * Microphone capture for mic grading: the "mic-analyser" AudioWorklet pipeline
+ * (micPipeline.ts: voice processing off, analysis on the audio thread) with the
+ * device's calibration applied, and its frames moved onto the performance.now()
+ * clock that MIDI events and the exercise player use. Audio never leaves the
+ * device: the worklet posts derived numbers only.
  */
 
-/** Browser voice processing removes harmonics and chops sustained tones; grading needs it off. */
-export const MIC_CONSTRAINTS: MediaTrackConstraints = {
-  echoCancellation: false,
-  noiseSuppression: false,
-  autoGainControl: false,
-  channelCount: 1,
-};
-
-export type MicProfileId = MicProfile["id"];
+/** Instruments mic grading listens for; each has its own range, window and hop (ANALYSIS_PROFILES). */
+export type MicProfileId = Exclude<AnalysisProfileId, "tuner">;
 
 export interface MicCapture {
   deviceId: string;
   /** Voice processing still on although we asked for it off (some Android devices): grades may suffer. */
   processingOn: boolean;
+  /** The calibration in use for this device (defaults until it has been set up). */
+  calibration: MicCalibration;
   stop(): void;
 }
 
-export class MicUnavailableError extends Error {
-  constructor(readonly reason: "unsupported" | "denied" | "no-device" | "failed", message: string) {
-    super(message);
-    this.name = "MicUnavailableError";
-  }
+export interface MicCaptureOptions {
+  deviceId?: string;
+  /** Opens the worklet session; tests substitute a fake. */
+  open?: OpenMicSession;
 }
 
-export const isMicSupported = (): boolean =>
-  typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof window !== "undefined" && ("AudioContext" in window || "webkitAudioContext" in window);
-
-/** Maps a getUserMedia failure onto what the UI can say about it. */
-export function micErrorFrom(error: unknown): MicUnavailableError {
-  const name = error instanceof Error || (typeof error === "object" && error !== null && "name" in error) ? String((error as { name: unknown }).name) : "";
-  if (name === "NotAllowedError" || name === "SecurityError") return new MicUnavailableError("denied", "Microphone access was blocked.");
-  if (name === "NotFoundError" || name === "OverconstrainedError") return new MicUnavailableError("no-device", "No microphone was found.");
-  return new MicUnavailableError("failed", error instanceof Error ? error.message : "The microphone could not be opened.");
-}
-
-/** Hop used by this main-thread capture: 512 samples (~10.7 ms) keeps the CPU cost low. */
-const CAPTURE_HOP = 512;
-
-export async function startMicCapture(profileId: MicProfileId, onFrame: (frame: AnalysisFrame) => void, deviceId?: string): Promise<MicCapture> {
-  if (!isMicSupported()) throw new MicUnavailableError("unsupported", "This browser cannot use the microphone.");
-  let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { ...MIC_CONSTRAINTS, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
-  } catch (error) {
-    throw micErrorFrom(error);
-  }
-  const track = stream.getAudioTracks()[0];
-  const settings = track?.getSettings?.() ?? {};
-  const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const context = new Context({ latencyHint: "interactive" });
-  if (context.state === "suspended") await context.resume().catch(() => undefined);
-  const source = context.createMediaStreamSource(stream);
-  const bufferSize = 1024;
-  const processor = context.createScriptProcessor(bufferSize, 1, 1);
-  // ScriptProcessor only runs while connected to the output; a muted gain keeps the mic off the speakers.
-  const mute = context.createGain();
-  mute.gain.value = 0;
-  const profile: MicProfile = { ...MIC_PROFILES[profileId], hopSize: CAPTURE_HOP };
-  let analyser: FrameAnalyser | null = null;
-  processor.onaudioprocess = (event) => {
-    const block = event.inputBuffer.getChannelData(0);
-    if (!analyser) {
-      // The block in hand ended about now: anchor its first sample on the performance.now() clock.
-      const blockMs = (block.length / context.sampleRate) * 1000;
-      const inputLatencyMs = (context.baseLatency || 0) * 1000;
-      analyser = new FrameAnalyser(profile, context.sampleRate, performance.now() - blockMs - inputLatencyMs, onFrame);
-    }
-    analyser.push(block);
-  };
-  source.connect(processor);
-  processor.connect(mute);
-  mute.connect(context.destination);
+/** A worklet frame (AudioContext seconds) on the performance.now() clock (seconds). */
+export function onPerfClock(frame: MicFrame, toPerfMs: (contextTime: number) => number): MicNoteFrame {
+  const offsetS = toPerfMs(frame.time) / 1000 - frame.time;
   return {
-    deviceId: settings.deviceId ?? deviceId ?? "default",
-    processingOn: settings.echoCancellation === true || settings.noiseSuppression === true || settings.autoGainControl === true,
+    time: frame.time + offsetS,
+    pitchTime: frame.pitchTime + offsetS,
+    levelDb: frame.levelDb,
+    gated: frame.gated,
+    onset: frame.onset === null ? null : frame.onset + offsetS,
+    candidates: frame.candidates,
+    voicedProbability: frame.voicedProbability,
+    frequency: frame.frequency,
+  };
+}
+
+/** Opens the mic (errors are `MicError`s from micPipeline.ts) and calls `onFrame` for every analysis frame. */
+export async function startMicCapture(profile: MicProfileId, onFrame: (frame: MicNoteFrame) => void, options: MicCaptureOptions = {}): Promise<MicCapture> {
+  const open = options.open ?? openMicSession;
+  const requested = options.deviceId ?? lastMicDeviceId();
+  let calibration = micCalibrationFor(requested ?? "default");
+  const session: MicSession = await open({
+    profile,
+    deviceId: requested,
+    gateDb: calibration.gateDb,
+    humHz: calibration.humHz,
+    quietPitchDb: QUIET_PITCH_DB,
+  });
+  // The browser may have picked another device than asked: use that device's calibration.
+  if (session.deviceId !== (requested ?? "default")) {
+    calibration = micCalibrationFor(session.deviceId);
+    session.setGate(calibration.gateDb);
+  }
+  rememberMicDevice(session.deviceId);
+  const unsubscribe = session.onFrame((frame) => onFrame(onPerfClock(frame, session.toPerfMs)));
+  return {
+    deviceId: session.deviceId,
+    processingOn: session.processingReported || calibration.processingSuspected,
+    calibration,
     stop() {
-      processor.onaudioprocess = null;
-      try { source.disconnect(); processor.disconnect(); mute.disconnect() } catch { /* already disconnected */ }
-      for (const t of stream.getTracks()) t.stop();
-      void context.close().catch(() => undefined);
+      unsubscribe();
+      session.close();
     },
   };
 }

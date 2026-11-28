@@ -1,4 +1,4 @@
-import { FrameAnalyser, resolveProfile, type AnalysisFrame, type AnalysisProfileId, type AnalysisProfile, type FrameAnalyserOptions } from "./analyser.js";
+import { FrameAnalyser, resolveProfile, type AnalysisProfileId, type AnalysisProfile, type FrameAnalyserOptions } from "./analyser.js";
 import { PitchHmm, type PitchHmmOptions, type TrackedPitch } from "./pyin.js";
 import { NoteSegmenter, type DetectedNote, type SegmentEvent, type SegmenterOptions } from "./segmenter.js";
 import type { PitchCandidate } from "./yin.js";
@@ -22,15 +22,16 @@ export interface TrackerFrame {
   voicedProbability: number;
 }
 
-export function toTrackerFrame(frame: AnalysisFrame): TrackerFrame {
+/** The tracker's part of a frame. A gated frame carries no pitch, even if the analyser estimated one (`quietPitchDb`). */
+export function toTrackerFrame(frame: TrackerFrame): TrackerFrame {
   return {
     time: frame.time,
     pitchTime: frame.pitchTime,
     levelDb: frame.levelDb,
     gated: frame.gated,
     onset: frame.onset,
-    candidates: frame.candidates,
-    voicedProbability: frame.voicedProbability,
+    candidates: frame.gated ? [] : frame.candidates,
+    voicedProbability: frame.gated ? 0 : frame.voicedProbability,
   };
 }
 
@@ -41,6 +42,12 @@ export interface NoteTrackerOptions {
   hmm?: Partial<PitchHmmOptions>;
   /** Keep frames for the offline pass (default true). */
   keepFrames?: boolean;
+  /**
+   * Keep at most this many frames (default unlimited). Past it the frames are
+   * dropped and the tracker stays live-only until `reset()`, so a mic left
+   * listening for a long time does not grow without bound.
+   */
+  maxFrames?: number;
 }
 
 /** Bowed and sung notes can begin without an attack; plucked and struck ones cannot. */
@@ -56,6 +63,8 @@ export class NoteTracker {
   private readonly pending: TrackerFrame[] = [];
   private readonly frames: TrackerFrame[] = [];
   private readonly keepFrames: boolean;
+  private readonly maxFrames: number;
+  private keeping: boolean;
   readonly notes: DetectedNote[] = [];
 
   constructor(options: NoteTrackerOptions) {
@@ -70,6 +79,13 @@ export class NoteTracker {
     this.hmm = new PitchHmm(this.hmmOptions);
     this.segmenter = new NoteSegmenter(this.segmenterOptions);
     this.keepFrames = options.keepFrames ?? true;
+    this.maxFrames = options.maxFrames ?? Number.POSITIVE_INFINITY;
+    this.keeping = this.keepFrames;
+  }
+
+  /** True while every frame since the last reset is kept, i.e. `reanalyse()` runs the offline pass. */
+  get keepsFrames(): boolean {
+    return this.keeping;
   }
 
   private feed(frame: TrackerFrame, pitch: TrackedPitch, segmenter: NoteSegmenter): SegmentEvent[] {
@@ -90,7 +106,13 @@ export class NoteTracker {
   }
 
   push(frame: TrackerFrame): SegmentEvent[] {
-    if (this.keepFrames) this.frames.push(frame);
+    if (this.keeping) {
+      this.frames.push(frame);
+      if (this.frames.length > this.maxFrames) {
+        this.frames.length = 0;
+        this.keeping = false;
+      }
+    }
     this.pending.push(frame);
     const decided = this.hmm.step(frame);
     if (!decided) return [];
@@ -118,8 +140,13 @@ export class NoteTracker {
     return this.segmenter.current();
   }
 
-  /** Full offline pass over every frame so far: the corrected final note list. */
+  /**
+   * Full offline pass over every frame so far: the corrected final note list.
+   * Without the frames (`keepFrames: false`, or past `maxFrames`) it is the live
+   * note list instead; call `finish()` first so the last note is in it.
+   */
   reanalyse(): DetectedNote[] {
+    if (!this.keeping) return [...this.notes];
     return segmentFrames(this.frames, this.hmmOptions, this.segmenterOptions);
   }
 
@@ -129,6 +156,7 @@ export class NoteTracker {
     this.pending.length = 0;
     this.frames.length = 0;
     this.notes.length = 0;
+    this.keeping = this.keepFrames;
   }
 }
 

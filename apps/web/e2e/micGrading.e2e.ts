@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { chromium as Chromium } from "playwright";
-import { encodeWav, synthesizeMelody, type SynthNote } from "../../../packages/audio-analysis/src/index.js";
+import { encodeWav, renderMelody } from "@keyboard-sensei/audio-analysis/testing";
 
 const { chromium } = createRequire(import.meta.url)("playwright") as { chromium: typeof Chromium };
 
@@ -27,9 +27,12 @@ const API_URL = process.env.API_URL ?? "http://localhost:3001";
 const LESSON_ID = "lesson-01";
 const EXERCISE_TITLE_PATTERN = /warm/i;
 
-/** C4, C5, C4 on a piano-like decaying tone, after a lead-in, then a long rest before the file loops. */
+interface SynthNote { midi: number; startMs: number; durationMs: number }
+
+/** C4, C5, C4 on a piano tone, after a lead-in, then a long rest before the file loops. */
 function writeFixture(notes: SynthNote[], name: string): string {
-  const samples = synthesizeMelody(notes, { decayMs: 900, harmonics: [1, 0.6, 0.4, 0.25, 0.15, 0.1], noiseDb: -62, seed: 11, totalMs: 9000 });
+  const melody = notes.map((n) => ({ midi: n.midi, startS: n.startMs / 1000, durationS: n.durationMs / 1000, amplitude: 0.4 }));
+  const samples = renderMelody(melody, { voice: "piano", noiseDb: -62, seed: 11, durationS: 9 });
   const path = join(mkdtempSync(join(tmpdir(), "mic-e2e-")), name);
   writeFileSync(path, encodeWav(samples));
   return path;

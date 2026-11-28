@@ -60,7 +60,7 @@ export interface AnalysisFrame {
   /** Peak absolute sample in the newest hop. */
   peak: number;
   clipped: boolean;
-  /** True when the level is under the noise gate: no pitch was analysed. */
+  /** True when the level is under the noise gate: no pitch was analysed (unless `quietPitchDb` asked for it). */
   gated: boolean;
   /** Onset time (seconds) detected with this frame, if any. */
   onset: number | null;
@@ -82,6 +82,12 @@ export interface FrameAnalyserOptions {
   startTime?: number;
   /** Skip pitch analysis (level and onsets only), e.g. for the calibration meter. */
   levelOnly?: boolean;
+  /**
+   * Also estimate pitch on gated frames down to this many dB under the gate
+   * (default 0: none). The frames stay `gated`; it only tells someone playing
+   * too softly apart from silence. Note tracking ignores pitch on gated frames.
+   */
+  quietPitchDb?: number;
 }
 
 export function resolveProfile(profile: AnalysisProfileId | AnalysisProfile): AnalysisProfile {
@@ -108,6 +114,7 @@ export class FrameAnalyser {
   private readonly onsets: OnsetDetector;
   private readonly filters: Biquad[] = [];
   private readonly levelOnly: boolean;
+  private readonly quietPitchDb: number;
   private readonly ring: Float64Array;
   private readonly frame: Float64Array;
   private readonly onsetFrame: Float64Array;
@@ -127,6 +134,7 @@ export class FrameAnalyser {
     this.hopSize = sizes.hopSize;
     this.gateDb = options.gateDb ?? DEFAULT_GATE_DB;
     this.levelOnly = options.levelOnly ?? false;
+    this.quietPitchDb = Math.max(0, options.quietPitchDb ?? 0);
     this.startTime = options.startTime ?? 0;
     this.yin = new YinDetector({
       sampleRate: options.sampleRate,
@@ -206,7 +214,7 @@ export class FrameAnalyser {
     let aperiodicity = 1;
     let candidates: PitchCandidate[] = [];
     let voicedProbability = 0;
-    if (!gated && !this.levelOnly) {
+    if (!this.levelOnly && (!gated || (this.quietPitchDb > 0 && levelDb >= this.gateDb - this.quietPitchDb))) {
       let result = this.yin.analyse(this.frame);
       if (result.frequency === null && this.fastYin) {
         const fast = this.fastYin.analyse(this.frame.subarray(W - this.fastYin.windowSize));
