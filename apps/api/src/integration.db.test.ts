@@ -403,13 +403,35 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
 
     it("lists lessons per instrument; rows from before instruments existed are piano", async () => {
       const user = await createUserWithPassword();
+      const ids = (res: { body: { id: string }[] }) => res.body.map((lesson) => lesson.id).sort();
+      const contentIds = (instrument: string) =>
+        m.content.lessons.filter((lesson) => (lesson.instrument ?? "piano") === instrument).map((lesson) => lesson.id).sort();
       const all = await api("GET", "/lessons", { token: user.token });
-      const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
-      const guitar = await api("GET", "/lessons?instrument=guitar", { token: user.token });
-      expect(piano.status).toBe(200);
-      expect(piano.body.length).toBe(all.body.length);
-      expect(all.body.every((lesson: { instrument: string }) => lesson.instrument === "piano")).toBe(true);
-      expect(guitar.body).toEqual([]);
+      expect(all.status).toBe(200);
+      const byInstrument: Record<string, string[]> = {};
+      for (const instrument of ["piano", "guitar", "violin"]) {
+        const res = await api("GET", `/lessons?instrument=${instrument}`, { token: user.token });
+        expect(res.status).toBe(200);
+        expect(res.body.every((lesson: { instrument: string }) => lesson.instrument === instrument), instrument).toBe(true);
+        expect(ids(res), instrument).toEqual(contentIds(instrument));
+        byInstrument[instrument] = ids(res);
+      }
+      // Guitar and violin content is seeded, so each filtered list is a strict part of the whole.
+      expect(byInstrument.guitar!.length).toBeGreaterThan(0);
+      expect(byInstrument.violin!.length).toBeGreaterThan(0);
+      expect(ids(all)).toEqual([...byInstrument.piano!, ...byInstrument.guitar!, ...byInstrument.violin!].sort());
+
+      // A row stored before the instrument column existed takes the column default: piano.
+      const legacyId = `legacy-test-${Date.now()}`;
+      const legacyLesson = { id: legacyId, path: "classical-technical", level: "foundation", branch: "technique", tier: 0, skills: [], title: "Legacy", estimatedMinutes: 5, objectives: ["x"], sections: [{ type: "markdown", title: "t", body: "b" }], unlockCriteria: { requiresLessonIds: [], minScore: 70 }, skillRewards: {} };
+      const order = ((await m.prisma.lesson.aggregate({ _max: { order: true } }))._max.order ?? 0) + 1;
+      await m.prisma.lesson.create({ data: { id: legacyId, lesson_json: legacyLesson, path: "classical-technical", level: "foundation", branch: "technique", order } });
+      try {
+        const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
+        expect(piano.body.find((lesson: { id: string }) => lesson.id === legacyId)?.instrument).toBe("piano");
+      } finally {
+        await m.prisma.lesson.delete({ where: { id: legacyId } });
+      }
       expect((await api("GET", "/lessons?instrument=banjo", { token: user.token })).status).toBe(400);
     });
 
@@ -424,7 +446,9 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
         // Even with a piano prerequisite satisfied this is a plain prerequisite check; the
         // guitar list holds only guitar lessons, and the piano list never includes it.
         const guitar = await api("GET", "/lessons?instrument=guitar", { token: user.token });
-        expect(guitar.body.map((lesson: { id: string }) => lesson.id)).toEqual([guitarId]);
+        const seededGuitar = m.content.lessons.filter((lesson) => lesson.instrument === "guitar").map((lesson) => lesson.id);
+        expect(guitar.body.map((lesson: { id: string }) => lesson.id).sort()).toEqual([...seededGuitar, guitarId].sort());
+        expect(guitar.body.find((lesson: { id: string }) => lesson.id === guitarId).progress.status).toBe("locked");
         const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
         expect(piano.body.some((lesson: { id: string }) => lesson.id === guitarId)).toBe(false);
       } finally {
