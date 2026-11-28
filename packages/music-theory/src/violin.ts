@@ -1,3 +1,5 @@
+import { tuningPresetById } from "./tunings.js";
+
 /**
  * Violin fingering model (first position and the geometry of the fingerboard).
  *
@@ -7,8 +9,10 @@
 
 export type ViolinStringName = "G" | "D" | "A" | "E";
 export const VIOLIN_STRINGS: readonly ViolinStringName[] = ["G", "D", "A", "E"];
-/** MIDI number of each open string: G3 D4 A4 E5. */
-export const VIOLIN_OPEN_STRING: Record<ViolinStringName, number> = { G: 55, D: 62, A: 69, E: 76 };
+/** MIDI number of each open string: G3 D4 A4 E5, from the tuner's standard violin preset. */
+export const VIOLIN_OPEN_STRING: Record<ViolinStringName, number> = Object.fromEntries(
+  tuningPresetById("violin-standard")!.strings.map((s) => [s.label.charAt(0), s.midi]),
+) as Record<ViolinStringName, number>;
 /** Roman numeral used to mark a string in violin music (E = I ... G = IV). */
 export const VIOLIN_STRING_NUMERAL: Record<ViolinStringName, string> = { E: "I", A: "II", D: "III", G: "IV" };
 /** Lowest and highest pitch the violin profile covers (G3 - E7). */
