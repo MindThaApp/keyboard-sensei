@@ -1,4 +1,4 @@
-import { GUITAR_CHORDS, type GuitarChordShape } from "@keyboard-sensei/music-theory";
+import { findGuitarChord, type GuitarChordShape } from "@keyboard-sensei/music-theory";
 
 /**
  * Guitar chord box: 6 strings (low E on the left), 4-5 frets, dots with finger numbers,
@@ -57,7 +57,7 @@ const stringX = (string: number) => GEOMETRY.left + ((6 - string) * (GEOMETRY.ri
 const rowY = (row: number) => GEOMETRY.top + (row - 0.5) * GEOMETRY.fretGap;
 
 export default function ChordDiagram({ chord, frets, className }: ChordDiagramProps) {
-  const shape = typeof chord === "string" ? GUITAR_CHORDS[chord] : chord;
+  const shape = typeof chord === "string" ? findGuitarChord(chord) : chord;
   if (!shape) return null;
   const model = diagramModel(shape, frets ?? 4);
   const bottom = GEOMETRY.top + model.rows * GEOMETRY.fretGap;

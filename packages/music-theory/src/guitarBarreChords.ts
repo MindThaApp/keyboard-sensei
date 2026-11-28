@@ -1,10 +1,14 @@
-import type { GuitarChordShape } from "./guitarChords.js";
+import { GUITAR_CHORDS, type GuitarChordShape } from "./guitarChords.js";
 
 /**
  * Movable barre shapes and power chords (tier 4 guitar). Same shape type and the same
  * rules as GUITAR_CHORDS: `frets` runs string 6 (low E) to string 1 (high e), `null` =
  * muted, frets are absolute, `baseFret` is the lowest fret the diagram starts on.
  * Chord grading reads pitch classes from these shapes, so the diagram and the grader agree.
+ *
+ * Keys are dictionary ids; `symbol` is the chord name from the shared chord vocabulary
+ * (chordSymbols.ts), which is what a strum is graded against. They differ only where an
+ * open chord already uses the name: "G3" is the 3rd-fret barre shape of G.
  */
 const shape = (symbol: string, name: string, frets: (number | null)[], fingers: number[], baseFret: number, barre?: GuitarChordShape["barre"]): GuitarChordShape => ({
   symbol, name, frets, fingers, baseFret, ...(barre ? { barre } : {}),
@@ -13,7 +17,7 @@ const shape = (symbol: string, name: string, frets: (number | null)[], fingers: 
 export const GUITAR_BARRE_CHORDS: Record<string, GuitarChordShape> = {
   F: shape("F", "F major (E-shape barre)", [1, 3, 3, 2, 1, 1], [1, 3, 4, 2, 1, 1], 1, { fret: 1, fromString: 6, toString: 1 }),
   Fm: shape("Fm", "F minor (E-shape barre)", [1, 3, 3, 1, 1, 1], [1, 3, 4, 1, 1, 1], 1, { fret: 1, fromString: 6, toString: 1 }),
-  G3: shape("G3", "G major (E-shape barre, 3rd fret)", [3, 5, 5, 4, 3, 3], [1, 3, 4, 2, 1, 1], 3, { fret: 3, fromString: 6, toString: 1 }),
+  G3: shape("G", "G major (E-shape barre, 3rd fret)", [3, 5, 5, 4, 3, 3], [1, 3, 4, 2, 1, 1], 3, { fret: 3, fromString: 6, toString: 1 }),
   Bb: shape("Bb", "B-flat major (A-shape barre)", [null, 1, 3, 3, 3, 1], [0, 1, 2, 3, 4, 1], 1, { fret: 1, fromString: 5, toString: 1 }),
   B: shape("B", "B major (A-shape barre)", [null, 2, 4, 4, 4, 2], [0, 1, 2, 3, 4, 1], 2, { fret: 2, fromString: 5, toString: 1 }),
   Bm: shape("Bm", "B minor (A-shape barre)", [null, 2, 4, 4, 3, 2], [0, 1, 3, 4, 2, 1], 2, { fret: 2, fromString: 5, toString: 1 }),
@@ -24,3 +28,8 @@ export const GUITAR_BARRE_CHORDS: Record<string, GuitarChordShape> = {
   G5: shape("G5", "G power chord", [3, 5, 5, null, null, null], [1, 3, 4, 0, 0, 0], 3),
   C5: shape("C5", "C power chord", [null, 3, 5, 5, null, null], [0, 1, 3, 4, 0, 0], 3),
 };
+
+/** A chord shape by dictionary id: open chords first, then barre and power chords. */
+export function findGuitarChord(id: string): GuitarChordShape | undefined {
+  return GUITAR_CHORDS[id] ?? GUITAR_BARRE_CHORDS[id];
+}
