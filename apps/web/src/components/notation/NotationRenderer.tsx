@@ -710,7 +710,7 @@ const NotationRenderer = forwardRef<NotationRendererHandle, {
   }, [data, maxSystemWidthPx, verticalRange]);
 
   return (
-    <div className="max-w-full overflow-x-auto">
+    <div className="max-w-full overflow-x-auto" dir="ltr">
       <div className="inline-block max-w-full rounded-md border border-ivory-200 bg-ivory-50 p-1 text-slate-900 shadow-sm">
         {title && <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">{title}</h3>}
         <div ref={containerRef} className="overflow-x-auto" role="group" aria-label={title ?? "Notation"} />

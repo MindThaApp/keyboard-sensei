@@ -176,6 +176,7 @@ export function OsmdNotation({ notationBytes, songTimeS }: { notationBytes: Arra
   return (
     <div
       ref={containerRef}
+      dir="ltr"
       className="osmd-container max-h-[420px] overflow-y-auto overflow-x-auto rounded-lg border border-slate-200 bg-white/60 p-2 dark:border-slate-800 dark:bg-slate-900/40"
     />
   );
