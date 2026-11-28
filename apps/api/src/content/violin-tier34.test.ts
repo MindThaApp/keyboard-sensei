@@ -161,6 +161,21 @@ describe("violin exercises", () => {
     }
   });
 
+  it("mark each slur with a start and an end, matching the repeated bows", () => {
+    for (const exercise of violinTier34Exercises) {
+      let open = false;
+      exercise.expected.forEach((n, i) => {
+        const hint = exercise.techniqueHints[n.id]!;
+        const next = exercise.expected[i + 1] ? exercise.techniqueHints[exercise.expected[i + 1]!.id]! : undefined;
+        if (hint.slur === "start") { expect(open, `${exercise.exerciseId} ${n.id}`).toBe(false); open = true; }
+        else if (hint.slur === "end") { expect(open, `${exercise.exerciseId} ${n.id}`).toBe(true); open = false; }
+        // Inside a slur the next note keeps this bow; outside it the bow changes.
+        if (next) expect(next.bow === hint.bow, `${exercise.exerciseId} ${n.id}`).toBe(open);
+      });
+      expect(open, exercise.exerciseId).toBe(false);
+    }
+  });
+
   it("keeps tier 3 in first position and tier 4 to first and third", () => {
     for (const exercise of violinTier34Exercises) {
       const positions = new Set(exercise.expected.filter((n) => exercise.techniqueHints[n.id]!.finger !== 0).map((n) => exercise.techniqueHints[n.id]!.position));
@@ -189,18 +204,26 @@ describe("violin notation and rights", () => {
     let checked = 0;
     for (const lesson of lessons) {
       for (const section of notationOf(lesson)) {
-        const data = section.vexflowData as { exerciseId: string; instrument: string; clef: string; notes: Array<{ keys: string[]; duration: string; fingering: { string: string; finger: number; position: number } }> };
+        // The violin staff format of the tier 0-2 lessons: bars of notes with their ids and violin marks.
+        const data = section.vexflowData as { exerciseId: string; instrument: string; clef: string; measures: Array<{ notes: Array<{ ids: string[]; keys: string[]; duration: string; violin?: { string?: string; finger?: number; position?: number } }> }> };
         const exercise = exerciseById.get(data.exerciseId)!;
         expect(exercise, `${lesson.id}: ${data.exerciseId}`).toBeDefined();
         expect(data.instrument).toBe("violin");
         expect(data.clef).toBe("treble");
-        expect(data.notes.length).toBe(exercise.expected.length);
-        data.notes.forEach((n, i) => {
+        const notes = data.measures.flatMap((m) => m.notes);
+        expect(notes.length).toBe(exercise.expected.length);
+        // String and position are printed where they change; follow them through the line.
+        let string: string | undefined;
+        let position = 1;
+        notes.forEach((n, i) => {
           const event = exercise.expected[i]!;
+          expect(n.ids).toEqual([event.id]);
           const m = /^([a-g])(##|bb|#|b)?\/(-?\d)$/.exec(n.keys[0]!)!;
           expect(midi(`${m[1]!.toUpperCase()}${m[2] ?? ""}${m[3]}`)).toBe(event.note);
           const hint = exercise.techniqueHints[event.id]!;
-          expect([n.fingering.string, n.fingering.finger, n.fingering.position]).toEqual([hint.string, hint.finger, hint.position]);
+          string = n.violin?.string ?? string;
+          position = n.violin?.position ?? position;
+          expect([string, n.violin?.finger, position]).toEqual([hint.string, hint.finger, hint.position]);
         });
         checked++;
       }
@@ -234,9 +257,10 @@ describe("violin notation and rights", () => {
     const ok = new Set(["16", "8", "8d", "q", "qd", "h", "hd", "w"]);
     for (const lesson of lessons) {
       for (const section of notationOf(lesson) as LessonSection[]) {
-        const data = (section as NotationSection).vexflowData as { notes: Array<{ duration: string }> };
-        expect(data.notes.length).toBeGreaterThan(0);
-        for (const n of data.notes) expect(ok.has(n.duration)).toBe(true);
+        const data = (section as NotationSection).vexflowData as { measures: Array<{ notes: Array<{ duration: string }> }> };
+        const notes = data.measures.flatMap((m) => m.notes);
+        expect(notes.length).toBeGreaterThan(0);
+        for (const n of notes) expect(ok.has(n.duration)).toBe(true);
       }
     }
   });
