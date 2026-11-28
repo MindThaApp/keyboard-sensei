@@ -49,6 +49,18 @@ export const STORAGE_KEY_INVENTORY: readonly StorageKeyEntry[] = [
   { key: "ks-practice-song:", kind: "prefix", owner: "components/play/practiceSession.ts", holds: "per-song practice memory" },
   { key: "ks-practice-song-choices:", kind: "prefix", owner: "components/play/practiceSession.ts", holds: "per-song level choices" },
 
+  // Language
+  { key: "ks-locale", kind: "exact", owner: "i18n/core.ts", holds: "chosen interface language" },
+
   // Music Portal
   { key: "mp-storage-version", kind: "exact", owner: "state/storageMigrations.ts", holds: "last storage migration applied" },
+  { key: "mp-active-instrument", kind: "exact", owner: "contexts/InstrumentContext.tsx", holds: "instrument Learn and Today show (M1)" },
+  { key: "mp-played-instruments", kind: "exact", owner: "contexts/InstrumentContext.tsx", holds: "instruments the learner plays (M1)" },
+  { key: "mp-instrument-pending", kind: "exact", owner: "contexts/InstrumentContext.tsx", holds: "instrument choice not yet synced" },
+  { key: "mp-instrument-prompt-done", kind: "exact", owner: "contexts/InstrumentContext.tsx", holds: "instrument prompt answered or dismissed" },
+  { key: "mp-tuner-settings", kind: "exact", owner: "components/tuner/tunerSettings.ts", holds: "tuner settings and the shared A4 (M3)" },
+  { key: "mp-mic-calibration:", kind: "prefix", owner: "audio/mic", holds: "mic gate and latency per input device (M2)" },
+  { key: "mp-mic-device", kind: "exact", owner: "audio/mic", holds: "last microphone used" },
+  { key: "mp-mic-explained", kind: "exact", owner: "audio/mic/useMicInput.ts", holds: "mic privacy explanation seen (M4)" },
+  { key: "mp-piano-tuning-session", kind: "exact", owner: "components/tuning/PianoTuningAidPage.tsx", holds: "guided tuning progress (M14)" },
 ];

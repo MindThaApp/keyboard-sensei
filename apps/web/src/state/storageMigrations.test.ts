@@ -65,6 +65,16 @@ const CURRENT_INSTALL: Record<string, string> = {
   "ks-fx-debug": "stats",
   "ks-practice-song:song-123": JSON.stringify({ level: 2, bars: [1, 8] }),
   "ks-practice-song-choices:song-123": JSON.stringify({ hands: "right" }),
+  "ks-locale": "de-DE",
+  "mp-active-instrument": "guitar",
+  "mp-played-instruments": JSON.stringify(["piano", "guitar"]),
+  "mp-instrument-pending": "1",
+  "mp-instrument-prompt-done": "1",
+  "mp-tuner-settings": JSON.stringify({ a4Hz: 442, greenZoneCents: 3, instrument: "guitar", tuningId: "guitar-standard", capo: 0, customTunings: [] }),
+  "mp-mic-calibration:default": JSON.stringify({ gateDb: -48, latencyMs: 42 }),
+  "mp-mic-device": "default",
+  "mp-mic-explained": "1",
+  "mp-piano-tuning-session": JSON.stringify({ phase: "measure", a4Hz: 440, samples: [] }),
 };
 
 describe("the current-install fixture", () => {
