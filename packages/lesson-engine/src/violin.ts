@@ -1,4 +1,4 @@
-import type { MidiExercise } from "@keyboard-sensei/shared-types";
+import type { MidiExercise, ViolinHint } from "@keyboard-sensei/shared-types";
 import { FINGER_PATTERNS, VIOLIN_OPEN_STRING, VIOLIN_RANGE, fingeringSounds, type FingerPatternId } from "@keyboard-sensei/music-theory/violin";
 
 export interface ViolinValidationOptions {
@@ -45,11 +45,16 @@ export function violinExerciseProblems(exercise: MidiExercise, options: ViolinVa
     previousEnd = note.startBeat + note.durationBeats;
     if (note.note < VIOLIN_RANGE.low || note.note > VIOLIN_RANGE.high) fail(`${note.id} (MIDI ${note.note}) is outside the violin's range`);
 
-    const hint = hints[note.id];
-    if (!hint) {
+    const anyHint = hints[note.id];
+    if (!anyHint) {
       fail(`${note.id} has no fingering hint`);
       return;
     }
+    if (typeof anyHint.string !== "string" || !("position" in anyHint)) {
+      fail(`${note.id} has a guitar hint, not a violin fingering`);
+      return;
+    }
+    const hint: ViolinHint = anyHint;
     const open = VIOLIN_OPEN_STRING[hint.string];
     if (hint.position === 1) {
       if (!fingeringSounds(hint, note.note, patterns)) {

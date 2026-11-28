@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateLesson, validateMidiExercise, violinExerciseProblems } from "@keyboard-sensei/lesson-engine";
+import type { ViolinHint } from "@keyboard-sensei/shared-types";
 import { lessons, exercises } from "./content.js";
 import { violinExercises, violinLessons } from "./content/violin.js";
 import { violinDrill, violinNotation } from "./content/violin-helpers.js";
@@ -100,7 +101,7 @@ describe("violin content", () => {
       for (const section of lesson.sections) {
         if (section.type !== "midi-exercise") continue;
         const exercise = exerciseById.get(section.exerciseId)!;
-        for (const hint of Object.values(exercise.techniqueHints!)) {
+        for (const hint of Object.values(exercise.techniqueHints!) as ViolinHint[]) {
           if (lesson.tier === 0) expect(hint.finger, exercise.exerciseId).toBe(0);
           expect(hint.position).toBe(1);
         }
@@ -124,7 +125,7 @@ describe("violin content", () => {
 describe("violinDrill", () => {
   it("fingers the notes, alternates bows from a down-bow and marks slurs", () => {
     const exercise = violinDrill({ id: "t", tempo: 60, level: "beginner", toleranceCents: 30, notes: "A4 B4 C#5 D5", slurs: [[1, 2]] });
-    const hints = exercise.expected.map((note) => exercise.techniqueHints![note.id]!);
+    const hints = exercise.expected.map((note) => exercise.techniqueHints![note.id] as ViolinHint);
     expect(hints.map((h) => `${h.string}${h.finger}${h.bow ?? "-"}${h.slur ?? ""}`)).toEqual(["A0down", "A1up" + "start", "A2-end", "A3down"]);
   });
 
@@ -162,7 +163,7 @@ describe("violin exercise validation", () => {
 
   it("flags two bows in the same direction with no rest between", () => {
     const [first, second] = good.expected;
-    const bad = { ...good, techniqueHints: { ...good.techniqueHints, [second!.id]: { ...good.techniqueHints![second!.id]!, bow: good.techniqueHints![first!.id]!.bow } } };
+    const bad = { ...good, techniqueHints: { ...good.techniqueHints, [second!.id]: { ...good.techniqueHints![second!.id]!, bow: (good.techniqueHints![first!.id] as ViolinHint).bow } } };
     expect(violinExerciseProblems(bad).join()).toMatch(/in a row/);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GUITAR_BARRE_CHORDS, GUITAR_CHORDS, chordPitchClasses, fretToMidi, GUITAR_HIGHEST_NOTE, GUITAR_LOWEST_NOTE } from "@keyboard-sensei/music-theory";
 import { lessonSchema, midiExerciseSchema } from "@keyboard-sensei/lesson-engine";
+import type { GuitarHint } from "@keyboard-sensei/shared-types";
 import { buildGuitarAdvancedLessons, guitarAdvancedExercises as exercises, guitarAdvancedLessons as lessons } from "./guitar-advanced.js";
 import { exercises as existingExercises, lessons as existingLessons } from "../content.js";
 
@@ -119,7 +120,7 @@ describe("guitar tiers 3-4: exercises", () => {
     for (const e of mono) {
       const hints = e.techniqueHints!;
       for (const n of e.expected) {
-        const h = hints[n.id];
+        const h = hints[n.id] as GuitarHint | undefined;
         expect(h, `${e.exerciseId}/${n.id}`).toBeDefined();
         expect(fretToMidi(h!.string, h!.fret)).toBe(n.note);
         expect(h!.fret).toBeGreaterThanOrEqual(0);
@@ -159,7 +160,7 @@ describe("guitar tiers 3-4: exercises", () => {
     for (const e of mono) {
       const perBar = new Map<number, number[]>();
       for (const n of e.expected) {
-        const f = e.techniqueHints![n.id]!.fret;
+        const f = (e.techniqueHints![n.id] as GuitarHint).fret;
         if (f === 0) continue;
         const bar = Math.floor(n.startBeat / (e.beatsPerBar ?? 4));
         perBar.set(bar, [...(perBar.get(bar) ?? []), f]);

@@ -126,7 +126,7 @@ export default function PianoCheckPage() {
 
   if (phase === "intro") {
     return (
-      <main className="mx-auto max-w-3xl space-y-4 p-4">
+      <div className="mx-auto max-w-3xl space-y-4 p-4">
         <h1 className="text-2xl font-semibold">Piano check</h1>
         <p>
           Find out which notes on your acoustic piano are out of tune, and by how many cents, so you can decide whether to call a technician.
@@ -166,13 +166,13 @@ export default function PianoCheckPage() {
           </div>
         </Card>
         {reports.length > 0 && <PastReports reports={reports} />}
-      </main>
+      </div>
     );
   }
 
   if (phase === "measuring") {
     return (
-      <main className="mx-auto max-w-3xl space-y-4 p-4">
+      <div className="mx-auto max-w-3xl space-y-4 p-4">
         <h1 className="text-2xl font-semibold">Play {current !== null ? midiName(current) : ""}</h1>
         <p aria-live="polite">Note {index + 1} of {notes.length}. Play it mezzo-forte and let it ring.</p>
         <KeyboardMap low={Math.max(21, low)} high={Math.min(108, high)} current={current}
@@ -184,7 +184,7 @@ export default function PianoCheckPage() {
           <Button onClick={skip}>Skip</Button>
           <Button variant="plain" onClick={() => { stopMic(); setPhase("intro"); }}>Cancel</Button>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -192,7 +192,7 @@ export default function PianoCheckPage() {
   const previous = reports.find((x) => x.id !== r.id && x.a4 === r.a4);
   const cmp = previous ? compareReports(previous, r) : null;
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-4">
+    <div className="mx-auto max-w-3xl space-y-4 p-4">
       <h1 className="text-2xl font-semibold">Piano check results</h1>
       <Card>
         <div className="space-y-1 p-4">
@@ -237,7 +237,7 @@ export default function PianoCheckPage() {
       </Card>
       <p className="text-sm opacity-80">This report is saved on this device so you can compare before and after a technician's visit.</p>
       <Button variant="filled" onClick={() => { setPhase("intro"); setReport(null); }}>Done</Button>
-    </main>
+    </div>
   );
 }
 
