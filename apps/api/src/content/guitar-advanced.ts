@@ -1,4 +1,4 @@
-import type { ContentRightsMetadata, ExpectedNoteEvent, GuitarHint, Lesson, LessonSection, MidiExercise } from "@keyboard-sensei/shared-types";
+import type { ContentRightsMetadata, ExerciseKey, ExpectedNoteEvent, GuitarHint, Lesson, LessonSection, MidiExercise } from "@keyboard-sensei/shared-types";
 import {
   GUITAR_BARRE_CHORDS, GUITAR_CHORDS, chordBassPitchClass, chordMidiNotes, chordPitchClasses, fretToMidi, fretsForMidi,
   type GuitarChordShape,
@@ -71,7 +71,7 @@ const ALL_CHORDS: Record<string, GuitarChordShape> = { ...GUITAR_CHORDS, ...GUIT
 /** [chord symbol, start beat, beats]; one strum per entry. */
 type Strum = readonly [symbol: string, startBeat: number, beats: number];
 
-export function chordExercise(id: string, tempoBpm: number, strums: readonly Strum[], beatsPerBar = 4): MidiExercise {
+export function chordExercise(id: string, tempoBpm: number, strums: readonly Strum[], beatsPerBar = 4, keySignature?: ExerciseKey): MidiExercise {
   const expected: ExpectedNoteEvent[] = [];
   const chordTargets = strums.map(([symbol, startBeat, durationBeats], i) => {
     const shape = ALL_CHORDS[symbol];
@@ -82,7 +82,7 @@ export function chordExercise(id: string, tempoBpm: number, strums: readonly Str
   });
   return {
     exerciseId: id, tempoBpm, difficulty: "intermediate", timingToleranceMs: 320, simultaneityWindowMs: 450, durationTolerancePercent: 80,
-    instrument: "guitar", input: "mic-chord", beatsPerBar, beatUnit: 4, expected, chordTargets,
+    instrument: "guitar", input: "mic-chord", beatsPerBar, beatUnit: 4, ...(keySignature ? { keySignature } : {}), expected, chordTargets,
   };
 }
 
@@ -339,6 +339,12 @@ const DOTTED_SYNC: Item[] = [
 
 // Chords.
 const strumBars = (symbols: readonly string[], beatsPerBar = 4): Strum[] => symbols.map((s, i) => [s, i * beatsPerBar, beatsPerBar]);
+// Chord exercises in a sharp key say so, so the staff spells their notes in that key.
+const G_MAJOR_KEY: ExerciseKey = { fifths: 1, mode: "major" };
+const B_MINOR_KEY: ExerciseKey = { fifths: 2, mode: "minor" };
+// A blues uses A7, D7 and E7: written with the A mixolydian signature (two sharps), so the
+// C natural in D7 is a plain C rather than a B sharp.
+const A_BLUES_KEY: ExerciseKey = { fifths: 2, mode: "major" };
 const BLUES_A = strumBars(["A7", "A7", "A7", "A7", "D7", "D7", "A7", "A7", "E7", "D7", "A7", "E7"]);
 const BLUES_E = strumBars(["E7", "E7", "E7", "E7", "A7", "A7", "E7", "E7", "B7", "A7", "E7", "B7"]);
 
@@ -683,9 +689,9 @@ const tier4: Built[] = [
       chordNotation("A-shape barre chords", ["Bm", "Bb", "B"]),
     ],
     exercises: [
-      { ex: chordExercise(exId(L.barreA, 1), 60, strumBars(["Bm", "Bm", "Bm", "Bm"])), title: "Strum Bm four times", instructions: "Check that the fifth string rings under the barre." },
-      { ex: chordExercise(exId(L.barreA, 2), 66, strumBars(["Am", "Bm", "Am", "Bm"])), title: "Am to Bm", instructions: "Slide the shape up one fret." },
-      { ex: chordExercise(exId(L.barreA, 3), 66, strumBars(["Bm", "G", "D", "A"])), title: "Bm - G - D - A", instructions: "A classic pop and folk loop in B minor and D major." },
+      { ex: chordExercise(exId(L.barreA, 1), 60, strumBars(["Bm", "Bm", "Bm", "Bm"]), 4, B_MINOR_KEY), title: "Strum Bm four times", instructions: "Check that the fifth string rings under the barre." },
+      { ex: chordExercise(exId(L.barreA, 2), 66, strumBars(["Am", "Bm", "Am", "Bm"]), 4, G_MAJOR_KEY), title: "Am to Bm", instructions: "Slide the shape up one fret." },
+      { ex: chordExercise(exId(L.barreA, 3), 66, strumBars(["Bm", "G", "D", "A"]), 4, B_MINOR_KEY), title: "Bm - G - D - A", instructions: "A classic pop and folk loop in B minor and D major." },
     ],
     quizQuestions: [
       quiz("q-barre-a-1", "Which fret does Bm barre?", ["Fret 1", "Fret 2", "Fret 4", "Fret 7"], 1, "The A-shape barre for B sits at the second fret."),
@@ -740,9 +746,9 @@ const tier4: Built[] = [
       chordNotation("Blues in A", ["A7", "D7", "E7"]),
     ],
     exercises: [
-      { ex: chordExercise(exId(L.bluesA, 1), 66, strumBars(["A7", "A7", "D7", "D7"])), title: "A7 to D7", instructions: "Four bars, one strum each." },
-      { ex: chordExercise(exId(L.bluesA, 2), 72, BLUES_A), title: "Full twelve-bar blues in A", instructions: "One strum per bar. Keep your place in the form." },
-      { ex: chordExercise(exId(L.bluesA, 3), 84, BLUES_A), title: "Twelve bars, a bit quicker", instructions: "Same form, faster pulse." },
+      { ex: chordExercise(exId(L.bluesA, 1), 66, strumBars(["A7", "A7", "D7", "D7"]), 4, A_BLUES_KEY), title: "A7 to D7", instructions: "Four bars, one strum each." },
+      { ex: chordExercise(exId(L.bluesA, 2), 72, BLUES_A, 4, A_BLUES_KEY), title: "Full twelve-bar blues in A", instructions: "One strum per bar. Keep your place in the form." },
+      { ex: chordExercise(exId(L.bluesA, 3), 84, BLUES_A, 4, A_BLUES_KEY), title: "Twelve bars, a bit quicker", instructions: "Same form, faster pulse." },
     ],
     quizQuestions: [
       quiz("q-blues-a-1", "Which chords make a twelve-bar blues in A?", ["A, D, E", "A, B, C", "A, C, G", "Am, Dm, Em"], 0, "I is A, IV is D, V is E."),

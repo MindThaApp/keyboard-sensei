@@ -39,10 +39,13 @@ describe("violin tier 3-4 content", () => {
     }
   });
 
-  it("never collides with an existing lesson or exercise id", () => {
-    const taken = new Set([...existingLessons.map((l) => l.id), ...existingExercises.map((e) => e.exerciseId)]);
-    for (const lesson of lessons) expect(taken.has(lesson.id)).toBe(false);
-    for (const exercise of violinTier34Exercises) expect(taken.has(exercise.exerciseId)).toBe(false);
+  it("ships in the course without colliding with another lesson or exercise id", () => {
+    // The course ships these lessons and exercises: each id appears exactly once in it.
+    const countOf = (ids: string[]) => ids.reduce((m, id) => m.set(id, (m.get(id) ?? 0) + 1), new Map<string, number>());
+    const lessonCounts = countOf(existingLessons.map((l) => l.id));
+    const exerciseCounts = countOf(existingExercises.map((e) => e.exerciseId));
+    for (const lesson of lessons) expect(lessonCounts.get(lesson.id), lesson.id).toBe(1);
+    for (const exercise of violinTier34Exercises) expect(exerciseCounts.get(exercise.exerciseId), exercise.exerciseId).toBe(1);
     expect(new Set(violinTier34Exercises.map((e) => e.exerciseId)).size).toBe(violinTier34Exercises.length);
   });
 

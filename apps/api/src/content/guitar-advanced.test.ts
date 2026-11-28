@@ -25,13 +25,15 @@ describe("guitar tiers 3-4: structure", () => {
     expect(tier(4)).toBeGreaterThanOrEqual(12);
     expect(lessons.every((l) => l.tier === 3 || l.tier === 4)).toBe(true);
   });
-  it("uses unique ids that do not collide with piano content", () => {
+  it("ships in the course with unique ids that collide with no other content", () => {
     expect(new Set(lessons.map((l) => l.id)).size).toBe(lessons.length);
     expect(new Set(exercises.map((e) => e.exerciseId)).size).toBe(exercises.length);
-    const lessonIds = new Set(existingLessons.map((l) => l.id));
-    const exerciseIds = new Set(existingExercises.map((e) => e.exerciseId));
-    expect(lessons.filter((l) => lessonIds.has(l.id))).toEqual([]);
-    expect(exercises.filter((e) => exerciseIds.has(e.exerciseId))).toEqual([]);
+    // The course ships these lessons and exercises: each id appears exactly once in it.
+    const countOf = (ids: string[]) => ids.reduce((m, id) => m.set(id, (m.get(id) ?? 0) + 1), new Map<string, number>());
+    const lessonCounts = countOf(existingLessons.map((l) => l.id));
+    const exerciseCounts = countOf(existingExercises.map((e) => e.exerciseId));
+    for (const l of lessons) expect(lessonCounts.get(l.id), l.id).toBe(1);
+    for (const e of exercises) expect(exerciseCounts.get(e.exerciseId), e.exerciseId).toBe(1);
   });
   it("uses the guitar- prefix and guitar paths", () => {
     for (const l of lessons) {

@@ -419,6 +419,15 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       // Guitar and violin content is seeded, so each filtered list is a strict part of the whole.
       expect(byInstrument.guitar!.length).toBeGreaterThan(0);
       expect(byInstrument.violin!.length).toBeGreaterThan(0);
+      // Guitar and violin ship tiers 0-4 (spec 3.1 / 3.2).
+      expect(byInstrument.guitar!.length).toBe(36);
+      expect(byInstrument.violin!.length).toBe(25);
+      const tierCounts = (instrument: string) =>
+        (all.body as { instrument: string; tier: number }[])
+          .filter((lesson) => lesson.instrument === instrument)
+          .reduce<Record<number, number>>((counts, lesson) => ({ ...counts, [lesson.tier]: (counts[lesson.tier] ?? 0) + 1 }), {});
+      expect(tierCounts("guitar")).toEqual({ 0: 4, 1: 6, 2: 6, 3: 7, 4: 13 });
+      expect(tierCounts("violin")).toEqual({ 0: 2, 1: 2, 2: 5, 3: 7, 4: 9 });
       expect(ids(all)).toEqual([...byInstrument.piano!, ...byInstrument.guitar!, ...byInstrument.violin!].sort());
 
       // A row stored before the instrument column existed takes the column default: piano.
@@ -1750,7 +1759,8 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
-  describe("content seeding", () => {
+  // Each test reseeds the whole course (every instrument) several times.
+  describe("content seeding", { timeout: 30_000 }, () => {
     const dummyLesson = (id: string): Lesson => ({
       ...m.content.lessons[0]!,
       id,
@@ -1853,16 +1863,19 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       expect(res.status).toBe(200);
       const perTier = new Map<number, number>();
       const guitarPerTier = new Map<number, number>();
+      const violinPerTier = new Map<number, number>();
       for (const item of res.body as Array<{ id: string; tier: number; skills: string[] }>) {
         const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
         expect(item.tier, item.id).toBe(expected.tier);
         expect(item.skills, item.id).toEqual(expected.skills);
         // Other instruments count their own tiers; the piano course keeps these numbers.
         if (expected.instrument === "guitar") guitarPerTier.set(item.tier, (guitarPerTier.get(item.tier) ?? 0) + 1);
+        else if (expected.instrument === "violin") violinPerTier.set(item.tier, (violinPerTier.get(item.tier) ?? 0) + 1);
         else if ((expected.instrument ?? "piano") === "piano") perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
       }
       expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
-      expect([...guitarPerTier.entries()].sort()).toEqual([[0, 4], [1, 6], [2, 6]]);
+      expect([...guitarPerTier.entries()].sort()).toEqual([[0, 4], [1, 6], [2, 6], [3, 7], [4, 13]]);
+      expect([...violinPerTier.entries()].sort()).toEqual([[0, 2], [1, 2], [2, 5], [3, 7], [4, 9]]);
       const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
       expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
     });
