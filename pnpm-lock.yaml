@@ -330,6 +330,10 @@ importers:
         version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(jsdom@30.1.3)(tsx@4.22.4)
 
   packages/piano-check:
+    dependencies:
+      '@keyboard-sensei/audio-analysis':
+        specifier: workspace:*
+        version: link:../audio-analysis
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -339,6 +343,10 @@ importers:
         version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(jsdom@30.1.3)(tsx@4.22.4)
 
   packages/piano-tuning:
+    dependencies:
+      '@keyboard-sensei/piano-check':
+        specifier: workspace:*
+        version: link:../piano-check
     devDependencies:
       typescript:
         specifier: ^5.8.3

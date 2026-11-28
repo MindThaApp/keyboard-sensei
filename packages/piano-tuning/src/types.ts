@@ -1,8 +1,9 @@
 /**
  * Shared shapes between the Piano check (phase 1, measurement only) and the
- * guided tuning aid (phase 2). The Piano check produces one
- * `PianoNoteMeasurement` per key it measures; the tuning aid only consumes that
- * shape, so either side can supply the analyser (`PianoNoteAnalyzer`).
+ * guided tuning aid (phase 2). The tuning aid consumes one `PianoNoteMeasurement`
+ * per key; `measurePianoNote` produces it from the Piano check's own measurement
+ * (`measureNote` in @keyboard-sensei/piano-check), and tests or the page can supply
+ * any other `PianoNoteAnalyzer`.
  *
  * Frequencies are in Hz, deviations in cents. "Pitch" of a piano note always
  * means the frequency of its first partial (`f0 * sqrt(1 + B)`), which is what
@@ -42,7 +43,7 @@ export interface MeasureOptions {
   searchCents?: number;
 }
 
-/** Measures one note from mono samples. The Piano check supplies one; this package ships a reference one. */
+/** Measures one note from mono samples. `measurePianoNote` wraps the Piano check measurement. */
 export type PianoNoteAnalyzer = (
   samples: Float32Array,
   sampleRate: number,
