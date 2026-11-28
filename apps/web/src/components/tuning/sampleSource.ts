@@ -1,7 +1,10 @@
+import { openMic, type MicCapture } from "../pianoCheck/micCapture";
+
 /**
  * Where the tuning aid gets audio from. The page only needs recent mono
- * samples, so tests (and later the shared mic pipeline) can supply any source.
- * Audio stays in memory on the device and is never stored or uploaded.
+ * samples, so tests can supply any source. The microphone source is the Piano
+ * check's raw capture (voice processing off, AudioWorklet tap) feeding a ring
+ * buffer. Audio stays in memory on the device and is never stored or uploaded.
  */
 export interface SampleSource {
   readonly sampleRate: number;
@@ -13,21 +16,10 @@ export interface SampleSource {
   capture(durationMs: number, skipMs?: number): Promise<Float32Array>;
 }
 
-/** Browser voice processing removes partials and pumps the level; tuning needs it all off. */
-export const MIC_CONSTRAINTS: MediaTrackConstraints = {
-  echoCancellation: false,
-  noiseSuppression: false,
-  autoGainControl: false,
-  channelCount: 1,
-};
-
 const BUFFER_SECONDS = 8;
-const BLOCK = 2048;
 
 export function createMicSampleSource(): SampleSource {
-  let ctx: AudioContext | null = null;
-  let stream: MediaStream | null = null;
-  let node: ScriptProcessorNode | null = null;
+  let mic: MicCapture | null = null;
   let ring = new Float32Array(48000 * BUFFER_SECONDS);
   let written = 0;
   let rate = 48000;
@@ -45,32 +37,21 @@ export function createMicSampleSource(): SampleSource {
       return rate;
     },
     async start() {
-      if (ctx) return;
-      stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
-      ctx = new AudioContext();
-      rate = ctx.sampleRate;
-      ring = new Float32Array(Math.round(rate * BUFFER_SECONDS));
+      if (mic) return;
       written = 0;
-      const input = ctx.createMediaStreamSource(stream);
-      node = ctx.createScriptProcessor(BLOCK, 1, 1);
-      node.onaudioprocess = (e) => {
-        const data = e.inputBuffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) ring[(written + i) % ring.length] = data[i];
-        written += data.length;
-      };
-      const mute = ctx.createGain();
-      mute.gain.value = 0;
-      input.connect(node);
-      node.connect(mute);
-      mute.connect(ctx.destination);
+      mic = await openMic((chunk) => {
+        for (let i = 0; i < chunk.length; i++) ring[(written + i) % ring.length] = chunk[i];
+        written += chunk.length;
+      });
+      if (mic.sampleRate !== rate || ring.length !== Math.round(mic.sampleRate * BUFFER_SECONDS)) {
+        rate = mic.sampleRate;
+        ring = new Float32Array(Math.round(rate * BUFFER_SECONDS));
+        written = 0;
+      }
     },
     stop() {
-      node?.disconnect();
-      stream?.getTracks().forEach((t) => t.stop());
-      void ctx?.close();
-      ctx = null;
-      stream = null;
-      node = null;
+      mic?.close();
+      mic = null;
     },
     latest,
     capture(durationMs, skipMs = 300) {
