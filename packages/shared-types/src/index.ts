@@ -123,16 +123,9 @@ export interface ApiErrorResponse { error: { code: string; message: string; deta
 export * from "./sentry.js";
 
 // --- Music Portal: mic grading (M4). Additive; see docs/specs/MUSIC-PORTAL.md 2.4 and 4. ---
-// Unions are written inline (not via the PlayedInstrument / ExerciseInput aliases) so this
-// block merges with the other milestones' declarations without a duplicate alias.
-export interface MidiExercise {
-  /** Absent = "piano". */
-  instrument?: "piano" | "guitar" | "violin";
-  /** Absent = "midi". */
-  input?: "midi" | "mic-mono" | "mic-chord" | "any";
-  /** mic-mono only: a pitch-correct note further than this from equal temperament is sharp/flat. */
-  intonationToleranceCents?: number;
-}
+// `MidiExercise.instrument` (absent = piano), `input` (absent = "midi") and
+// `intonationToleranceCents` (mic-mono only: a pitch-correct note further than this from
+// equal temperament is sharp/flat) are declared on MidiExercise above.
 /**
  * Mic-only data rides in optional fields, so the scorer and the server re-score treat a
  * mic note exactly like a MIDI note. `centsOffset`: the steady part's median offset from
@@ -150,10 +143,7 @@ export interface GuitarHint { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number; finge
 export interface ChordTarget { id: string; symbol: string; pitchClasses: number[]; bassPitchClass?: number; startBeat: number; durationBeats: number }
 /** What the chord detector heard for one strum (labels only, never audio). */
 export interface ChordDetection { onsetMs: number; label: string | null; confidence: number; runnerUp?: { label: string; confidence: number } | null }
-export interface Lesson { instrument?: PlayedInstrument }
 export interface MidiExercise {
-  instrument?: PlayedInstrument;
-  input?: ExerciseInput;
   chordTargets?: ChordTarget[];
   techniqueHints?: Record<string, GuitarHint | ViolinHint>;
 }
