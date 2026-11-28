@@ -12,7 +12,8 @@ import { exerciseSeconds, playAlongSeconds } from "./practice-time.js";
 import { skillPoints } from "./skills.js";
 import { lessonStars, playAlongExtras, playAlongStars, starsForScore } from "./stars.js";
 import { computeGoalStreak } from "./streak.js";
-import { pickReview, presetFor } from "./today.js";
+import { pickContinue, pickReview, presetFor } from "./today.js";
+import type { Snapshot } from "./snapshot.js";
 import { exerciseAttemptXp, playAlongXp, repeatFactor, starXp, streakMilestoneXp } from "./xp.js";
 
 describe("levels", () => {
@@ -194,6 +195,23 @@ describe("review picker", () => {
 
   it("ignores exercises no longer in the course", () => {
     expect(pickReview([attempt("gone", "2026-10-01", 10)], live, null, "2026-10-09")).toBeNull();
+  });
+});
+
+describe("continue on Today", () => {
+  const lesson = (id: string, order: number, instrument?: "guitar" | "violin") => ({
+    id, order, title: id, path: "classical-technical", ...(instrument ? { instrument } : {}),
+    sections: [{ type: "midi-exercise", title: `${id} ex`, instructions: "", exerciseId: `${id}-ex` }],
+    unlockCriteria: { requiresLessonIds: [], minScore: 70 },
+  });
+  const snapshot = (activeInstrument?: "piano" | "guitar" | "violin") =>
+    ({ lessons: [lesson("piano-1", 0), lesson("guitar-1", 1, "guitar")], progress: new Map(), exerciseAttempts: [], ...(activeInstrument ? { activeInstrument } : {}) }) as unknown as Snapshot;
+
+  it("continues the active instrument's course only, piano when none was chosen", () => {
+    expect(pickContinue(snapshot())?.lessonId).toBe("piano-1");
+    expect(pickContinue(snapshot("piano"))?.lessonId).toBe("piano-1");
+    expect(pickContinue(snapshot("guitar"))?.lessonId).toBe("guitar-1");
+    expect(pickContinue(snapshot("violin"))).toBeNull();
   });
 });
 

@@ -4,7 +4,7 @@ import {
   type GuitarChordShape,
 } from "@keyboard-sensei/music-theory";
 import { chainLessons, quiz, rewards } from "./helpers.js";
-import { vexKey } from "./build.js";
+import { guitarNotationSection, type GuitarNotation, type GuitarNotationNote } from "./guitar-helpers.js";
 
 /**
  * Guitar tiers 3 and 4 (Music Portal M12). See docs/specs/MUSIC-PORTAL.md, section 3.1.
@@ -89,29 +89,43 @@ export function chordExercise(id: string, tempoBpm: number, strums: readonly Str
 const VEX_QUARTER_UNIT: Record<number, string> = { 0.25: "16", 0.5: "8", 0.75: "8d", 1: "q", 1.5: "qd", 2: "h", 3: "hd", 4: "w" };
 const VEX_EIGHTH_UNIT: Record<number, string> = { 1: "8", 2: "q", 3: "qd", 4: "h", 6: "hd" };
 
-/** Staff + tab notation built from the same items as the exercise. */
-function notation(title: string, items: readonly Item[], opts: { timeSignature?: string; beatUnit?: number; flats?: boolean; techniques?: { from: number; to: number; type: "hammer-on" | "pull-off" }[]; rights?: ContentRightsMetadata } = {}): LessonSection {
+/**
+ * Staff + tab notation built from the same items as the exercise, in the guitar notation
+ * format the lesson player draws (`kind: "guitar"`, see guitar-helpers.ts): one entry per
+ * note with its fretting, grouped into bars. `techniques` (hammer-ons, pull-offs) index the
+ * items and ride along with the data.
+ */
+function notation(title: string, items: readonly Item[], opts: { timeSignature?: string; beatUnit?: number; techniques?: { from: number; to: number; type: "hammer-on" | "pull-off" }[]; rights?: ContentRightsMetadata } = {}): LessonSection {
   const table = opts.beatUnit === 8 ? VEX_EIGHTH_UNIT : VEX_QUARTER_UNIT;
   const dur = (beats: number) => {
     const d = table[beats];
     if (!d) throw new Error(`No notation duration for ${beats} beats`);
     return d;
   };
-  const notes = items.map(([string, fret, beats]) => string === 0
-    ? { keys: ["b/4"], duration: `${dur(beats)}r` }
-    : { keys: [vexKey(fretToMidi(string, fret) + 12, opts.flats)], duration: dur(beats) });
-  const tab = items.filter(([string]) => string !== 0).map(([string, fret, beats]) => ({ string, fret, duration: dur(beats) }));
+  const timeSignature = opts.timeSignature ?? "4/4";
+  const barBeats = Number(timeSignature.split("/")[0]);
+  const measures: { notes: GuitarNotationNote[] }[] = [];
+  let beat = 0;
+  for (const [string, fret, beats] of items) {
+    const bar = Math.floor(beat / barBeats + 1e-9);
+    if (beat + beats > (bar + 1) * barBeats + 1e-9) throw new Error(`${title}: a note crosses the bar line at beat ${(bar + 1) * barBeats}`);
+    while (measures.length <= bar) measures.push({ notes: [] });
+    measures[bar]!.notes.push(string === 0 ? { duration: dur(beats), positions: [] } : { duration: dur(beats), positions: [{ string, fret }] });
+    beat += beats;
+  }
+  const data: GuitarNotation & { techniques?: { from: number; to: number; type: "hammer-on" | "pull-off" }[] } = {
+    kind: "guitar", timeSignature, measures, ...(opts.techniques ? { techniques: opts.techniques } : {}),
+  };
   return {
-    type: "notation", title,
-    vexflowData: { instrument: "guitar", clef: "treble-8vb", timeSignature: opts.timeSignature ?? "4/4", notes, tab, ...(opts.techniques ? { techniques: opts.techniques } : {}) },
+    ...guitarNotationSection(title, data),
     ...(opts.rights ? { contentRights: opts.rights } : {}),
   };
 }
 
-const chordNotation = (title: string, symbols: readonly string[]): LessonSection => ({
-  type: "notation", title,
-  vexflowData: { instrument: "guitar", kind: "chord-diagrams", chords: symbols.map((symbol) => ({ symbol })) },
-});
+const chordNotation = (title: string, symbols: readonly string[]): LessonSection => {
+  for (const symbol of symbols) if (!ALL_CHORDS[symbol]) throw new Error(`Unknown chord ${symbol}`);
+  return { type: "notation", title, vexflowData: { kind: "chord-diagrams", chords: [...symbols] } };
+};
 
 const publicDomain = (workTitle: string, composer: string): ContentRightsMetadata => ({ workTitle, composer, status: "public-domain", copyrightHolder: null, licenseReference: null });
 const md = (title: string, body: string): LessonSection => ({ type: "markdown", title, body });

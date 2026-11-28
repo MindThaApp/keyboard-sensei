@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Lesson } from "@keyboard-sensei/shared-types";
+import { isPlayedInstrument, type Lesson, type PlayedInstrument } from "@keyboard-sensei/shared-types";
 import { validateLesson } from "@keyboard-sensei/lesson-engine";
 import { sharedSongWhere } from "../catalogue/eligibility.js";
 import { songCollection, type SongCollection } from "../songs.js";
@@ -72,6 +72,8 @@ export interface Snapshot {
   timezone: string | null;
   now: Date;
   today: string;
+  /** The instrument that scopes Today (users.active_instrument; absent = piano). */
+  activeInstrument?: PlayedInstrument;
   lessons: LiveLesson[];
   progress: Map<string, LessonProgressRow>;
   exerciseAttempts: ExerciseAttemptRow[];
@@ -158,7 +160,7 @@ export async function loadSongPlayAlong(db: Pick<PrismaClient, "$queryRaw">, use
 export async function loadSnapshot(db: Db, userId: string, now: Date = new Date()): Promise<Snapshot> {
   const user = await db.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { daily_goal_minutes: true, timezone: true },
+    select: { daily_goal_minutes: true, timezone: true, active_instrument: true },
   });
 
   // Play-along rows are read whole (to_jsonb) rather than through the Prisma model, so
@@ -166,7 +168,7 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
   // Full / both hands / not a loop on rows (and databases) that predate them.
   const [lessonRows, progressRows, exerciseRows, quizRows, playAlongRaw, practiceDays, xp, achievementRows, essentialsRows, challengeRows] =
     await Promise.all([
-      db.lesson.findMany({ where: { retired_at: null }, orderBy: { order: "asc" }, select: { order: true, lesson_json: true } }),
+      db.lesson.findMany({ where: { retired_at: null }, orderBy: { order: "asc" }, select: { order: true, lesson_json: true, instrument: true } }),
       db.userProgress.findMany({ where: { user_id: userId } }),
       db.$queryRaw<{ id: string; exercise_id: string; created_at: Date; score: number | null }[]>`
         SELECT id, exercise_id, created_at, (result->>'score')::float AS score
@@ -204,7 +206,13 @@ export async function loadSnapshot(db: Db, userId: string, now: Date = new Date(
     timezone: user.timezone,
     now,
     today: dayKey(now, user.timezone),
-    lessons: lessonRows.map((row) => ({ ...validateLesson(row.lesson_json), order: row.order })),
+    ...(isPlayedInstrument(user.active_instrument) ? { activeInstrument: user.active_instrument } : {}),
+    // The row's instrument column is the source of truth, as for GET /lessons.
+    lessons: lessonRows.map((row) => ({
+      ...validateLesson(row.lesson_json),
+      ...(isPlayedInstrument(row.instrument) ? { instrument: row.instrument } : {}),
+      order: row.order,
+    })),
     progress: new Map(
       progressRows.map((row) => [
         row.lesson_id,

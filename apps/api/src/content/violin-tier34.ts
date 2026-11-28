@@ -1,4 +1,5 @@
-import type { ExerciseKey, Lesson, LessonSection, MidiExercise, SkillChip, TierId } from "@keyboard-sensei/shared-types";
+import type { ExerciseKey, Lesson, LessonSection, MidiExercise, SkillChip, TierId, ViolinHint, ViolinString } from "@keyboard-sensei/shared-types";
+import { printedMarks } from "@keyboard-sensei/music-theory/violin";
 import { authoredSpellings, drill, estimateLessonMinutes, midi } from "./build.js";
 import { chainLessons, defineLesson, midiSection, quiz, rewards } from "./helpers.js";
 
@@ -20,21 +21,16 @@ import { chainLessons, defineLesson, midiSection, quiz, rewards } from "./helper
  * One fingering token per note, in order: a string letter (G D A E) and a finger 0-4
  * (0 = open). `^N` moves to the Nth position from that note on (it stays until changed)
  * and a trailing `~` slurs the note to the next one (same bow). Bows alternate
- * down/up otherwise. The hints become `techniqueHints` (spec 2.4); they feed notation
- * and the fingerboard view and are not graded in v1. Pitches are sounding MIDI numbers.
- *
- * The violin model fields (`instrument`, `input`, `intonationToleranceCents`,
- * `techniqueHints`, the violin learning paths) come from the violin branch; the local
- * types below add them structurally so this file compiles with or without it.
+ * down/up otherwise. The hints become `techniqueHints` (spec 2.4) in the violin model's
+ * `ViolinHint` shape (M7), slurs included; they feed notation and the fingerboard view
+ * and are not graded in v1. Pitches are sounding MIDI numbers.
  */
 
-type ViolinString = "G" | "D" | "A" | "E";
-interface ViolinHintShape { string: ViolinString; finger: 0 | 1 | 2 | 3 | 4; position: number; bow?: "down" | "up" }
 export type ViolinExercise = MidiExercise & {
   instrument: "violin";
   input: "mic-mono";
   intonationToleranceCents: number;
-  techniqueHints: Record<string, ViolinHintShape>;
+  techniqueHints: Record<string, ViolinHint>;
 };
 export type ViolinLesson = Lesson & { instrument: "violin" };
 
@@ -75,7 +71,7 @@ export function vdrill(input: VDrill): ViolinExercise {
   if (tokens.length !== base.expected.length) {
     throw new Error(`${input.id}: ${base.expected.length} notes but ${tokens.length} fingering tokens`);
   }
-  const hints: Record<string, ViolinHintShape> = {};
+  const hints: Record<string, ViolinHint> = {};
   let position = input.position ?? 1;
   let bow: "down" | "up" = "up"; // flipped to "down" for the first note
   let slurredFromPrevious = false;
@@ -84,8 +80,13 @@ export function vdrill(input: VDrill): ViolinExercise {
     if (!match) throw new Error(`${input.id}: bad fingering token "${tokens[index]}"`);
     if (match[3]) position = Number(match[3]);
     if (!slurredFromPrevious) bow = bow === "down" ? "up" : "down";
-    hints[event.id] = { string: match[1] as ViolinString, finger: Number(match[2]) as 0 | 1 | 2 | 3 | 4, position, bow };
-    slurredFromPrevious = match[4] === "~";
+    const slursOn = match[4] === "~";
+    const hint: ViolinHint = { string: match[1] as ViolinString, finger: Number(match[2]) as ViolinHint["finger"], position, bow };
+    // A slur runs from the first `~` note to the note after the last one.
+    if (slursOn && !slurredFromPrevious) hint.slur = "start";
+    if (!slursOn && slurredFromPrevious) hint.slur = "end";
+    hints[event.id] = hint;
+    slurredFromPrevious = slursOn;
   });
   return {
     ...base,
@@ -121,39 +122,39 @@ interface NotationOptions {
   rights: { workTitle: string; composer: string; status: "original" | "public-domain" };
 }
 
-/** The notation for an exercise, generated from the exercise itself so score and scoring cannot disagree. */
+/**
+ * The notation for an exercise, generated from the exercise itself so score and scoring cannot
+ * disagree. Same staff format as the tier 0-2 violin notation (violin-helpers.ts): bars of
+ * notes carrying their exercise note id and the violin marks `printedMarks` chooses (finger,
+ * string and position when they change, bowing, slurs), keeping the authored spelling.
+ * Inside a slur only the first note shows the bow. `dynamics`, `vibrato` and `texts` index
+ * the notes in order and ride along with the data.
+ */
 export function vnotation(exercise: ViolinExercise, options: NotationOptions): LessonSection {
   const spellings = authoredSpellings.get(exercise.exerciseId)!;
   const unit = exercise.beatUnit ?? 4;
-  const slurs: Array<[number, number]> = [];
-  const positionMarks: Array<{ noteIndex: number; label: string }> = [];
+  const beatsPerBar = exercise.beatsPerBar ?? 4;
+  const hints = exercise.expected.map((event) => exercise.techniqueHints[event.id]!);
+  const printed = printedMarks(hints);
+  const measures: { notes: Record<string, unknown>[] }[] = [];
   let expectedStart = 0;
-  let previousPosition = 0;
-  const notes = exercise.expected.map((event, index) => {
+  exercise.expected.forEach((event, index) => {
     if (Math.abs(event.startBeat - expectedStart) > 1e-9) throw new Error(`${exercise.exerciseId}: rests are not supported in violin notation`);
     expectedStart = event.startBeat + event.durationBeats;
-    const hint = exercise.techniqueHints[event.id]!;
     const duration = VEX_DURATION[(event.durationBeats * 4) / unit];
     if (!duration) throw new Error(`${exercise.exerciseId}: no notation for ${event.durationBeats} beats`);
-    if (hint.finger !== 0 && hint.position !== previousPosition && (hint.position > 1 || previousPosition > 1)) {
-      positionMarks.push({ noteIndex: index, label: `${hint.position === 1 ? "1st" : hint.position === 3 ? "3rd" : `${hint.position}th`} pos.` });
-    }
-    if (hint.finger !== 0) previousPosition = hint.position;
-    return {
+    const bar = Math.floor(event.startBeat / beatsPerBar + 1e-9);
+    if (event.startBeat + event.durationBeats > (bar + 1) * beatsPerBar + 1e-9) throw new Error(`${exercise.exerciseId}: ${event.id} crosses a bar line`);
+    while (measures.length <= bar) measures.push({ notes: [] });
+    const marks = printed[index] ? { ...printed[index] } : undefined;
+    const inSlur = index > 0 && hints[index]!.bow === hints[index - 1]!.bow;
+    if (marks && inSlur) delete marks.bow;
+    measures[bar]!.notes.push({
+      ids: [event.id],
       keys: [vexName(spellings.get(event.id)!)],
       duration,
-      fingering: { string: hint.string, finger: hint.finger, position: hint.position, bow: hint.bow },
-    };
-  });
-  // A slur joins runs of notes marked `~`; recover them from the bows (same bow as the previous note).
-  let runStart = -1;
-  exercise.expected.forEach((event, index) => {
-    const sameBowAsNext = index + 1 < exercise.expected.length && exercise.techniqueHints[event.id]!.bow === exercise.techniqueHints[exercise.expected[index + 1]!.id]!.bow;
-    if (sameBowAsNext && runStart < 0) runStart = index;
-    if (!sameBowAsNext && runStart >= 0) {
-      slurs.push([runStart, index]);
-      runStart = -1;
-    }
+      ...(marks ? { violin: marks } : {}),
+    });
   });
   return {
     type: "notation",
@@ -162,11 +163,9 @@ export function vnotation(exercise: ViolinExercise, options: NotationOptions): L
       instrument: "violin",
       clef: "treble",
       exerciseId: exercise.exerciseId,
-      timeSignature: options.timeSignature ?? "4/4",
+      timeSignature: options.timeSignature ?? `${beatsPerBar}/${unit}`,
       ...(options.keySignature ? { keySignature: options.keySignature } : {}),
-      notes,
-      slurs,
-      positionMarks,
+      measures,
       ...(options.dynamics ? { dynamics: options.dynamics } : {}),
       ...(options.vibrato ? { vibrato: options.vibrato } : {}),
       ...(options.texts ? { texts: options.texts } : {}),

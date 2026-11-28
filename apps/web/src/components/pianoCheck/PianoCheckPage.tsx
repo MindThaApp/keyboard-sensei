@@ -8,6 +8,7 @@ import {
 import { Button, Card, SegmentedControl } from "../ui";
 import KeyboardMap from "./KeyboardMap";
 import { NoteListener, openMic, type MicCapture } from "./micCapture";
+import { loadTunerSettings } from "../tuner/tunerSettings";
 
 type Phase = "intro" | "measuring" | "results";
 
@@ -33,7 +34,8 @@ function useReports() {
 export default function PianoCheckPage() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [mode, setMode] = useState<CheckMode>("quick");
-  const [a4, setA4] = useState(DEFAULT_A4_HZ);
+  // Starts at the learner's A4 from the tuner settings (spec 5.3); this check can still use another.
+  const [a4, setA4] = useState(() => loadTunerSettings().a4Hz);
   const [low, setLow] = useState(FULL_RANGE.low);
   const [high, setHigh] = useState(FULL_RANGE.high);
   const [index, setIndex] = useState(0);

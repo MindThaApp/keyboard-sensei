@@ -5,7 +5,8 @@ Pure TypeScript (no DOM) for the guided piano tuning aid, spec section 6.2.
 | Module | What it does |
 |---|---|
 | `types.ts` | Shapes shared with the Piano check: `PianoNoteMeasurement`, `PianoNoteAnalyzer`, `InharmonicitySample` |
-| `measure.ts` | Reference analyser `measurePianoNote` (zero-padded Hann FFT, partial peaks, fit of `f_n = n f0 sqrt(1 + B n^2)`) and `measureLivePitch` for the per-note display |
+| `dsp.ts` | Pitch maths under this package's names, built on the Piano check's note range, equal temperament, cents and partial model |
+| `measure.ts` | `measurePianoNote`: locates a note that may be far from pitch, then measures it with the Piano check's `measureNote` (zero-padded Hann FFT, partial peaks, fit of `f_n = n f0 sqrt(1 + B n^2)`); `measureLivePitch` for the per-note display, on the Piano check's spectrum and peak interpolation |
 | `inharmonicity.ts` | B across the keyboard (log10 B, piecewise linear), fitted to measured samples with a weak pull to a typical piano |
 | `curve.ts` | Stretch curve: A3-A4 temperament octave with a beatless 4:2, treble 4:2 widening to 2:1 at the top, bass 4:2 widening to 6:3; tuning order and sample keys |
 | `checks.ts` | Beat detection for unison and octave checks; octave check from two measurements |
@@ -15,10 +16,12 @@ Pure TypeScript (no DOM) for the guided piano tuning aid, spec section 6.2.
 
 ## Piano check integration
 
-The flow only consumes `PianoNoteMeasurement`. When the Piano check analyser is
-available, pass it to the page (`<PianoTuningAidPage analyzer={...} />`) and its
-measured notes can seed the curve (`RECORD_SAMPLE`). `measurePianoNote` is the
-fallback with the same signature.
+Phase 2 builds on phase 1's measurement core: `measurePianoNote` and
+`measureLivePitch` use `@keyboard-sensei/piano-check` (spectrum, partial search,
+f0/B fit), so both features measure a note the same way. The flow only consumes
+`PianoNoteMeasurement`; the page accepts any analyser with the same signature
+(`<PianoTuningAidPage analyzer={...} />`), and its measured notes seed the curve
+(`RECORD_SAMPLE`).
 
 ## Safety
 

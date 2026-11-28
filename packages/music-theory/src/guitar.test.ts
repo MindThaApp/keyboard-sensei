@@ -76,3 +76,21 @@ describe("chord symbols", () => {
     }
   });
 });
+
+import { GUITAR_BARRE_CHORDS, findGuitarChord } from "./index.js";
+describe("barre and power chord symbols", () => {
+  it("name every barre shape with a symbol the recogniser and the grader know", () => {
+    for (const [id, shape] of Object.entries(GUITAR_BARRE_CHORDS)) {
+      const parsed = parseChordSymbol(shape.symbol);
+      expect(parsed, id).not.toBeNull();
+      expect(chordPitchClasses(shape), id).toEqual(parsed!.pitchClasses.filter((pc) => chordPitchClasses(shape).includes(pc)));
+      expect(parsed!.pitchClasses.filter((pc) => !chordPitchClasses(shape).includes(pc) && pc !== (parsed!.root + 7) % 12), id).toEqual([]);
+    }
+    expect(GUITAR_BARRE_CHORDS["G3"]!.symbol).toBe("G");
+  });
+  it("finds open chords first, then barre shapes", () => {
+    expect(findGuitarChord("G")).toBe(GUITAR_CHORDS["G"]);
+    expect(findGuitarChord("G3")).toBe(GUITAR_BARRE_CHORDS["G3"]);
+    expect(findGuitarChord("H")).toBeUndefined();
+  });
+});

@@ -1,7 +1,9 @@
+import { tuningPresetById } from "./tunings.js";
+
 /** Guitar fretboard helpers. All pitches are SOUNDING MIDI numbers (a written guitar part is an octave higher). */
 
-/** Open-string MIDI notes, string 6 (low E) to string 1 (high e): E2 A2 D3 G3 B3 E4. */
-export const STANDARD_TUNING: readonly number[] = [40, 45, 50, 55, 59, 64];
+/** Open-string MIDI notes, string 6 (low E) to string 1 (high e): E2 A2 D3 G3 B3 E4, from the tuner's standard preset. */
+export const STANDARD_TUNING: readonly number[] = tuningPresetById("guitar-standard")!.strings.map((s) => s.midi);
 export const STRING_NAMES = ["E", "A", "D", "G", "B", "e"] as const;
 export const MAX_FRET = 15;
 

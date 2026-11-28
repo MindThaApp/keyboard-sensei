@@ -5,7 +5,7 @@ import { TIER_NAMES, type LessonListItem, type LessonStatus, type TierId } from 
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
 import { nextLessonFor } from "../../utils/levels";
 import { pathLabel, placeInPath } from "../../utils/paths";
-import { LEARN_FILTERS, SKILL_LABEL, currentTierOf, groupByTier, type LearnFilter, type TierGroup } from "../../utils/tiers";
+import { SKILL_LABEL, currentTierOf, groupByTier, learnFiltersFor, type LearnFilter, type TierGroup } from "../../utils/tiers";
 import { lessonStars } from "../../utils/stars";
 import { StarRating } from "../progress/ProgressBits";
 import { Chip, ProgressRing, SegmentedControl } from "../ui";
@@ -233,7 +233,10 @@ export default function LessonListPage() {
   const nextPlace = nextLesson ? placeInPath(lessons, nextLesson.id) : null;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
-  const groups = groupByTier(lessons, filter);
+  const filters = learnFiltersFor(active);
+  // A path filter from another instrument (after switching) falls back to everything.
+  const shownFilter: LearnFilter = filters.some((entry) => entry.value === filter) ? filter : "all";
+  const groups = groupByTier(lessons, shownFilter);
   const currentTier = currentTierOf(groups);
   // The current tier starts open and every other tier starts closed, until the learner toggles one.
   const openTiers = new Set<TierId>(
@@ -298,13 +301,15 @@ export default function LessonListPage() {
       )}
 
       <section className="space-y-4" aria-label={t("lesson.levels")}>
-        <SegmentedControl
-          aria-label={t("lesson.showFrom")}
-          options={LEARN_FILTERS.map(({ value }) => ({ value, label: t(`lesson.filter.${value}`) }))}
-          value={filter}
-          onChange={setFilter}
-          block
-        />
+        {filters.length > 1 && (
+          <SegmentedControl
+            aria-label={t("lesson.showFrom")}
+            options={filters.map(({ value }) => ({ value, label: t(`lesson.filter.${value}`) }))}
+            value={shownFilter}
+            onChange={setFilter}
+            block
+          />
+        )}
         <div className="space-y-3">
           {groups.map((group) => (
             <TierSection

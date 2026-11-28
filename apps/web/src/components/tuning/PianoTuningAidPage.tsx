@@ -28,11 +28,12 @@ import { Button, Card } from "../ui";
 import FineDisplay from "./FineDisplay";
 import SafetyNote, { TechnicianRecommendation } from "./SafetyNote";
 import { createMicSampleSource, type SampleSource } from "./sampleSource";
+import { loadTunerSettings } from "../tuner/tunerSettings";
 
 /** Saved progress of a tuning session (never the safety acknowledgement). New key, `mp-` prefix (spec 1.2). */
 export const TUNING_SESSION_KEY = "mp-piano-tuning-session";
 /** Tuner settings from spec 5.3; only the reference pitch is read here. */
-export const TUNER_SETTINGS_KEY = "mp-tuner-settings";
+export { TUNER_SETTINGS_KEY } from "../tuner/tunerSettings";
 
 const MEASURE_MS = 1500;
 const CHECK_MS = 3000;
@@ -42,14 +43,9 @@ function noteName(midi: number): string {
   return midiNoteToName(midi).split("/")[0];
 }
 
+/** The learner's A4 (spec 5.3), shared with the tuner, mic grading and the Piano check. */
 function readReferenceA4(): number {
-  try {
-    const raw = localStorage.getItem(TUNER_SETTINGS_KEY);
-    const a4 = raw ? Number((JSON.parse(raw) as { a4Hz?: unknown }).a4Hz) : NaN;
-    return Number.isFinite(a4) && a4 >= 415 && a4 <= 466 ? a4 : 440;
-  } catch {
-    return 440;
-  }
+  return loadTunerSettings().a4Hz;
 }
 
 function loadSession(): TuningSession {

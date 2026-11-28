@@ -56,3 +56,12 @@ describe("tuning presets", () => {
     expect(validateCustomTuning("x", ["C0"])).toMatchObject({ ok: false });
   });
 });
+
+import { STANDARD_TUNING } from "./guitar.js";
+import { VIOLIN_OPEN_STRING } from "./violin.js";
+describe("instrument open strings", () => {
+  it("come from the standard presets", () => {
+    expect(STANDARD_TUNING).toEqual([40, 45, 50, 55, 59, 64]);
+    expect(VIOLIN_OPEN_STRING).toEqual({ G: 55, D: 62, A: 69, E: 76 });
+  });
+});

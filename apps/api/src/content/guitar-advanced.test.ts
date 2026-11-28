@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GUITAR_BARRE_CHORDS, GUITAR_CHORDS, chordPitchClasses, fretToMidi, GUITAR_HIGHEST_NOTE, GUITAR_LOWEST_NOTE } from "@keyboard-sensei/music-theory";
+import { GUITAR_BARRE_CHORDS, GUITAR_CHORDS, chordPitchClasses, fretToMidi, GUITAR_HIGHEST_NOTE, GUITAR_LOWEST_NOTE, parseChordSymbol } from "@keyboard-sensei/music-theory";
 import { lessonSchema, midiExerciseSchema } from "@keyboard-sensei/lesson-engine";
 import { isGuitarHint } from "@keyboard-sensei/shared-types";
 import { buildGuitarAdvancedLessons, guitarAdvancedExercises as exercises, guitarAdvancedLessons as lessons } from "./guitar-advanced.js";
@@ -188,6 +188,13 @@ describe("guitar tiers 3-4: exercises", () => {
       }
     }
   });
+  it("names every chord target with a symbol the strum grader can match", () => {
+    for (const e of chord) for (const t of e.chordTargets!) {
+      const parsed = parseChordSymbol(t.symbol);
+      expect(parsed, t.symbol).not.toBeNull();
+      expect(t.pitchClasses.every((pc) => parsed!.pitchClasses.includes(pc)), t.symbol).toBe(true);
+    }
+  });
   it("uses only chords introduced by the time they are needed", () => {
     // Open chords come from tier 0-2; barre and power chords are taught in tier 4 lessons.
     const barreLessonTier = new Map(lessons.map((l) => [l.id, l.tier]));
@@ -214,18 +221,25 @@ describe("guitar tiers 3-4: notation", () => {
     for (const l of lessons) for (const s of l.sections) {
       if (s.type !== "notation") continue;
       const d = s.vexflowData as Record<string, any>;
-      expect(d.instrument).toBe("guitar");
+      // The lesson player's guitar formats (guitar-helpers.ts): staff + tab, or chord boxes.
       if (d.kind === "chord-diagrams") {
         const all = { ...GUITAR_CHORDS, ...GUITAR_BARRE_CHORDS };
-        for (const c of d.chords) expect(all[c.symbol], c.symbol).toBeDefined();
+        for (const c of d.chords) {
+          expect(typeof c).toBe("string");
+          expect(all[c], c).toBeDefined();
+        }
       } else {
-        expect(d.clef).toBe("treble-8vb");
-        const sounding = d.notes.filter((n: any) => !n.duration.endsWith("r"));
-        expect(d.tab.length).toBe(sounding.length);
-        for (const t of d.tab) {
-          expect(t.string).toBeGreaterThanOrEqual(1);
-          expect(t.string).toBeLessThanOrEqual(6);
-          expect(t.fret).toBeGreaterThanOrEqual(0);
+        expect(d.kind).toBe("guitar");
+        expect(d.measures.length).toBeGreaterThan(0);
+        // One fretting per sounding note: the staff and the tab are drawn from the same entry.
+        for (const m of d.measures) for (const n of m.notes) {
+          expect(typeof n.duration).toBe("string");
+          expect(n.duration.endsWith("r")).toBe(false);
+          for (const t of n.positions ?? []) {
+            expect(t.string).toBeGreaterThanOrEqual(1);
+            expect(t.string).toBeLessThanOrEqual(6);
+            expect(t.fret).toBeGreaterThanOrEqual(0);
+          }
         }
       }
     }

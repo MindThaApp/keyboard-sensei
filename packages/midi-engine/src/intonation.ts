@@ -1,4 +1,4 @@
-import type { ExpectedNoteEvent, IntonationResult, MidiExercise, PerformedNote, ScoringMistake, ScoringResult } from "@keyboard-sensei/shared-types";
+import { lessonInstrument, type ExpectedNoteEvent, type IntonationResult, type MidiExercise, type PerformedNote, type PlayedInstrument, type ScoringMistake, type ScoringResult } from "@keyboard-sensei/shared-types";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
 import { resolveScoreWeights, VIOLIN_SCORE_WEIGHTS } from "./config.js";
 import { scoreMidiExercise, type ScoreMidiExerciseParams } from "./scoring.js";
@@ -25,11 +25,11 @@ const SEMITONE_EDGE_CENTS = 50;
 
 export const isMicAttempt = (notes: readonly PerformedNote[]): boolean => notes.some((note) => note.source === "mic");
 
-export type PlayedInstrumentName = NonNullable<MidiExercise["instrument"]>;
-export const exerciseInstrument = (exercise: MidiExercise): PlayedInstrumentName => exercise.instrument ?? "piano";
+/** The instrument an exercise is for (absent = piano), by the same rule as lessons. */
+export const exerciseInstrument = (exercise: MidiExercise): PlayedInstrument => lessonInstrument(exercise);
 
 /** Whether this instrument's pitch is the player's to control (and so graded for intonation). Pianos are tuned, not played in tune. */
-export const gradesIntonation = (instrument: PlayedInstrumentName): instrument is "guitar" | "violin" => instrument !== "piano";
+export const gradesIntonation = (instrument: PlayedInstrument): instrument is "guitar" | "violin" => instrument !== "piano";
 
 export interface IntonationMatch { expected: ExpectedNoteEvent; performed: PerformedNote }
 

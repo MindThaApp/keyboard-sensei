@@ -174,6 +174,11 @@ function beatWobble(x: ArrayLike<number>, sampleRate: number, ps: Partial[]): nu
 
 export interface MeasureOptions extends SpectrumOptions {
   a4?: number;
+  /**
+   * Where to start the partial search (ideal-string f0, Hz). Default: equal temperament
+   * at `a4`. A caller that has already located a note far from pitch passes it here.
+   */
+  f0Hint?: number;
 }
 
 /** Measure one captured piano note: partials, fitted f0 and inharmonicity B, unison hints. */
@@ -183,7 +188,7 @@ export function measureNote(
   midi: number,
   opts: MeasureOptions = {},
 ): NoteMeasurement | null {
-  const nominal = etFrequency(midi, opts.a4 ?? DEFAULT_A4_HZ);
+  const nominal = opts.f0Hint ?? etFrequency(midi, opts.a4 ?? DEFAULT_A4_HZ);
   const spec = computeSpectrum(samples, sampleRate, opts);
   const raw = findPartials(spec, nominal);
   if (raw.length < 1) return null;
