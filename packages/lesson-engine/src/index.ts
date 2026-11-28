@@ -12,6 +12,9 @@ export const contentRightsSchema = z.object({
   if(rights.status==="licensed-copyright"&&!rights.copyrightHolder)ctx.addIssue({code:z.ZodIssueCode.custom,path:["copyrightHolder"],message:"Licensed copyrighted works require a copyright holder"});
   if(rights.status==="licensed-copyright"&&!rights.licenseReference)ctx.addIssue({code:z.ZodIssueCode.custom,path:["licenseReference"],message:"Licensed copyrighted works require a license reference"});
 });
+const playedInstrument = z.enum(["piano","guitar","violin"]);
+const chordTarget = z.object({id:z.string().min(1),symbol:z.string().min(1),pitchClasses:z.array(z.number().int().min(0).max(11)),bassPitchClass:z.number().int().min(0).max(11).optional(),startBeat:z.number().nonnegative(),durationBeats:z.number().positive()});
+const guitarHint = z.object({string:z.number().int().min(1).max(6),fret:z.number().int().min(0).max(24),finger:z.number().int().min(0).max(4).optional()});
 const section = z.discriminatedUnion("type", [
   z.object({type:z.literal("markdown"),title:z.string().min(1),body:z.string().min(1)}),
   z.object({type:z.literal("theory-card"),title:z.string().min(1),body:z.string().min(1)}),
@@ -19,12 +22,24 @@ const section = z.discriminatedUnion("type", [
   z.object({type:z.literal("midi-exercise"),title:z.string().min(1),instructions:z.string().min(1),exerciseId:z.string().min(1)}),
   z.object({type:z.literal("quiz"),questions:z.array(quizQuestion).min(1)})
 ]);
-export const lessonSchema = z.object({ id:z.string().min(1), path:z.enum(["classical-technical","modern-chords","sightreading-intensive"]), level:z.enum(["foundation","elementary","intermediate","late-intermediate","advanced","virtuoso"]), branch:z.enum(["technique","theory","repertoire"]), tier:z.number().int().min(0).max(7).default(0), skills:z.array(z.enum(SKILL_CHIPS)).default([]), title:z.string().min(1), estimatedMinutes:z.number().int().positive(), objectives:z.array(z.string().min(1)).min(1), sections:z.array(section).min(1), unlockCriteria:z.object({requiresLessonIds:z.array(z.string()),minScore:z.number().min(0).max(100)}), skillRewards:z.record(z.number().nonnegative()) });
+const violinHint = z.object({string:z.enum(["G","D","A","E"]),finger:z.number().int().min(0).max(4),position:z.number().int().min(1).max(7),bow:z.enum(["down","up"]).optional(),slur:z.enum(["start","end"]).optional()});
+export const lessonSchema = z.object({ id:z.string().min(1), path:z.enum(["classical-technical","modern-chords","sightreading-intensive","guitar-foundations","guitar-chords-rhythm","violin-foundations","violin-technique"]), level:z.enum(["foundation","elementary","intermediate","late-intermediate","advanced","virtuoso"]), branch:z.enum(["technique","theory","repertoire"]), tier:z.number().int().min(0).max(7).default(0), skills:z.array(z.enum(SKILL_CHIPS)).default([]), title:z.string().min(1), estimatedMinutes:z.number().int().positive(), objectives:z.array(z.string().min(1)).min(1), instrument:playedInstrument.optional(), sections:z.array(section).min(1), unlockCriteria:z.object({requiresLessonIds:z.array(z.string()),minScore:z.number().min(0).max(100)}), skillRewards:z.record(z.number().nonnegative()) });
 const expectedNote = z.object({id:z.string().min(1),note:z.number().int().min(0).max(127),startBeat:z.number().nonnegative(),durationBeats:z.number().positive(),hand:z.enum(["left","right","both"]),finger:z.number().int().min(1).max(5).nullable(),chordGroupId:z.string().nullable(),voice:z.enum(["melody","bass","inner","chord"]).nullable()});
-export const midiExerciseSchema = z.object({exerciseId:z.string().min(1),tempoBpm:z.number().positive(),difficulty:z.enum(["beginner","intermediate","advanced"]),simultaneityWindowMs:z.number().positive(),timingToleranceMs:z.number().positive(),durationTolerancePercent:z.number().positive(),scoring:z.enum(["timed","untimed"]).optional(),beatsPerBar:z.number().int().positive().optional(),beatUnit:z.number().int().positive().optional(),keySignature:z.object({fifths:z.number().int().min(-7).max(7),mode:z.enum(["major","minor"])}).optional(),dynamics:z.object({evenVolume:z.boolean().optional(),balancedChords:z.boolean().optional()}).optional(),expected:z.array(expectedNote).min(1)});
+export const midiExerciseSchema = z.object({exerciseId:z.string().min(1),tempoBpm:z.number().positive(),difficulty:z.enum(["beginner","intermediate","advanced"]),simultaneityWindowMs:z.number().positive(),timingToleranceMs:z.number().positive(),durationTolerancePercent:z.number().positive(),scoring:z.enum(["timed","untimed"]).optional(),beatsPerBar:z.number().int().positive().optional(),beatUnit:z.number().int().positive().optional(),keySignature:z.object({fifths:z.number().int().min(-7).max(7),mode:z.enum(["major","minor"])}).optional(),dynamics:z.object({evenVolume:z.boolean().optional(),balancedChords:z.boolean().optional()}).optional(),instrument:playedInstrument.optional(),input:z.enum(["midi","mic-mono","mic-chord","any"]).optional(),chordTargets:z.array(chordTarget).optional(),techniqueHints:z.record(z.union([guitarHint,violinHint])).optional(),expected:z.array(expectedNote).min(1)});
 
 export function validateLesson(lesson: unknown): Lesson { return lessonSchema.parse(lesson) as Lesson }
-export function validateMidiExercise(exercise: unknown): MidiExercise { return midiExerciseSchema.parse(exercise) as MidiExercise }
+/**
+ * Mic grading fields (docs/specs/MUSIC-PORTAL.md 2.4). Kept apart from the base schema so
+ * an exercise stored before them validates exactly as before; zod strips unknown keys, so
+ * without these the server would silently drop them.
+ */
+export const micExerciseFields = {
+  instrument: z.enum(["piano", "guitar", "violin"]).optional(),
+  input: z.enum(["midi", "mic-mono", "mic-chord", "any"]).optional(),
+  intonationToleranceCents: z.number().positive().max(50).optional(),
+};
+const micAwareExerciseSchema = midiExerciseSchema.extend(micExerciseFields);
+export function validateMidiExercise(exercise: unknown): MidiExercise { return micAwareExerciseSchema.parse(exercise) as MidiExercise }
 export function isLessonUnlocked({lesson,completedLessonIds,scoresByLessonId}:{lesson:Lesson;completedLessonIds:string[];scoresByLessonId:Record<string,number>}): boolean {
   return lesson.unlockCriteria.requiresLessonIds.every(id => completedLessonIds.includes(id) && (scoresByLessonId[id] ?? 0) >= lesson.unlockCriteria.minScore);
 }
@@ -109,3 +124,5 @@ export function lessonsUnlockedBy<T extends Pick<Lesson, "id" | "unlockCriteria"
       lesson.unlockCriteria.requiresLessonIds.every((id) => completed.has(id)),
   );
 }
+
+export * from "./violin.js";

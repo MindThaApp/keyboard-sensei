@@ -560,7 +560,7 @@ function VirtualPiano({
   }
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="w-full" dir="ltr">
       <div
         ref={scrollerRef}
         className={`${scrollable ? "w-full overflow-x-auto pb-1" : "w-full"} ${flat ? "ks-flat" : "ks-case"} ks-keybed ${

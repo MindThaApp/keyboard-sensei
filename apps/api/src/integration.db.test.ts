@@ -382,6 +382,107 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("played instruments (piano / guitar / violin)", () => {
+    it("defaults to nothing chosen (reads as piano), stores choices on the account and validates them", async () => {
+      const user = await createUserWithPassword();
+      const profile = async (token: string) => (await api("GET", "/users/me", { token })).body;
+      const before = await profile(user.token);
+      expect(before.played_instruments).toEqual([]);
+      expect(before.active_instrument).toBeNull();
+
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { played_instruments: ["piano", "guitar"], active_instrument: "guitar" } });
+      expect(set.status).toBe(200);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      const after = await profile(login.body.accessToken);
+      expect(after.played_instruments).toEqual(["piano", "guitar"]);
+      expect(after.active_instrument).toBe("guitar");
+
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { active_instrument: "banjo" } })).status).toBe(400);
+      expect((await profile(user.token)).active_instrument).toBe("guitar");
+    });
+
+    it("lists lessons per instrument; rows from before instruments existed are piano", async () => {
+      const user = await createUserWithPassword();
+      const ids = (res: { body: { id: string }[] }) => res.body.map((lesson) => lesson.id).sort();
+      const contentIds = (instrument: string) =>
+        m.content.lessons.filter((lesson) => (lesson.instrument ?? "piano") === instrument).map((lesson) => lesson.id).sort();
+      const all = await api("GET", "/lessons", { token: user.token });
+      expect(all.status).toBe(200);
+      const byInstrument: Record<string, string[]> = {};
+      for (const instrument of ["piano", "guitar", "violin"]) {
+        const res = await api("GET", `/lessons?instrument=${instrument}`, { token: user.token });
+        expect(res.status).toBe(200);
+        expect(res.body.every((lesson: { instrument: string }) => lesson.instrument === instrument), instrument).toBe(true);
+        expect(ids(res), instrument).toEqual(contentIds(instrument));
+        byInstrument[instrument] = ids(res);
+      }
+      // Guitar and violin content is seeded, so each filtered list is a strict part of the whole.
+      expect(byInstrument.guitar!.length).toBeGreaterThan(0);
+      expect(byInstrument.violin!.length).toBeGreaterThan(0);
+      // Guitar and violin ship tiers 0-4 (spec 3.1 / 3.2).
+      expect(byInstrument.guitar!.length).toBe(36);
+      expect(byInstrument.violin!.length).toBe(25);
+      const tierCounts = (instrument: string) =>
+        (all.body as { instrument: string; tier: number }[])
+          .filter((lesson) => lesson.instrument === instrument)
+          .reduce<Record<number, number>>((counts, lesson) => ({ ...counts, [lesson.tier]: (counts[lesson.tier] ?? 0) + 1 }), {});
+      expect(tierCounts("guitar")).toEqual({ 0: 4, 1: 6, 2: 6, 3: 7, 4: 13 });
+      expect(tierCounts("violin")).toEqual({ 0: 2, 1: 2, 2: 5, 3: 7, 4: 9 });
+      expect(ids(all)).toEqual([...byInstrument.piano!, ...byInstrument.guitar!, ...byInstrument.violin!].sort());
+
+      // A row stored before the instrument column existed takes the column default: piano.
+      const legacyId = `legacy-test-${Date.now()}`;
+      const legacyLesson = { id: legacyId, path: "classical-technical", level: "foundation", branch: "technique", tier: 0, skills: [], title: "Legacy", estimatedMinutes: 5, objectives: ["x"], sections: [{ type: "markdown", title: "t", body: "b" }], unlockCriteria: { requiresLessonIds: [], minScore: 70 }, skillRewards: {} };
+      const order = ((await m.prisma.lesson.aggregate({ _max: { order: true } }))._max.order ?? 0) + 1;
+      await m.prisma.lesson.create({ data: { id: legacyId, lesson_json: legacyLesson, path: "classical-technical", level: "foundation", branch: "technique", order } });
+      try {
+        const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
+        expect(piano.body.find((lesson: { id: string }) => lesson.id === legacyId)?.instrument).toBe("piano");
+      } finally {
+        await m.prisma.lesson.delete({ where: { id: legacyId } });
+      }
+      expect((await api("GET", "/lessons?instrument=banjo", { token: user.token })).status).toBe(400);
+    });
+
+    it("never opens a lesson from another instrument's progress", async () => {
+      const user = await createUserWithPassword();
+      const stamp = Date.now();
+      const guitarId = `guitar-test-${stamp}`;
+      const guitarLesson = { id: guitarId, instrument: "guitar", path: "classical-technical", level: "foundation", branch: "technique", tier: 0, skills: [], title: "Guitar test", estimatedMinutes: 5, objectives: ["x"], sections: [{ type: "markdown", title: "t", body: "b" }], unlockCriteria: { requiresLessonIds: ["lesson-01"], minScore: 70 }, skillRewards: {} };
+      const order = ((await m.prisma.lesson.aggregate({ _max: { order: true } }))._max.order ?? 0) + 1;
+      await m.prisma.lesson.create({ data: { id: guitarId, lesson_json: guitarLesson, path: "classical-technical", level: "foundation", branch: "technique", instrument: "guitar", order } });
+      try {
+        // Even with a piano prerequisite satisfied this is a plain prerequisite check; the
+        // guitar list holds only guitar lessons, and the piano list never includes it.
+        const guitar = await api("GET", "/lessons?instrument=guitar", { token: user.token });
+        const seededGuitar = m.content.lessons.filter((lesson) => lesson.instrument === "guitar").map((lesson) => lesson.id);
+        expect(guitar.body.map((lesson: { id: string }) => lesson.id).sort()).toEqual([...seededGuitar, guitarId].sort());
+        expect(guitar.body.find((lesson: { id: string }) => lesson.id === guitarId).progress.status).toBe("locked");
+        const piano = await api("GET", "/lessons?instrument=piano", { token: user.token });
+        expect(piano.body.some((lesson: { id: string }) => lesson.id === guitarId)).toBe(false);
+      } finally {
+        await m.prisma.lesson.delete({ where: { id: guitarId } });
+      }
+    });
+  });
+
+  describe("tuner reference pitch (A4)", () => {
+    it("is stored on the account, validated to 415-466 Hz, and can be cleared", async () => {
+      const user = await createUserWithPassword();
+      const a4 = async (token: string) => (await api("GET", "/users/me", { token })).body.tuner_a4_hz;
+      expect(await a4(user.token)).toBeNull();
+      const set = await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 442.5 } });
+      expect(set.status).toBe(200);
+      expect(set.body.tuner_a4_hz).toBe(442.5);
+      const login = await api("POST", "/auth/login", { body: { email: user.email, password: PASSWORD } });
+      expect(await a4(login.body.accessToken)).toBe(442.5);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 400 } })).status).toBe(400);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: 500 } })).status).toBe(400);
+      expect(await a4(user.token)).toBe(442.5);
+      expect((await api("PATCH", "/users/me", { token: user.token, body: { tuner_a4_hz: null } })).body.tuner_a4_hz).toBeNull();
+    });
+  });
+
   describe("experience mode (Simple / Advanced)", () => {
     it("is stored on the account, read back on a later sign-in, and validated", async () => {
       const user = await createUserWithPassword();
@@ -1452,6 +1553,104 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
+  describe("offline outbox and content cache (M10)", () => {
+    const totalXp = async (userId: string) =>
+      (await m.prisma.xpEvent.aggregate({ where: { user_id: userId }, _sum: { amount: true } }))._sum.amount ?? 0;
+
+    it("stores a replayed attempt once, pays XP once and dates it when it was played", async () => {
+      const user = await createUser();
+      const playedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "offline-attempt-0001", playedAt };
+
+      const first = await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body });
+      expect(first.status).toBe(201);
+      expect(first.body.score).toBeGreaterThanOrEqual(70);
+      const xpAfterFirst = await totalXp(user.id);
+      expect(xpAfterFirst).toBeGreaterThan(0);
+
+      const replay = await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body });
+      expect(replay.status).toBe(200);
+      expect(replay.body).toMatchObject({ duplicate: true, rewards: null, score: first.body.score });
+
+      const rows = await m.prisma.exerciseAttempt.findMany({ where: { user_id: user.id } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.client_attempt_id).toBe("offline-attempt-0001");
+      expect(rows[0]!.created_at.toISOString()).toBe(playedAt);
+      expect(await totalXp(user.id)).toBe(xpAfterFirst);
+      expect(await statusOf(user.token, "lesson-01")).not.toBe("locked");
+    });
+
+    it("dedupes concurrent replays of the same attempt", async () => {
+      const user = await createUser();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "offline-attempt-race" };
+      const results = await Promise.all(
+        [0, 1, 2].map(() => api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 200, 201]);
+      expect(await m.prisma.exerciseAttempt.count({ where: { user_id: user.id } })).toBe(1);
+    });
+
+    it("keeps attempt ids per user and rejects reuse for another exercise", async () => {
+      const [a, b] = [await createUser(), await createUser()];
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]), clientAttemptId: "shared-attempt-id" };
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: a.token, body })).status).toBe(201);
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: b.token, body })).status).toBe(201);
+      const other = m.content.exercises.find((item) => item.exerciseId !== "exercise-01")!.exerciseId;
+      const conflict = await api("POST", `/exercises/${other}/attempts`, { token: a.token, body });
+      expect(conflict.status).toBe(409);
+      expect(conflict.body.error.code).toBe("client_attempt_id_conflict");
+    });
+
+    it("attempts without a client id behave exactly as before", async () => {
+      const user = await createUser();
+      const body = { performedNotes: exerciseOneNotes([48, 60, 72]) };
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })).status).toBe(201);
+      expect((await api("POST", "/exercises/exercise-01/attempts", { token: user.token, body })).status).toBe(201);
+      const rows = await m.prisma.exerciseAttempt.findMany({ where: { user_id: user.id } });
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row) => row.client_attempt_id === null)).toBe(true);
+    });
+
+    it("serves the offline bundle with a content-hash ETag and 304 while unchanged", async () => {
+      const user = await createUser();
+      const res = await fetch(`${baseUrl}/content/offline`, { headers: { authorization: `Bearer ${user.token}` } });
+      expect(res.status).toBe(200);
+      const bundle = await res.json();
+      const etag = res.headers.get("etag")!;
+      expect(etag).toBe(`"${bundle.contentHash}"`);
+      expect(bundle.lessons).toHaveLength(m.content.lessons.length);
+      const withExercises = bundle.lessons.find((entry: any) => entry.lesson.id === "lesson-01");
+      expect(withExercises.exercises.map((ex: any) => ex.exerciseId)).toContain("exercise-01");
+      // Answers never leave the server, offline or not.
+      const quizzes = bundle.lessons.flatMap((entry: any) => entry.lesson.sections.filter((s: any) => s.type === "quiz"));
+      expect(quizzes.length).toBeGreaterThan(0);
+      expect(quizzes.flatMap((q: any) => q.questions).every((q: any) => q.correctIndex === undefined)).toBe(true);
+
+      const again = await fetch(`${baseUrl}/content/offline`, {
+        headers: { authorization: `Bearer ${user.token}`, "if-none-match": etag },
+      });
+      expect(again.status).toBe(304);
+
+      // Progress is not content: completing a lesson keeps the hash.
+      await passEveryExercise(user.token, "lesson-01");
+      const version = await api("GET", "/content/version", { token: user.token });
+      expect(version.body.contentHash).toBe(bundle.contentHash);
+
+      // A content change (a retired lesson) changes it.
+      await m.prisma.lesson.update({ where: { id: "lesson-02" }, data: { retired_at: new Date() } });
+      const changed = await fetch(`${baseUrl}/content/offline`, {
+        headers: { authorization: `Bearer ${user.token}`, "if-none-match": etag },
+      });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).contentHash).not.toBe(bundle.contentHash);
+      await m.prisma.lesson.update({ where: { id: "lesson-02" }, data: { retired_at: null } });
+    });
+
+    it("requires sign-in for the bundle", async () => {
+      expect((await api("GET", "/content/offline")).status).toBe(401);
+    });
+  });
+
   describe("narration", () => {
     it("rejects a voice id outside the allow-list before any synthesis", async () => {
       const user = await createUser();
@@ -1560,7 +1759,8 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
     });
   });
 
-  describe("content seeding", () => {
+  // Each test reseeds the whole course (every instrument) several times.
+  describe("content seeding", { timeout: 30_000 }, () => {
     const dummyLesson = (id: string): Lesson => ({
       ...m.content.lessons[0]!,
       id,
@@ -1662,13 +1862,20 @@ describe.skipIf(!enabled)("API against a real Postgres", () => {
       const res = await api("GET", "/lessons", { token: user.token });
       expect(res.status).toBe(200);
       const perTier = new Map<number, number>();
+      const guitarPerTier = new Map<number, number>();
+      const violinPerTier = new Map<number, number>();
       for (const item of res.body as Array<{ id: string; tier: number; skills: string[] }>) {
         const expected = m.content.lessons.find((lesson) => lesson.id === item.id)!;
         expect(item.tier, item.id).toBe(expected.tier);
         expect(item.skills, item.id).toEqual(expected.skills);
-        perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
+        // Other instruments count their own tiers; the piano course keeps these numbers.
+        if (expected.instrument === "guitar") guitarPerTier.set(item.tier, (guitarPerTier.get(item.tier) ?? 0) + 1);
+        else if (expected.instrument === "violin") violinPerTier.set(item.tier, (violinPerTier.get(item.tier) ?? 0) + 1);
+        else if ((expected.instrument ?? "piano") === "piano") perTier.set(item.tier, (perTier.get(item.tier) ?? 0) + 1);
       }
       expect([...perTier.entries()].sort()).toEqual([[0, 6], [1, 6], [2, 9], [3, 10], [4, 15], [5, 13]]);
+      expect([...guitarPerTier.entries()].sort()).toEqual([[0, 4], [1, 6], [2, 6], [3, 7], [4, 13]]);
+      expect([...violinPerTier.entries()].sort()).toEqual([[0, 2], [1, 2], [2, 5], [3, 7], [4, 9]]);
       const detail = await api("GET", "/lessons/lesson-25", { token: user.token });
       expect(detail.body.lesson).toMatchObject({ tier: 3, skills: ["repertoire"] });
     });

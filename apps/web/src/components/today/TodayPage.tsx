@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { t, getLocale, useT } from "../../i18n";
 import { getToday, type TodayResponse } from "../../services/api";
 import { useRewardsVersion } from "../../state/rewards";
 import { useDeviceClass } from "../../contexts/AppearanceContext";
@@ -11,8 +12,8 @@ import { Button, Card, Chip, EmptyState, ErrorState, ListGroup, ListRow, Progres
 import { StarRating } from "../progress/ProgressBits";
 import DailyChallengeRow, { useChallengeToday } from "../challenge/DailyChallengeRow";
 
-const HANDS_LABEL = { both: "both hands", right: "right hand", left: "left hand" } as const;
-const LEVEL_LABEL = { full: "Full", simplified: "Simplified", easy: "Easy", melody: "Melody" } as const;
+const handsLabel = (hands: "both" | "right" | "left") => t(`today.hands.${hands}`);
+const levelLabel = (level: "full" | "simplified" | "easy" | "melody") => t(`today.level.${level}`);
 
 /** Lessons a learner finishes before the Gym's fifth-and-chord drills make sense. */
 const LESSONS_BEFORE_VARIED_WARMUPS = 4;
@@ -30,53 +31,54 @@ function warmupForLearner(today: TodayResponse): PracticeGymDrill | null {
 }
 
 function goalHeadline(minutesToday: number, goalMinutes: number, met: boolean): string {
-  if (met) return "Goal met today. Nice work.";
+  if (met) return t("today.goalMet");
   if (minutesToday > 0) {
     const left = Math.max(1, Math.ceil(goalMinutes - minutesToday));
-    return `${left} more minute${left === 1 ? "" : "s"} today`;
+    return t("today.minutesLeft", { n: left });
   }
-  return "Ready for today's practice?";
+  return t("today.ready");
 }
 
 function GoalCard({ today }: { today: TodayResponse }) {
+  useT();
   const { minutesToday, goalMinutes, met } = today.dailyGoal;
   const { streak } = today;
   const hasMetGoal = streak.longest > 0 || streak.freezesAvailable > 0 || streak.frozenDays.length > 0;
   const whole = Math.floor(minutesToday);
   return (
-    <Card as="section" aria-label="Daily goal">
+    <Card as="section" aria-label={t("today.dailyGoal")}>
       <div className="flex items-center gap-4">
       <ProgressRing
         value={goalMinutes > 0 ? minutesToday / goalMinutes : 0}
         size={104}
         stroke={10}
         label={<span data-testid="goal-minutes">{whole}</span>}
-        sublabel={`of ${goalMinutes} min`}
-        aria-label={`${whole} of ${goalMinutes} minutes today`}
+        sublabel={t("today.minutesOfGoal", { goal: goalMinutes })}
+        aria-label={t("today.minutesTodayAria", { done: whole, goal: goalMinutes })}
       />
       <div className="min-w-0 flex-1 space-y-2">
         <h2 className="text-title3 text-label">{goalHeadline(minutesToday, goalMinutes, met)}</h2>
         <p className="text-subhead text-label-2a" data-testid="streak-line">
           {streak.current > 0
-            ? "Practise a little every day to build your streak."
-            : "Meet your goal to start a streak."}
+            ? t("today.streakKeep")
+            : t("today.streakStart")}
         </p>
         {streak.current > 0 && (
           <Chip tone="tint" icon="🔥">
-            {streak.current}-day streak
-            {streak.longest > streak.current && ` · best ${streak.longest}`}
+            {t("today.streakDays", { n: streak.current })}
+            {streak.longest > streak.current && t("today.streakBest", { n: streak.longest })}
           </Chip>
         )}
         {streak.frozenDays.length > 0 && (
           <p className="text-footnote text-label-2a" data-testid="freeze-used">
-            <span aria-hidden>❄️ </span>A day-off pass covered {streak.frozenDays.length === 1 ? "a missed day" : `${streak.frozenDays.length} missed days`}.
+            <span aria-hidden>❄️ </span>{streak.frozenDays.length === 1 ? t("today.frozenOne") : t("today.frozenMany", { n: streak.frozenDays.length })}
           </p>
         )}
         {hasMetGoal && (
           <p className="text-footnote text-label-2a">
             {streak.freezesAvailable > 0
-              ? `${streak.freezesAvailable} day-off pass${streak.freezesAvailable > 1 ? "es" : ""} saved. A missed day won't break your streak.`
-              : `Meet your goal ${streak.daysToNextFreeze} more day${streak.daysToNextFreeze === 1 ? "" : "s"} in a row to earn a day-off pass.`}
+              ? t("today.freezesSaved", { n: streak.freezesAvailable })
+              : t("today.freezeNext", { n: streak.daysToNextFreeze })}
           </p>
         )}
       </div>
@@ -86,12 +88,13 @@ function GoalCard({ today }: { today: TodayResponse }) {
 }
 
 function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) {
+  useT();
   const percent = next.exercisesTotal > 0 ? Math.round((next.exercisesPassed / next.exercisesTotal) * 100) : 0;
   return (
-    <Card as="section" aria-label="Up next" padding="lg">
+    <Card as="section" aria-label={t("today.upNext")} padding="lg">
       <div className="flex flex-col gap-3">
       <div className="space-y-1">
-        <p className="text-footnote font-semibold uppercase tracking-wide text-tint">{next.started ? "Continue" : "Up next"}</p>
+        <p className="text-footnote font-semibold uppercase tracking-wide text-tint">{next.started ? t("today.continueLabel") : t("today.upNext")}</p>
         <h2 className="text-title2 text-label">{next.lessonTitle}</h2>
         <p className="text-subhead text-label-2a">{pathLabel(next.path)}</p>
       </div>
@@ -100,7 +103,7 @@ function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) 
           <div
             className="h-2 overflow-hidden rounded-pill bg-fill"
             role="progressbar"
-            aria-label="Exercises passed in this lesson"
+            aria-label={t("today.exercisesPassedAria")}
             aria-valuemin={0}
             aria-valuemax={next.exercisesTotal}
             aria-valuenow={next.exercisesPassed}
@@ -108,13 +111,13 @@ function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) 
             <div className="h-full rounded-pill bg-tint-fill" style={{ width: `${percent}%` }} />
           </div>
           <p className="mt-1.5 text-footnote text-label-2a">
-            {next.exercisesPassed} of {next.exercisesTotal} exercises passed
+            {t("today.exercisesPassed", { passed: next.exercisesPassed, total: next.exercisesTotal })}
           </p>
         </div>
       )}
-      {next.exerciseTitle && <p className="text-subhead text-label-2">Next: {next.exerciseTitle}</p>}
+      {next.exerciseTitle && <p className="text-subhead text-label-2">{t("today.nextExercise", { title: next.exerciseTitle })}</p>}
       <Link to={lessonExerciseLink(next.lessonId, next.exerciseId)} className="ks-btn ks-btn--filled ks-btn--lg mt-1">
-        {next.started ? "Continue lesson" : "Start lesson"}
+        {next.started ? t("today.continueLesson") : t("today.startLesson")}
       </Link>
       </div>
     </Card>
@@ -122,10 +125,11 @@ function UpNextCard({ next }: { next: NonNullable<TodayResponse["continue"]> }) 
 }
 
 function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGymDrill | null }) {
+  useT();
   const { review, song } = today;
   const challenge = useChallengeToday();
   return (
-    <ListGroup header="Also today" aria-label="Also today">
+    <ListGroup header={t("today.alsoToday")} aria-label={t("today.alsoToday")}>
       {song && (
         <ListRow
           as={Link}
@@ -138,7 +142,7 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
               {song.stars > 0 && <StarRating stars={song.stars} />}
             </span>
           }
-          subtitle={`${song.reason} Starts with the ${HANDS_LABEL[song.hands]}, ${LEVEL_LABEL[song.level]} level.`}
+          subtitle={t("today.songReason", { reason: song.reason, hands: handsLabel(song.hands), level: levelLabel(song.level) })}
           accessory="chevron"
         />
       )}
@@ -148,11 +152,10 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           to={lessonExerciseLink(review.lessonId, review.exerciseId)}
           icon="↻"
           iconColor="rgb(88 86 214)"
-          title="Quick review"
+          title={t("today.quickReview")}
           subtitle={
             <span data-testid="review-detail">
-              {review.exerciseTitle} from “{review.lessonTitle}”. Last time you scored {Math.round(review.lastScore)}
-              {review.mistakeCount > 0 && `, with ${review.mistakeCount} note${review.mistakeCount === 1 ? "" : "s"} to fix`}.
+              {t("today.reviewDetail", { exercise: review.exerciseTitle, lesson: review.lessonTitle, score: Math.round(review.lastScore), mistakes: review.mistakeCount })}
             </span>
           }
           accessory="chevron"
@@ -164,8 +167,8 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
           to={drillLink(warmup.id)}
           icon="♫"
           iconColor="rgb(52 199 89)"
-          title="Warm up your fingers"
-          subtitle={`${warmup.label} · 2 min`}
+          title={t("today.warmUp")}
+          subtitle={t("today.warmUpSub", { label: warmup.label })}
           accessory="chevron"
         />
       )}
@@ -174,8 +177,8 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
         to="/practice/notes"
         icon="♯"
         iconColor="rgb(255 45 85)"
-        title="Note reading"
-        subtitle="Name notes on the staff · 2 min"
+        title={t("today.noteReading")}
+        subtitle={t("today.noteReadingSub")}
         accessory="chevron"
       />
       <DailyChallengeRow today={challenge} />
@@ -184,8 +187,8 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
         to="/import"
         icon="+"
         iconColor="var(--tint)"
-        title="Add a song"
-        subtitle="Import a MIDI file, a score, a link or a photo of sheet music"
+        title={t("today.addSong")}
+        subtitle={t("today.addSongSub")}
         accessory="chevron"
       />
     </ListGroup>
@@ -193,8 +196,9 @@ function AlsoToday({ today, warmup }: { today: TodayResponse; warmup: PracticeGy
 }
 
 function TodaySkeleton() {
+  useT();
   return (
-    <div className="space-y-4" role="status" aria-label="Loading today">
+    <div className="space-y-4" role="status" aria-label={t("today.loading")}>
       <Skeleton height={136} radius={20} />
       <Skeleton height={200} radius={20} />
     </div>
@@ -202,6 +206,7 @@ function TodaySkeleton() {
 }
 
 export default function TodayPage() {
+  useT();
   const [today, setToday] = useState<TodayResponse | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -223,7 +228,7 @@ export default function TodayPage() {
     };
   }, [version, attempt]);
 
-  const dateLabel = new Date(`${today?.today ?? new Date().toISOString().slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
+  const dateLabel = new Date(`${today?.today ?? new Date().toISOString().slice(0, 10)}T12:00:00`).toLocaleDateString(getLocale(), {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -233,14 +238,14 @@ export default function TodayPage() {
     <div className="space-y-5">
       <header>
         <p className="text-footnote font-semibold uppercase tracking-wide text-label-2a">{dateLabel}</p>
-        <h1 className="text-large-title text-label">Today</h1>
+        <h1 className="text-large-title text-label">{t("today.title")}</h1>
       </header>
 
       {error && !today ? (
         <ErrorState
-          title="Couldn't load today's plan"
-          message="Check your connection and try again."
-          action={<Button variant="filled" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>}
+          title={t("today.loadError")}
+          message={t("common.checkConnection")}
+          action={<Button variant="filled" onClick={() => setAttempt((n) => n + 1)}>{t("common.tryAgain")}</Button>}
         />
       ) : !today ? (
         <TodaySkeleton />
@@ -252,6 +257,7 @@ export default function TodayPage() {
 }
 
 function TodayContent({ today, wide }: { today: TodayResponse; wide: boolean }) {
+  useT();
   const warmup = warmupForLearner(today);
   const next = today.continue;
   const hero = next ? (
@@ -259,9 +265,9 @@ function TodayContent({ today, wide }: { today: TodayResponse; wide: boolean }) 
   ) : (
     <Card as="section" padding="lg">
       <EmptyState
-        title="Every lesson complete"
-        message="Polish your stars, or pick a song."
-        action={<Link to="/learn" className="ks-btn ks-btn--tinted">Browse lessons</Link>}
+        title={t("today.allDone")}
+        message={t("today.allDoneMsg")}
+        action={<Link to="/learn" className="ks-btn ks-btn--tinted">{t("today.browseLessons")}</Link>}
       />
     </Card>
   );
@@ -277,8 +283,8 @@ function TodayContent({ today, wide }: { today: TodayResponse; wide: boolean }) 
         <>
           <section aria-labelledby="recent-achievements" className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
-              <h2 id="recent-achievements" className="text-headline text-label">Recent achievements</h2>
-              <Link to="/progress?tab=achievements" className="text-subhead text-tint">All achievements</Link>
+              <h2 id="recent-achievements" className="text-headline text-label">{t("today.recentAchievements")}</h2>
+              <Link to="/progress?tab=achievements" className="text-subhead text-tint">{t("today.allAchievements")}</Link>
             </div>
             <ul className="grid gap-2 sm:grid-cols-3">
               {today.recentAchievements.map((achievement) => (

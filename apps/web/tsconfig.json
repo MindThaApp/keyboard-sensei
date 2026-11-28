@@ -26,13 +26,21 @@
     "baseUrl": ".",
     "paths": {
       "@keyboard-sensei/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@keyboard-sensei/audio-analysis": ["../../packages/audio-analysis/src/index.ts"],
       "@keyboard-sensei/challenge-gen": ["../../packages/challenge-gen/src/index.ts"],
       "@keyboard-sensei/lesson-engine": ["../../packages/lesson-engine/src/index.ts"],
       "@keyboard-sensei/midi-engine": ["../../packages/midi-engine/src/index.ts"],
       "@keyboard-sensei/midi-engine/web": ["../../packages/midi-engine/src/web.ts"],
       "@keyboard-sensei/midi-engine/capacitor": ["../../packages/midi-engine/src/capacitor.ts"],
+      "@keyboard-sensei/midi-engine/windows": ["../../packages/midi-engine/src/windows.ts"],
       "@keyboard-sensei/playalong-core": ["../../packages/playalong-core/src/index.ts"],
-      "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"]
+      "@keyboard-sensei/audio-analysis/testing": ["../../packages/audio-analysis/src/testing/index.ts"],
+      "@keyboard-sensei/audio-analysis/chord": ["../../packages/audio-analysis/src/chord/index.ts"],
+      "@keyboard-sensei/piano-check": ["../../packages/piano-check/src/index.ts"],
+      "@keyboard-sensei/piano-check/testing": ["../../packages/piano-check/src/testing/synth.ts"],
+      "@keyboard-sensei/music-theory": ["../../packages/music-theory/src/index.ts"],
+      "@keyboard-sensei/music-theory/violin": ["../../packages/music-theory/src/violin.ts"],
+      "@keyboard-sensei/piano-tuning": ["../../packages/piano-tuning/src/index.ts"]
     }
   },
   "include": ["src", "scripts"],

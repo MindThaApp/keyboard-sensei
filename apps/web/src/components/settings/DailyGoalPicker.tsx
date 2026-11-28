@@ -1,11 +1,6 @@
+import { t, useT } from "../../i18n";
 import { DAILY_GOAL_OPTIONS, type DailyGoalMinutes } from "../../services/api";
 
-const DESCRIPTION: Record<DailyGoalMinutes, string> = {
-  5: "Casual",
-  10: "Regular",
-  15: "Serious",
-  20: "Intense",
-};
 
 /** The four daily-goal choices as a radio group of cards. */
 export default function DailyGoalPicker({
@@ -17,8 +12,9 @@ export default function DailyGoalPicker({
   onChange(minutes: DailyGoalMinutes): void;
   disabled?: boolean;
 }) {
+  useT();
   return (
-    <div role="radiogroup" aria-label="Daily practice goal" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div role="radiogroup" aria-label={t("settings.dailyGoal")} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {DAILY_GOAL_OPTIONS.map((minutes) => {
         const selected = value === minutes;
         return (
@@ -35,8 +31,8 @@ export default function DailyGoalPicker({
                 : "border-slate-200 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900"
             }`}
           >
-            <span className="block text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{minutes} min</span>
-            <span className="block text-xs text-slate-600 dark:text-slate-300">{DESCRIPTION[minutes]} · a day</span>
+            <span className="block text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{t("settings.goalMin", { minutes })}</span>
+            <span className="block text-xs text-slate-600 dark:text-slate-300">{t("settings.goalADay", { label: t(`settings.goal.${minutes}`) })}</span>
           </button>
         );
       })}

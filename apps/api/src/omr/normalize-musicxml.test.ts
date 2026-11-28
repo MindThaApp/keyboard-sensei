@@ -53,7 +53,8 @@ describe("normalizeRecognisedMusicXml", () => {
     expect(raw.report.overfullMeasures).toBe(31);
     expect(fixed.report.overfullMeasures).toBe(0);
     expect(fixed.report.printedMeasures).toBe(35);
-  });
+    // Two full Verovio imports: past the 5 s default when the DB suite shares the CPU.
+  }, 30_000);
 
   it("moves a forward repeat written on the right of its bar to the left, so the repeats play as printed", async () => {
     const { text, movedRepeats } = normalizeRecognisedMusicXml(MINUET);

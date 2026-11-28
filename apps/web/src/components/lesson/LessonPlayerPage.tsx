@@ -1,3 +1,5 @@
+import GuitarSection, { isGuitarSection } from "../notation/GuitarSection";
+import { t, useT } from "../../i18n";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import MarkdownSectionView from "./MarkdownSectionView";
@@ -19,6 +21,7 @@ import { levelLabel } from "../../utils/levels";
 import { missingPrerequisites, pathLabel, placeInPath } from "../../utils/paths";
 
 export default function LessonPlayerPage() {
+  useT();
   const { lessonId } = useParams<{ lessonId: string }>();
   const lessons = useProgressStore((s) => s.lessons);
   const progress = useProgressStore((s) => s.progress);
@@ -52,11 +55,11 @@ export default function LessonPlayerPage() {
     setDetailError(null);
     getLesson(lessonId)
       .then(setDetail)
-      .catch((e) => setDetailError(e instanceof Error ? e.message : "Unable to load lesson content"));
+      .catch((e) => setDetailError(e instanceof Error ? e.message : t("player.loadFailed")));
   }, [lessonId]);
 
   if (!loaded || !progress) {
-    return <p className="text-slate-500 dark:text-slate-300">Loading lesson…</p>;
+    return <p className="text-slate-500 dark:text-slate-300">{t("player.loading")}</p>;
   }
 
   const index = lessons.findIndex((l) => l.id === lessonId);
@@ -65,8 +68,8 @@ export default function LessonPlayerPage() {
   if (lesson === null) {
     return (
       <div className="space-y-2">
-        <p className="text-slate-700 dark:text-slate-200">Lesson not found.</p>
-        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
+        <p className="text-slate-700 dark:text-slate-200">{t("player.notFound")}</p>
+        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">{t("player.backToLessons")}</Link>
       </div>
     );
   }
@@ -75,10 +78,9 @@ export default function LessonPlayerPage() {
     return (
       <div className="space-y-2">
         <p className="text-slate-700 dark:text-slate-200">
-          To unlock &ldquo;{lesson.title}&rdquo;, first complete:{" "}
-          {missingPrerequisites(lessons, lesson).map((title) => `“${title}”`).join(", ") || "the previous lesson"}.
+          {t("player.unlockFirst", { title: lesson.title, list: missingPrerequisites(lessons, lesson).map((title) => `“${title}”`).join(", ") || t("player.previousLesson") })}
         </p>
-        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">Back to lessons</Link>
+        <Link to="/learn" className="text-felt-700 underline dark:text-felt-300">{t("player.backToLessons")}</Link>
       </div>
     );
   }
@@ -100,27 +102,27 @@ export default function LessonPlayerPage() {
   return (
     <div className="space-y-6">
       <GlassSurface className="sticky top-3 z-30 flex items-center gap-1 rounded-full p-1.5">
-        <Button variant="plain" aria-label="Back to lessons" onClick={() => navigate("/learn")}>
+        <Button variant="plain" aria-label={t("player.backToLessons")} onClick={() => navigate("/learn")}>
           <span aria-hidden>‹</span>
         </Button>
         <h1 className="glass-text min-w-0 flex-1 truncate px-1 text-center text-base font-semibold">{lesson.title}</h1>
-        <Button variant="plain" aria-label="About this lesson" aria-haspopup="dialog" onClick={() => setDetailsOpen(true)}>
+        <Button variant="plain" aria-label={t("player.about")} aria-haspopup="dialog" onClick={() => setDetailsOpen(true)}>
           <span aria-hidden>⋯</span>
         </Button>
       </GlassSurface>
       <div className="-mt-3">
         <p className="text-sm text-slate-500 dark:text-slate-300">
-          {levelLabel(lesson.level)} · {lesson.estimatedMinutes} min · {place.position} of {place.total} in {pathLabel(lesson.path)}
+          {t("player.meta", { level: levelLabel(lesson.level), minutes: lesson.estimatedMinutes, pos: place.position, total: place.total, path: pathLabel(lesson.path) })}
         </p>
         {!hasExercises && <div className="mt-3">{objectives}</div>}
       </div>
 
-      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title="About this lesson">
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} title={t("player.about")}>
         <div className="space-y-4 px-1 pb-2">
           {objectives}
           {hasExercises && <MidiStatusBar />}
           <Link to="/learn" className="inline-block text-sm text-felt-700 underline dark:text-felt-300">
-            All lessons
+            {t("player.allLessons")}
           </Link>
         </div>
       </Sheet>
@@ -129,16 +131,16 @@ export default function LessonPlayerPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brass-400/60 bg-brass-100/60 px-4 py-3 dark:border-brass-600/50 dark:bg-brass-700/10">
           <p className="flex items-center gap-2 text-sm font-medium text-brass-700 dark:text-brass-300">
             <StarRating stars={lessonStars(lesson.progress.status, lesson.progress.bestScore)} />
-            Lesson passed · Best {lesson.progress.bestScore}
+            {t("player.passed", { score: lesson.progress.bestScore })}
           </p>
           {unlockedSongs.map((song) => (
             <Link key={song.songId} to={songPracticeLink(song.songId)} className="text-sm font-medium text-felt-700 underline dark:text-felt-300">
-              🎵 Song unlocked: {song.title}
+              {t("player.songUnlocked", { title: song.title })}
             </Link>
           ))}
           {nextLesson && nextUnlocked && (
             <Link to={`/lessons/${nextLesson.id}`} className="primary-button">
-              Next: {nextLesson.title} →
+              {t("player.nextLesson", { title: nextLesson.title })}
             </Link>
           )}
         </div>
@@ -146,7 +148,7 @@ export default function LessonPlayerPage() {
 
       {detailError && (
         <p role="alert" className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200">
-          {detailError} — exercises may not load. Refresh to retry.
+          {t("player.loadWarning", { error: detailError })}
         </p>
       )}
 
@@ -162,7 +164,7 @@ export default function LessonPlayerPage() {
             if (!detail) {
               return (
                 <p key={block.index} className="text-sm text-slate-500 dark:text-slate-300">
-                  Loading exercises…
+                  {t("player.loadingExercises")}
                 </p>
               );
             }
@@ -186,6 +188,7 @@ export default function LessonPlayerPage() {
             case "theory-card":
               return <TheoryCardSectionView key={sectionIndex} section={section} lessonId={lesson.id} sectionIndex={sectionIndex} />;
             case "notation":
+              if (isGuitarSection(section.vexflowData)) return <GuitarSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
               return <LiveNotationSection key={sectionIndex} data={section.vexflowData} title={section.title} />;
             case "quiz":
               return <QuizSectionView key={sectionIndex} section={section} />;

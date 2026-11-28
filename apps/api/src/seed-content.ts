@@ -75,6 +75,7 @@ export async function seedContent(
           path: lesson.path,
           level: lesson.level,
           branch: lesson.branch,
+          instrument: lesson.instrument ?? "piano",
           tier: lesson.tier,
           skills: lesson.skills,
           order: index + 1,

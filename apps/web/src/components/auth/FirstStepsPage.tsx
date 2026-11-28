@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { midiNoteToName } from "@keyboard-sensei/music-theory";
@@ -25,6 +26,7 @@ type Step = 0 | 1 | 2 | "done";
  * the daily goal (or to saving the demo, as the assessment would have).
  */
 export default function FirstStepsPage() {
+  useT();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const source = parseSourceParam(params.get("from"));
@@ -40,7 +42,7 @@ export default function FirstStepsPage() {
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const press = device === "screen" ? "Tap" : "Press";
+  const press = device === "screen" ? t("first.tap") : t("first.press");
 
   const advance = useCallback((to: Step) => {
     setCheer(true);
@@ -82,7 +84,7 @@ export default function FirstStepsPage() {
       resetProgress();
       navigate(source === "demo" ? "/welcome/save-progress" : "/welcome/goal", { replace: true });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+      setError(e instanceof Error ? e.message : t("first.failed"));
       setFinishing(false);
     }
   };
@@ -99,14 +101,14 @@ export default function FirstStepsPage() {
   let heading = "";
   let detail = "";
   if (step === 0) {
-    heading = `${press} the glowing middle C`;
-    detail = "It's the white key just left of the group of two black keys, near the middle.";
+    heading = t("first.s0", { verb: press });
+    detail = t("first.s0d");
   } else if (step === 1) {
-    heading = "Find the group of two black keys";
-    detail = `${press} both of them. They glow until you do.`;
+    heading = t("first.s1");
+    detail = t("first.s1d", { verb: press });
   } else if (step === 2) {
-    heading = "Play the start of Ode to Joy";
-    detail = `The piano waits for you. ${press} each glowing key (${midiNoteToName(ODE_TO_JOY_PHRASE[phraseIndex]!)} next).`;
+    heading = t("first.s2");
+    detail = t("first.s2d", { verb: press, note: midiNoteToName(ODE_TO_JOY_PHRASE[phraseIndex]!) });
   }
 
   return (
@@ -115,19 +117,19 @@ export default function FirstStepsPage() {
 
       {step === "done" ? (
         <section className="space-y-4 text-center" aria-live="polite">
-          <h1 className="font-display text-3xl font-semibold">You played your first tune</h1>
+          <h1 className="font-display text-3xl font-semibold">{t("first.doneTitle")}</h1>
           <p className="text-slate-600 dark:text-slate-300">
-            That was the start of Ode to Joy. Next, choose how much to practise each day.
+            {t("first.doneBody")}
           </p>
           <Button variant="filled" size="lg" loading={finishing} onClick={() => void next()}>
-            Continue
+            {t("common.continue")}
           </Button>
         </section>
       ) : (
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-              Step {Number(step) + 1} of {STEP_COUNT}
+              {t("first.step", { n: Number(step) + 1, total: STEP_COUNT })}
             </p>
             <span className="flex items-center gap-1.5" aria-hidden="true">
               {Array.from({ length: STEP_COUNT }, (_, i) => (
@@ -143,7 +145,7 @@ export default function FirstStepsPage() {
           <h1 className="font-display text-2xl font-semibold">{heading}</h1>
           <p className="text-sm text-slate-600 dark:text-slate-300">{detail}</p>
           <p role="status" className="min-h-[1.5rem] text-sm font-medium text-felt-700 dark:text-felt-300">
-            {cheer ? "Nice!" : nudge ? "Not that one. Look for the glowing key." : ""}
+            {cheer ? t("first.cheer") : nudge ? t("first.nudge") : ""}
           </p>
         </section>
       )}
@@ -173,7 +175,7 @@ export default function FirstStepsPage() {
           disabled={finishing}
           onClick={() => void next()}
         >
-          Skip the first steps
+          {t("first.skip")}
         </button>
       )}
     </div>

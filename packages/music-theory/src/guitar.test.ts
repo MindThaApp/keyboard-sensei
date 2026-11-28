@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+import { chordBassPitchClass, chordMidiNotes, chordPitchClasses, defaultFretting, fretToMidi, fretsForMidi, GUITAR_CHORDS, guitarChord } from "./index.js";
+
+describe("fretboard", () => {
+  it("maps open strings and frets to sounding pitch", () => {
+    expect(fretToMidi(6, 0)).toBe(40);
+    expect(fretToMidi(1, 0)).toBe(64);
+    expect(fretToMidi(2, 1)).toBe(60);
+    expect(fretToMidi(3, 4)).toBe(59);
+  });
+  it("finds the lowest-fret position", () => {
+    expect(defaultFretting(59)).toEqual({ string: 2, fret: 0 });
+    expect(defaultFretting(65)).toEqual({ string: 1, fret: 1 });
+    expect(defaultFretting(30)).toBeNull();
+    expect(fretsForMidi(64).map((p) => p.string)).toContain(1);
+  });
+  it("rejects bad input", () => {
+    expect(() => fretToMidi(7, 0)).toThrow();
+    expect(() => fretToMidi(1, -1)).toThrow();
+  });
+});
+
+describe("chord dictionary", () => {
+  const cases: Record<string, number[]> = {
+    Em: [4, 7, 11], Am: [0, 4, 9], E: [4, 8, 11], A: [1, 4, 9], D: [2, 6, 9], G: [2, 7, 11],
+    C: [0, 4, 7], D7: [0, 2, 6, 9], A7: [4, 7, 9, 1].sort((a, b) => a - b), Dm: [2, 5, 9],
+  };
+  for (const [symbol, pcs] of Object.entries(cases)) {
+    it(`${symbol} sounds ${pcs.join(",")}`, () => {
+      expect(chordPitchClasses(guitarChord(symbol))).toEqual([...pcs].sort((a, b) => a - b));
+    });
+  }
+  it("has consistent shapes", () => {
+    for (const symbol of Object.keys(GUITAR_CHORDS)) {
+      const chord = GUITAR_CHORDS[symbol]!;
+      expect(chord.frets).toHaveLength(6);
+      expect(chord.fingers).toHaveLength(6);
+      chord.frets.forEach((fret, i) => {
+        if (fret === null || fret === 0) expect(chord.fingers[i]).toBe(0);
+        else expect(chord.fingers[i]).toBeGreaterThan(0);
+      });
+      expect(chordMidiNotes(chord).length).toBeGreaterThanOrEqual(4);
+    }
+  });
+  it("bass note is the lowest sounding string", () => {
+    expect(chordBassPitchClass(guitarChord("Am"))).toBe(9);
+    expect(chordBassPitchClass(guitarChord("D"))).toBe(2);
+    expect(chordBassPitchClass(guitarChord("G"))).toBe(7);
+  });
+});
+
+import { nearNeighbours, parseChordSymbol, sameChord } from "./index.js";
+describe("chord symbols", () => {
+  it("parses roots and qualities", () => {
+    expect(parseChordSymbol("Em")).toEqual({ root: 4, suffix: "m", pitchClasses: [4, 7, 11] });
+    expect(parseChordSymbol("Bbmaj7")?.root).toBe(10);
+    expect(parseChordSymbol("H")).toBeNull();
+    expect(parseChordSymbol("Cadd9")).toBeNull();
+  });
+  it("compares chords by notes", () => {
+    expect(sameChord("A#", "Bb")).toBe(true);
+    expect(sameChord("C", "Cmaj7")).toBe(false);
+    expect(nearNeighbours("C", "Cmaj7")).toBe(true);
+    expect(nearNeighbours("C", "Am")).toBe(false);
+    expect(nearNeighbours("C", "Cm")).toBe(false);
+  });
+  it("dictionary symbols are all in the vocabulary and agree with their diagrams", () => {
+    for (const symbol of Object.keys(GUITAR_CHORDS)) {
+      const parsed = parseChordSymbol(symbol);
+      expect(parsed, symbol).not.toBeNull();
+      const drawn = chordPitchClasses(GUITAR_CHORDS[symbol]!);
+      // every note of the named chord is in the diagram, and the diagram adds nothing foreign
+      expect(drawn.filter((pc) => !parsed!.pitchClasses.includes(pc)), symbol).toEqual([]);
+      // only the fifth may be left out (C7 is normally played without it)
+      expect(parsed!.pitchClasses.filter((pc) => !drawn.includes(pc) && pc !== (parsed!.root + 7) % 12), symbol).toEqual([]);
+    }
+  });
+});
+
+import { GUITAR_BARRE_CHORDS, findGuitarChord } from "./index.js";
+describe("barre and power chord symbols", () => {
+  it("name every barre shape with a symbol the recogniser and the grader know", () => {
+    for (const [id, shape] of Object.entries(GUITAR_BARRE_CHORDS)) {
+      const parsed = parseChordSymbol(shape.symbol);
+      expect(parsed, id).not.toBeNull();
+      expect(chordPitchClasses(shape), id).toEqual(parsed!.pitchClasses.filter((pc) => chordPitchClasses(shape).includes(pc)));
+      expect(parsed!.pitchClasses.filter((pc) => !chordPitchClasses(shape).includes(pc) && pc !== (parsed!.root + 7) % 12), id).toEqual([]);
+    }
+    expect(GUITAR_BARRE_CHORDS["G3"]!.symbol).toBe("G");
+  });
+  it("finds open chords first, then barre shapes", () => {
+    expect(findGuitarChord("G")).toBe(GUITAR_CHORDS["G"]);
+    expect(findGuitarChord("G3")).toBe(GUITAR_BARRE_CHORDS["G3"]);
+    expect(findGuitarChord("H")).toBeUndefined();
+  });
+});

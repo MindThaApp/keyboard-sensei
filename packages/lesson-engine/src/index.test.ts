@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAssessmentPlacement, validateMidiExercise } from "./index.js";
+import { calculateAssessmentPlacement, validateLesson, validateMidiExercise } from "./index.js";
 
 describe("validateMidiExercise", () => {
   it("keeps an exercise's dynamics opt-in (stripping it would silently turn velocity scoring off)", () => {
@@ -31,4 +31,13 @@ describe("isLessonUnlocked",()=>it("requires completion and score",()=>{expect(i
 describe("content rights",()=>{
   it("accepts licensed copyrighted works with documented permission",()=>expect(()=>contentRightsSchema.parse({workTitle:"Licensed Work",composer:"A Composer",status:"licensed-copyright",copyrightHolder:"Rights Holder",licenseReference:"license-contract-2026-01"})).not.toThrow());
   it("rejects undocumented copyrighted works",()=>expect(()=>contentRightsSchema.parse({workTitle:"Unlicensed Work",composer:"A Composer",status:"licensed-copyright",copyrightHolder:null,licenseReference:null})).toThrow());
+});
+
+describe("lesson instrument", () => {
+  const base = { id: "l", path: "classical-technical", level: "foundation", branch: "technique", title: "t", estimatedMinutes: 5, objectives: ["o"], sections: [{ type: "markdown", title: "t", body: "b" }], unlockCriteria: { requiresLessonIds: [], minScore: 70 }, skillRewards: {} };
+  it("leaves instrument absent for existing lessons (read as piano) and keeps it when set", () => {
+    expect(validateLesson(base).instrument).toBeUndefined();
+    expect(validateLesson({ ...base, instrument: "guitar" }).instrument).toBe("guitar");
+    expect(() => validateLesson({ ...base, instrument: "banjo" })).toThrow();
+  });
 });

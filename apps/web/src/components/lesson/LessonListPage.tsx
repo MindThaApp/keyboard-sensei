@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
+import { t, useT } from "../../i18n";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { TIER_NAMES, type LessonListItem, type LessonStatus, type TierId } from "@keyboard-sensei/shared-types";
 import { useProgressStore, getLessonStatus, getLessonBestScore } from "../../state/progressStore";
 import { nextLessonFor } from "../../utils/levels";
 import { pathLabel, placeInPath } from "../../utils/paths";
-import { LEARN_FILTERS, SKILL_LABEL, currentTierOf, groupByTier, type LearnFilter, type TierGroup } from "../../utils/tiers";
+import { SKILL_LABEL, currentTierOf, groupByTier, learnFiltersFor, type LearnFilter, type TierGroup } from "../../utils/tiers";
 import { lessonStars } from "../../utils/stars";
 import { StarRating } from "../progress/ProgressBits";
 import { Chip, ProgressRing, SegmentedControl } from "../ui";
+import { useInstrument } from "../../contexts/InstrumentContext";
+import { InstrumentChoice } from "../settings/PlayedInstrumentSection";
+import { INSTRUMENT_LABEL, filterByInstrument } from "../../utils/playedInstrument";
 
 const BRANCH_LABEL: Record<string, string> = {
-  technique: "Technique",
-  theory: "Theory",
-  repertoire: "Repertoire",
+  get technique() { return t("lesson.branch.technique"); },
+  get theory() { return t("lesson.branch.theory"); },
+  get repertoire() { return t("lesson.branch.repertoire"); },
 };
 
 function CheckIcon() {
@@ -71,16 +75,16 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
             span sat past the cut-off text and widened a phone's page by 16px. */}
         <p className={`relative truncate font-medium ${locked ? "text-slate-600 dark:text-slate-300" : "text-slate-900 dark:text-slate-100"}`}>
           {lesson.title}
-          {locked && <span className="sr-only"> (locked)</span>}
+          {locked && <span className="sr-only"> ({t("lesson.locked")})</span>}
         </p>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
           {BRANCH_LABEL[lesson.branch]} · {lesson.estimatedMinutes} min
         </p>
         {lesson.skills.length > 0 && (
-          <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Skills">
+          <ul className="mt-1.5 flex flex-wrap gap-1" aria-label={t("lesson.skills")}>
             {lesson.skills.map((skill) => (
               <li key={skill}>
-                <Chip>{SKILL_LABEL[skill]}</Chip>
+                <Chip>{t(`lesson.skill.${skill}`)}</Chip>
               </li>
             ))}
           </ul>
@@ -90,12 +94,12 @@ function LessonRow({ lesson, number, status, bestScore, isNext }: { lesson: Less
         {completed && (
           <span className="flex flex-col items-end gap-0.5">
             <StarRating stars={lessonStars(status, bestScore ?? 0)} className="text-sm" />
-            <span className="font-medium tabular-nums text-brass-700 dark:text-brass-300">Best {bestScore}</span>
+            <span className="font-medium tabular-nums text-brass-700 dark:text-brass-300">{t("lesson.best", { score: bestScore })}</span>
           </span>
         )}
         {!completed && !locked && (
           <span className="rounded-full bg-felt-50 px-2 py-0.5 font-medium text-felt-700 dark:bg-felt-900/40 dark:text-felt-300">
-            {isNext ? "Up next" : bestScore ? `Best ${bestScore}` : "Unlocked"}
+            {isNext ? t("lesson.upNext") : bestScore ? t("lesson.best", { score: bestScore }) : t("lesson.unlocked")}
           </span>
         )}
       </div>
@@ -128,6 +132,7 @@ function TierSection({
   progress: ReturnType<typeof useProgressStore.getState>["progress"];
   nextLesson: LessonListItem | null;
 }) {
+  useT();
   const panelId = `tier-${group.tier}`;
   const total = group.lessons.length;
   const fraction = total ? group.completed / total : 0;
@@ -135,18 +140,18 @@ function TierSection({
   if (group.comingSoon) {
     return (
       <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
-        <span className="text-sm font-medium tabular-nums text-slate-500 dark:text-slate-400">Level {group.tier}</span>
+        <span className="text-sm font-medium tabular-nums text-slate-500 dark:text-slate-400">{t("lesson.level", { n: group.tier })}</span>
         <h2 className="font-display text-base font-semibold text-slate-900 dark:text-slate-100">{group.name}</h2>
-        <span className="text-xs text-slate-500 dark:text-slate-400">Coming soon</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t("lesson.comingSoon")}</span>
         <Link to="/practice" className="ml-auto inline-flex min-h-[44px] items-center text-sm font-medium text-felt-700 underline-offset-2 hover:underline dark:text-felt-300">
-          Play songs from the library meanwhile
+          {t("lesson.playSongsMeanwhile")}
         </Link>
       </div>
     );
   }
 
   return (
-    <section className={`card overflow-hidden ${current ? "ring-1 ring-felt-400/50 dark:ring-felt-600/50" : ""}`} aria-label={`Level ${group.tier}: ${group.name}`}>
+    <section className={`card overflow-hidden ${current ? "ring-1 ring-felt-400/50 dark:ring-felt-600/50" : ""}`} aria-label={`${t("lesson.level", { n: group.tier })}: ${group.name}`}>
       <button
         type="button"
         onClick={onToggle}
@@ -161,7 +166,7 @@ function TierSection({
             stroke={6}
             label={group.completed}
             sublabel={`/${total}`}
-            aria-label={`${group.completed} of ${total} lessons complete`}
+            aria-label={t("lesson.completeAria", { done: group.completed, total })}
           />
         ) : (
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-medium tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -170,13 +175,13 @@ function TierSection({
         )}
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            {current ? "Your level" : `Level ${group.tier}`}
+            {current ? t("lesson.yourLevel") : t("lesson.level", { n: group.tier })}
           </span>
           <span className="block font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {current ? `Level ${group.tier} · ${group.name}` : group.name}
+            {current ? t("lesson.levelNamed", { n: group.tier, name: group.name }) : group.name}
           </span>
           <span className="block text-xs tabular-nums text-slate-500 dark:text-slate-400">
-            {group.completed}/{total} lessons
+            {t("lesson.lessonsCount", { done: group.completed, total })}
           </span>
         </span>
         <span className="text-slate-500 dark:text-slate-400">
@@ -202,7 +207,11 @@ function TierSection({
 }
 
 export default function LessonListPage() {
-  const lessons = useProgressStore((s) => s.lessons);
+  useT();
+  const allLessons = useProgressStore((s) => s.lessons);
+  const { active, promptDone, dismissPrompt, played } = useInstrument();
+  // Piano lessons carry no instrument, so an install that never chose sees exactly today's list.
+  const lessons = useMemo(() => filterByInstrument(allLessons, active), [allLessons, active]);
   const progress = useProgressStore((s) => s.progress);
   const loaded = useProgressStore((s) => s.loaded);
   const loadAll = useProgressStore((s) => s.loadAll);
@@ -215,7 +224,7 @@ export default function LessonListPage() {
   const [toggled, setToggled] = useState<ReadonlyMap<TierId, boolean>>(new Map());
 
   if (!loaded || !progress) {
-    return <p className="text-slate-500 dark:text-slate-300">Loading lessons…</p>;
+    return <p className="text-slate-500 dark:text-slate-300">{t("lesson.loadingLessons")}</p>;
   }
 
   const statuses = lessons.map((lesson) => getLessonStatus(progress, lesson));
@@ -224,7 +233,10 @@ export default function LessonListPage() {
   const nextPlace = nextLesson ? placeInPath(lessons, nextLesson.id) : null;
   const minutesCompleted = lessons.filter((_, i) => statuses[i] === "completed").reduce((sum, l) => sum + l.estimatedMinutes, 0);
 
-  const groups = groupByTier(lessons, filter);
+  const filters = learnFiltersFor(active);
+  // A path filter from another instrument (after switching) falls back to everything.
+  const shownFilter: LearnFilter = filters.some((entry) => entry.value === filter) ? filter : "all";
+  const groups = groupByTier(lessons, shownFilter);
   const currentTier = currentTierOf(groups);
   // The current tier starts open and every other tier starts closed, until the learner toggles one.
   const openTiers = new Set<TierId>(
@@ -234,51 +246,70 @@ export default function LessonListPage() {
 
   return (
     <div className="space-y-8">
+      {!promptDone && (
+        <section className="card space-y-3 p-5" aria-label={t("played.choose")}>
+          <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">{t("played.question")}</h2>
+          <InstrumentChoice onDone={dismissPrompt} />
+          <button type="button" className="text-sm text-slate-600 underline dark:text-slate-300" onClick={dismissPrompt}>
+            {t("played.notNow")}
+          </button>
+        </section>
+      )}
+      {played.length > 1 && (
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("played.learning", { instrument: INSTRUMENT_LABEL[active] })}</p>
+      )}
+      {lessons.length === 0 && (
+        <section className="card p-6 text-center">
+          <h1 className="text-2xl font-semibold">{t("played.comingSoon", { instrument: INSTRUMENT_LABEL[active] })}</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{t("played.comingSoonHint")}</p>
+        </section>
+      )}
       {nextLesson && (
         <section className="card relative overflow-hidden p-5 sm:p-6">
           <div className="felt-strip absolute inset-x-0 top-0" />
           <p className="text-xs font-medium uppercase tracking-widest text-felt-600 dark:text-felt-400">
-            {nextLesson.progress.bestScore > 0 ? "Continue practising" : "Up next"}
+            {nextLesson.progress.bestScore > 0 ? t("lesson.continuePractising") : t("lesson.upNext")}
           </p>
           <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{nextLesson.title}</h1>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                {pathLabel(nextLesson.path)} · Lesson {nextPlace?.position} of {nextPlace?.total} · Level {nextLesson.tier} · {TIER_NAMES[nextLesson.tier]} · {BRANCH_LABEL[nextLesson.branch]} ·{" "}
-                {nextLesson.estimatedMinutes} min
-                {nextLesson.progress.bestScore > 0 && <> · Best {nextLesson.progress.bestScore}</>}
+                {t("lesson.meta", { path: pathLabel(nextLesson.path), pos: nextPlace?.position, total: nextPlace?.total, tier: nextLesson.tier, tierName: t(`lesson.tier.${nextLesson.tier}`), branch: BRANCH_LABEL[nextLesson.branch], minutes: nextLesson.estimatedMinutes })}
+                {nextLesson.progress.bestScore > 0 && <> · {t("lesson.best", { score: nextLesson.progress.bestScore })}</>}
               </p>
             </div>
             <Link to={`/lessons/${nextLesson.id}`} className="primary-button">
-              {nextLesson.progress.bestScore > 0 ? "Continue lesson" : "Start lesson"}
+              {nextLesson.progress.bestScore > 0 ? t("lesson.continueLesson") : t("lesson.startLesson")}
             </Link>
           </div>
           <div className="mt-5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
             <span className="shrink-0 tabular-nums">
-              {completedCount} of {lessons.length} lessons · {minutesCompleted} min completed
+              {t("lesson.progressLine", { done: completedCount, total: lessons.length, minutes: minutesCompleted })}
             </span>
             <ProgressBar value={lessons.length ? completedCount / lessons.length : 0} className="flex-1" />
           </div>
         </section>
       )}
 
-      {!nextLesson && (
+      {!nextLesson && lessons.length > 0 && (
         <section className="card p-6 text-center">
-          <h1 className="text-2xl font-semibold">Path complete</h1>
+          <h1 className="text-2xl font-semibold">{t("lesson.pathComplete")}</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            You've completed every lesson in every path. Keep your hands warm in the Practice Gym.
+            {t("lesson.pathCompleteMsg")}
           </p>
         </section>
       )}
 
-      <section className="space-y-4" aria-label="Levels">
-        <SegmentedControl
-          aria-label="Show lessons from"
-          options={LEARN_FILTERS.map(({ value, label }) => ({ value, label }))}
-          value={filter}
-          onChange={setFilter}
-          block
-        />
+      <section className="space-y-4" aria-label={t("lesson.levels")}>
+        {filters.length > 1 && (
+          <SegmentedControl
+            aria-label={t("lesson.showFrom")}
+            options={filters.map(({ value }) => ({ value, label: t(`lesson.filter.${value}`) }))}
+            value={shownFilter}
+            onChange={setFilter}
+            block
+          />
+        )}
         <div className="space-y-3">
           {groups.map((group) => (
             <TierSection

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LessonListItem, LessonStatus, TierId } from "@keyboard-sensei/shared-types";
-import { currentTierOf, groupByTier } from "./tiers";
+import { currentTierOf, groupByTier, learnFiltersFor } from "./tiers";
 
 const lesson = (id: string, tier: TierId, path: string, status: LessonStatus = "locked"): LessonListItem =>
   ({ id, tier, path, skills: ["rhythm"], progress: { lessonId: id, status, bestScore: 0, completedAt: null } }) as unknown as LessonListItem;
@@ -36,5 +36,13 @@ describe("currentTierOf", () => {
 
   it("is null once everything visible is complete", () => {
     expect(currentTierOf(groupByTier([lesson("a", 0, "classical-technical", "completed")], "all"))).toBeNull();
+  });
+});
+
+describe("learnFiltersFor", () => {
+  it("offers the piano paths to piano learners only", () => {
+    expect(learnFiltersFor("piano").map((f) => f.value)).toEqual(["all", "foundations", "reading", "chords"]);
+    expect(learnFiltersFor("guitar").map((f) => f.value)).toEqual(["all"]);
+    expect(learnFiltersFor("violin").map((f) => f.value)).toEqual(["all"]);
   });
 });

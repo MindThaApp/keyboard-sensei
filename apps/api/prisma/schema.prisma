@@ -40,6 +40,13 @@ model User {
   // "simple" | "advanced": the interface mode, synced so a new device picks it up.
   // NULL until the user has chosen one.
   experience_mode    String?
+  /// Instruments the learner plays; empty = never chosen (reads as piano).
+  played_instruments String[]           @default([])
+  /// The instrument that scopes Learn and Today; NULL = piano.
+  active_instrument  String?
+  // Tuner reference A4 in Hz (415-466), synced: a property of the learner's ensemble,
+  // not the device. NULL until set (reads as 440).
+  tuner_a4_hz        Float?
   created_at         DateTime           @default(now())
   attempts           ExerciseAttempt[]
   quiz_attempts      QuizAttempt[]
@@ -411,6 +418,8 @@ model Lesson {
   path          String
   level         String
   branch        String
+  /// What the lesson teaches: "piano" | "guitar" | "violin". Existing rows are piano.
+  instrument    String         @default("piano")
   /// Tiered level on Learn, 0 (first steps) to 7 (advanced). Set by the seed from content/tiers.ts.
   tier          Int            @default(0)
   /// Skill chips shown on the lesson row (see SKILL_CHIPS in shared-types).
@@ -425,6 +434,8 @@ model Lesson {
   exercises     Exercise[]
   quiz_attempts QuizAttempt[]
   progress      UserProgress[]
+
+  @@index([instrument])
 }
 
 model Exercise {
@@ -440,16 +451,20 @@ model Exercise {
 }
 
 model ExerciseAttempt {
-  id               String   @id @default(cuid())
-  user_id          String
-  exercise_id      String
-  submitted_events Json
-  performed_notes  Json
-  result           Json
-  created_at       DateTime @default(now())
-  user             User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  exercise         Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  user_id           String
+  exercise_id       String
+  submitted_events  Json
+  performed_notes   Json
+  result            Json
+  created_at        DateTime @default(now())
+  /// Client-generated id for attempts queued offline and replayed later; a replay
+  /// with the same id for the same user is ignored. NULL for older clients.
+  client_attempt_id String?
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exercise          Exercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
 
+  @@unique([user_id, client_attempt_id])
   @@index([user_id])
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { t } from "../../i18n";
 import {
   finalScore,
   practiceMultiplier,
@@ -51,6 +52,8 @@ import {
 } from "./practiceSession";
 import { defaultSettingsFor, isOnlyMyNotes, loadSettings, setOnlyMyNotes, saveSettings, settingsToPersist, TEMPO_MAX_PCT, TEMPO_MIN_PCT, type Settings } from "./practiceSettings";
 import "./practice.css";
+import MicInputPanel, { MicStatusPill } from "../mic/MicInputPanel";
+import { usePlayAlongMic } from "../mic/usePlayAlongMic";
 
 /** A loop starts out this long when switched on with no preset. */
 const DEFAULT_LOOP_BARS = 4;
@@ -173,6 +176,9 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
   const [settings, setSettings] = useState<Settings>(initial.settings);
   const [level, setLevel] = useState<PracticeLevel>(initial.level);
   const [hands, setHands] = useState<PracticeHands>(initial.hands);
+  // Acoustic piano: the melody from the microphone (docs/specs/MUSIC-PORTAL.md 2.2).
+  const playMic = usePlayAlongMic({ level, setLevel, midiSubscribe: subscribe });
+  const runSettings = useMemo(() => playMic.runSettings(settings), [playMic.runSettings, settings]);
   const [finished, setFinished] = useState<FinishedRun | null>(null);
   const [resultOpen, setResultOpen] = useState(false);
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
@@ -494,7 +500,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
     togglePause,
     start: startRun,
     stopRun,
-  } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings, subscribe, onFrame, onFinish, onJudged });
+  } = usePlayAlongRun({ run, clickSafe: parsed.grid.clickSafe, settings: runSettings, subscribe: playMic.subscribe, onFrame, onFinish, onJudged });
   startRunRef.current = startRun;
 
   const nothingToPlay = run.notes.length === 0;
@@ -640,7 +646,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
       {paused ? playIcon : pauseIcon}
     </button>
   ) : (
-    <button type="button" className="ks-practice-play" onClick={start} disabled={nothingToPlay} aria-label={phase === "done" ? "Play again" : "Play"}>
+    <button type="button" className="ks-practice-play" onClick={start} disabled={nothingToPlay || playMic.blocked} aria-label={phase === "done" ? "Play again" : "Play"}>
       {playIcon}
     </button>
   );
@@ -715,6 +721,16 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
         title="Only my notes: the app stays silent except for the keys you press"
         pressed={isOnlyMyNotes(settings)}
         onChange={(on) => setSettings((s) => setOnlyMyNotes(s, on))}
+      />
+    </StripGroup>
+  );
+  const micGroup = (
+    <StripGroup caption={t("mic.playAlong.input")} disabled={practiceLocked} hint={stoppedHint}>
+      <LedToggle
+        label={phone ? t("mic.playAlong.mic") : t("mic.playAlong.acoustic")}
+        title={t("mic.playAlong.title")}
+        pressed={playMic.on}
+        onChange={playMic.setOn}
       />
     </StripGroup>
   );
@@ -934,6 +950,7 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
                     {loopGroup}
                     {metronomeGroup}
                     {onlyMineGroup}
+                    {micGroup}
                     {viewGroup}
                   </div>
                 }
@@ -960,10 +977,18 @@ function SongPractice({ practiceSong }: { practiceSong: NonNullable<ReturnType<t
               {waitGroup}
               {metronomeGroup}
               {onlyMineGroup}
+              {micGroup}
               {viewGroup}
             </>
           )}
         </GlassSurface>
+
+        {playMic.on && !playing && (
+          <div className="ks-practice-alert">
+            <MicStatusPill mic={playMic.mic} />
+            <MicInputPanel mic={playMic.mic} onUseKeyboard={() => playMic.setOn(false)} />
+          </div>
+        )}
 
         {nothingToPlay && (
           <p className="ks-practice-alert glass-text" role="alert">

@@ -8,6 +8,9 @@ import { metronome } from "../../utils/metronome";
 import { playSequence } from "../../audio/noteSequence";
 import { latencyOffsetMs } from "../../audio/latency";
 import { coveredNoteIds } from "./exerciseCoverage";
+import type { MicNoteSource } from "../../audio/mic/micNoteSource";
+import { beatGridClicks } from "../../audio/mic/useMicInput";
+import { micNotesOnTimeline, type PauseSpan } from "../mic/exerciseInput";
 
 export type ExercisePhase = "idle" | "listening" | "counting-in" | "recording" | "paused" | "submitting" | "scored";
 
@@ -67,6 +70,8 @@ interface Options {
   metronomeSettings: MetronomeSettings;
   onCompleted?: (result: ScoringResult) => void;
   onRecordingClock?: (clock: RecordingClock | null) => void;
+  /** Grade from the microphone instead of MIDI (docs/specs/MUSIC-PORTAL.md 4). */
+  micSource?: MicNoteSource | null;
 }
 
 /**
@@ -84,8 +89,11 @@ export function useExerciseAttempt({
   metronomeSettings,
   onCompleted,
   onRecordingClock,
+  micSource = null,
 }: Options) {
-  const { subscribe } = useMidiContext();
+  const { subscribe: subscribeMidi } = useMidiContext();
+  // Mic notes arrive as MIDI-shaped events on the same clock, so live follow is shared.
+  const subscribe = micSource ? micSource.subscribe : subscribeMidi;
   const submitExercise = useProgressStore((s) => s.submitExercise);
   const submitPractice = useProgressStore((s) => s.submitPracticeGym);
 
@@ -109,6 +117,8 @@ export function useExerciseAttempt({
   const pausedMs = useRef(0);
   /** Wall-clock moment the current pause began; null when not paused. */
   const pauseStart = useRef<number | null>(null);
+  /** Pauses of the current attempt (wall clock), to fold out of mic note times. */
+  const pauseSpans = useRef<PauseSpan[]>([]);
   const stopListenRef = useRef<(() => void) | null>(null);
   const metronomeOnRef = useRef(metronomeOn);
   metronomeOnRef.current = metronomeOn;
@@ -280,6 +290,9 @@ export function useExerciseAttempt({
     setBeat(null);
     pausedMs.current = 0;
     pauseStart.current = null;
+    pauseSpans.current = [];
+    micSource?.reset();
+    micSource?.setClickSchedule(null);
     if (untimed) {
       // No pulse to lock onto — start recording immediately, no count-in, no clicks.
       start.current = performance.now();
@@ -302,6 +315,8 @@ export function useExerciseAttempt({
         active.current = true;
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
+        // Clicks leaking from the speakers into the mic must not become notes (4.5).
+        micSource?.setClickSchedule(metronomeOnRef.current ? beatGridClicks(downbeatMs + latencyOffsetMs(), 60_000 / effectiveBpm) : null);
         startLiveFollow();
         onRecordingClockRef.current?.(clockNow());
       },
@@ -337,6 +352,7 @@ export function useExerciseAttempt({
     if (phase !== "paused") return;
     const unfreeze = (resumeAtMs = performance.now()) => {
       if (pauseStart.current !== null) {
+        pauseSpans.current.push({ fromMs: pauseStart.current, toMs: resumeAtMs });
         pausedMs.current += resumeAtMs - pauseStart.current;
         pauseStart.current = null;
       }
@@ -360,6 +376,7 @@ export function useExerciseAttempt({
         active.current = true;
         setPhase("recording");
         if (!metronomeOnRef.current) metronome.stop();
+        micSource?.setClickSchedule(metronomeOnRef.current ? beatGridClicks(downbeatMs + latencyOffsetMs(), 60_000 / effectiveBpm) : null);
         startLiveFollow(true);
         onRecordingClockRef.current?.(clockNow());
       },
@@ -386,7 +403,9 @@ export function useExerciseAttempt({
     onRecordingClockRef.current?.(null);
     setPhase("submitting");
     try {
-      const performedNotes = pairRawMidiEvents(raw.current);
+      const performedNotes = micSource
+        ? micNotesOnTimeline(micSource.finish(), start.current, pauseSpans.current, latencyOffsetMs())
+        : pairRawMidiEvents(raw.current);
       const scored = lessonId
         ? await submitExercise(exerciseId, { performedNotes, tempoPct })
         : await submitPractice(exercise, { performedNotes, tempoPct });

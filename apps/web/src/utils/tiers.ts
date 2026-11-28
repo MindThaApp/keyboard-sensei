@@ -1,14 +1,24 @@
-import { TIER_NAMES, type LessonListItem, type SkillChip, type TierId } from "@keyboard-sensei/shared-types";
+import { t } from "../i18n";
+import { TIER_NAMES, type LessonListItem, type PlayedInstrument, type SkillChip, type TierId } from "@keyboard-sensei/shared-types";
 
-/** Learn's filter: the three learning paths, as a way to narrow the tier list. */
+/**
+ * Learn's filter: the piano learning paths, as a way to narrow the tier list. Learn
+ * already shows only the active instrument's lessons (utils/playedInstrument), so
+ * there is no per-instrument entry here.
+ */
 export type LearnFilter = "all" | "foundations" | "reading" | "chords";
 
-export const LEARN_FILTERS: { value: LearnFilter; label: string; paths: readonly string[] | null }[] = [
-  { value: "all", label: "All", paths: null },
-  { value: "foundations", label: "Foundations", paths: ["classical-technical"] },
-  { value: "reading", label: "Reading", paths: ["sightreading-intensive"] },
-  { value: "chords", label: "Chords & Pop", paths: ["modern-chords"] },
+export const LEARN_FILTERS: { value: LearnFilter; label: string; paths: readonly string[] | null; instrument: PlayedInstrument | null }[] = [
+  { value: "all", label: "All", paths: null, instrument: null },
+  { value: "foundations", label: "Foundations", paths: ["classical-technical"], instrument: "piano" },
+  { value: "reading", label: "Reading", paths: ["sightreading-intensive"], instrument: "piano" },
+  { value: "chords", label: "Chords & Pop", paths: ["modern-chords"], instrument: "piano" },
 ];
+
+/** The filters that make sense for one instrument ("all" first). A single entry means there is nothing to choose. */
+export function learnFiltersFor(instrument: PlayedInstrument): typeof LEARN_FILTERS {
+  return LEARN_FILTERS.filter((entry) => entry.instrument === null || entry.instrument === instrument);
+}
 
 export const SKILL_LABEL: Record<SkillChip, string> = {
   "five-finger": "Five-finger",
@@ -49,7 +59,7 @@ export function groupByTier(allLessons: readonly LessonListItem[], filter: Learn
     if (lessons.length === 0 && inCourse) continue;
     groups.push({
       tier,
-      name: TIER_NAMES[tier],
+      name: t(`lesson.tier.${tier}`) || TIER_NAMES[tier],
       lessons,
       completed: lessons.filter((lesson) => lesson.progress.status === "completed").length,
       comingSoon: !inCourse,

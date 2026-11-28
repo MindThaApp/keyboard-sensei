@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { t } from "./i18n";
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate, useSearchParams } from "react-router-dom";
 import LessonListPage from "./components/lesson/LessonListPage";
 import LessonPlayerPage from "./components/lesson/LessonPlayerPage";
@@ -32,6 +33,7 @@ import { useProgressStore } from "./state/progressStore";
 import AudioNoticeToasts from "./components/shell/AudioNoticeToasts";
 import { useNativeKeepAwake } from "./native/nativeShell";
 import PrivacyPage from "./components/legal/PrivacyPage";
+import PublicPageLayout from "./components/legal/PublicPageLayout";
 import TermsPage from "./components/legal/TermsPage";
 import DeleteAccountPage from "./components/legal/DeleteAccountPage";
 import ThirdPartyLicensesPage from "./components/legal/ThirdPartyLicensesPage";
@@ -39,7 +41,13 @@ import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./compon
 
 // Dev-only component kit page. The condition is a build-time constant, so production
 // bundles drop the import entirely.
+// The tuner works signed in or out (spec 5): its own chunk, loaded on first visit.
+const TunerPage = lazy(() => import("./components/tuner/TunerPage"));
+
+const PianoCheckPage = lazy(() => import("./components/pianoCheck/PianoCheckPage"));
 const KitPreview = import.meta.env.DEV ? lazy(() => import("./components/ui/KitPreview")) : null;
+// Guided piano tuning aid: loaded only when opened.
+const PianoTuningAidPage = lazy(() => import("./components/tuning/PianoTuningAidPage"));
 
 /**
  * Pages that work signed in or out, outside the app shell: the policies and account
@@ -155,6 +163,16 @@ function AppShell() {
   const PublicPage = PUBLIC_PAGES[location.pathname.replace(/\/+$/, "") || "/"];
   if (PublicPage) return <PublicPage />;
 
+  if (!auth.authenticated && location.pathname.replace(/\/+$/, "") === "/tune") {
+    return (
+      <PublicPageLayout title={t("tuner.title")} wide>
+        <Suspense fallback={null}>
+          <TunerPage hideTitle />
+        </Suspense>
+      </PublicPageLayout>
+    );
+  }
+
   if (!auth.authenticated) {
     return (
       <AuthPage
@@ -204,10 +222,20 @@ function AppShell() {
           <Route path="/import" element={<ImportPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/tune" element={<Suspense fallback={null}><TunerPage /></Suspense>} />
+          <Route path="/piano-check" element={<Suspense fallback={null}><PianoCheckPage /></Suspense>} />
           <Route path="/play/:songId" element={<PlayAlongPage />} />
           {/* New screens: register their routes here, above the redirects. */}
           <Route path="/practice/notes" element={<NoteReadingGame />} />
           <Route path="/challenge" element={<DailyChallengePage />} />
+          <Route
+            path="/tune/piano-tuning"
+            element={
+              <Suspense fallback={null}>
+                <PianoTuningAidPage />
+              </Suspense>
+            }
+          />
           {KitPreview && (
             <Route
               path="/dev/kit"

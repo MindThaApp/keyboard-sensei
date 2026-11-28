@@ -10,6 +10,10 @@ import { readingLessons, readingExercises } from "./content/reading.js";
 import { modernLessons, modernExercises } from "./content/modern.js";
 import { tierOf, withTier, validateTiers } from "./content/tiers.js";
 import { keyLessons, keyExercises } from "./content/keys.js";
+import { guitarChordsLessons, guitarExercises, guitarFoundationsLessons } from "./content/guitar.js";
+import { violinLessons, violinExercises } from "./content/violin.js";
+import { buildGuitarAdvancedLessons, guitarAdvancedExercises } from "./content/guitar-advanced.js";
+import { violinTier34Exercises, violinTier34Lessons } from "./content/violin-tier34.js";
 
 /**
  * Exercises scored on dynamics as well (see ExerciseDynamics), because their
@@ -35,6 +39,10 @@ export const exercises: MidiExercise[] = [
   ...keyExercises,
   ...readingExercises,
   ...modernExercises,
+  ...guitarExercises,
+  ...violinExercises,
+  ...guitarAdvancedExercises,
+  ...violinTier34Exercises,
 ].map((exercise) => (DYNAMICS_OPT_IN[exercise.exerciseId] ? { ...exercise, dynamics: DYNAMICS_OPT_IN[exercise.exerciseId] } : exercise));
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
@@ -65,7 +73,30 @@ const readingPath = chainLessons(byTier(readingLessons), ["lesson-11"]);
 // Modern Chords opens after the foundation assessment (lesson 12), which covers triads.
 const modernPath = chainLessons(byTier(modernLessons), ["lesson-12"]);
 
-export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath]
+// Guitar has its own two paths, independent of the piano chain: a guitar lesson never unlocks from a piano
+// lesson. Chords start once the learner has tuned up and picked their first rhythms.
+const guitarFoundationsBase = chainLessons(byTier(guitarFoundationsLessons));
+const guitarChordsBase = chainLessons(byTier(guitarChordsLessons), ["guitar-open-string-rhythm"]);
+
+// Tiers 3-4 continue each guitar path from its last tier 0-2 lesson.
+const lastId = (path: Lesson[]): string => {
+  const last = path[path.length - 1];
+  if (!last) throw new Error("content.ts: an instrument path is empty");
+  return last.id;
+};
+const guitarAdvanced = buildGuitarAdvancedLessons({
+  foundations: [lastId(guitarFoundationsBase)],
+  chordsRhythm: [lastId(guitarChordsBase)],
+});
+const guitarFoundationsPath = [...guitarFoundationsBase, ...guitarAdvanced.filter((lesson) => lesson.path === "guitar-foundations")];
+const guitarChordsPath = [...guitarChordsBase, ...guitarAdvanced.filter((lesson) => lesson.path === "guitar-chords-rhythm")];
+
+// Violin opens straight away: no piano lesson is a prerequisite. Its chain is its own; the
+// violin-technique path (tiers 3-4) follows the last tier 0-2 violin lesson.
+const violinFoundationsPath = chainLessons(byTier(violinLessons));
+const violinTechniquePath: Lesson[] = violinTier34Lessons([lastId(violinFoundationsPath)]);
+
+export const lessons: Lesson[] = [...classicalPath, ...readingPath, ...modernPath, ...guitarFoundationsPath, ...guitarChordsPath, ...violinFoundationsPath, ...violinTechniquePath]
   .map(withPractice)
   .map(withTier)
   .map((lesson) => ({ ...lesson, estimatedMinutes: estimateLessonMinutes(lesson, exerciseById) }));

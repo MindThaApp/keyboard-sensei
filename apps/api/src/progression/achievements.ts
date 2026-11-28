@@ -90,6 +90,8 @@ const PATH_TITLES: Record<string, string> = {
   "classical-technical": "Classical Technique",
   "sightreading-intensive": "Reading & Rhythm",
   "modern-chords": "Modern Chords",
+  "guitar-foundations": "Guitar Basics",
+  "guitar-chords-rhythm": "Guitar Chords & Rhythm",
 };
 
 const LEVEL_TITLES: Record<string, string> = {

@@ -1,4 +1,15 @@
-export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive";
+import type { ViolinHint } from "./violin.js";
+/** What a learner plays. Not the sampled sound (that is an "Instrument" in the sound bank). */
+export type PlayedInstrument = "piano" | "guitar" | "violin";
+export const PLAYED_INSTRUMENTS: readonly PlayedInstrument[] = ["piano", "guitar", "violin"];
+export const DEFAULT_PLAYED_INSTRUMENT: PlayedInstrument = "piano";
+export const isPlayedInstrument = (value: unknown): value is PlayedInstrument =>
+  typeof value === "string" && (PLAYED_INSTRUMENTS as readonly string[]).includes(value);
+/** The instrument a lesson is for; lessons written before instruments existed are piano. */
+export const lessonInstrument = (lesson: { instrument?: PlayedInstrument | null }): PlayedInstrument =>
+  lesson.instrument ?? DEFAULT_PLAYED_INSTRUMENT;
+
+export type LearningPathId = "classical-technical" | "modern-chords" | "sightreading-intensive" | "guitar-foundations" | "guitar-chords-rhythm" | "violin-foundations" | "violin-technique";
 export type LevelId = "foundation" | "elementary" | "intermediate" | "late-intermediate" | "advanced" | "virtuoso";
 export type BranchId = "technique" | "theory" | "repertoire";
 
@@ -31,7 +42,7 @@ export const TIER_NAMES: Record<TierId, string> = {
   6: "Upper intermediate",
   7: "Advanced",
 };
-export interface Lesson { id: string; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
+export interface Lesson { id: string; /** Absent = piano. */ instrument?: PlayedInstrument; path: LearningPathId; level: LevelId; branch: BranchId; tier: TierId; skills: SkillChip[]; title: string; estimatedMinutes: number; objectives: string[]; sections: LessonSection[]; unlockCriteria: { requiresLessonIds: string[]; minScore: number }; skillRewards: Record<string, number> }
 
 export interface ExpectedNoteEvent { id: string; note: number; startBeat: number; durationBeats: number; hand: "left" | "right" | "both"; finger: number | null; chordGroupId: string | null; voice: "melody" | "bass" | "inner" | "chord" | null }
 /** A key on the circle of fifths: +n sharps / -n flats. On an exercise, its signature is drawn and notes are spelled for it. */
@@ -43,14 +54,14 @@ export interface ExerciseKey { fifths: number; mode: "major" | "minor" }
  * the same loudness. Velocity is never scored unless an exercise asks for it.
  */
 export interface ExerciseDynamics { evenVolume?: boolean; balancedChords?: boolean }
-export interface MidiExercise { exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
+export interface MidiExercise { instrument?: PlayedInstrument; input?: ExerciseInput; intonationToleranceCents?: number; techniqueHints?: Record<string, GuitarHint | ViolinHint>; exerciseId: string; tempoBpm: number; difficulty: "beginner" | "intermediate" | "advanced"; simultaneityWindowMs: number; timingToleranceMs: number; durationTolerancePercent: number; scoring?: "timed" | "untimed"; beatsPerBar?: number; beatUnit?: number; keySignature?: ExerciseKey; dynamics?: ExerciseDynamics; expected: ExpectedNoteEvent[] }
 /** Practice tempo as a percentage of the exercise's authored tempoBpm. Continuous
  * since 2026-07-12 (was the literal union 25|50|75|100) — the UI is now a real
  * 25-200 BPM slider. The API accepts [10, 250]. */
 export type ExerciseTempoPct = number;
 export interface RawMidiEvent { note: number; velocity: number; type: "noteon" | "noteoff"; timestampMs: number }
 export interface PerformedNote { note: number; velocity: number; startTimestampMs: number; endTimestampMs: number | null; durationMs: number | null }
-export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown";
+export type ScoringIssue = "wrong" | "missed" | "extra" | "early" | "late" | "missing-chord-tone" | "extra-chord-tone" | "uneven-hand-timing" | "held-too-short" | "held-too-long" | "duration-unknown" | "sharp" | "flat" | "wrong-chord" | "no-strum";
 export interface ScoringMistake { noteId: string | null; expectedNote: number | null; performedNote: number | null; chordGroupId: string | null; issue: ScoringIssue }
 /**
  * How evenly the notes were played, for exercises that opt in (see ExerciseDynamics).
@@ -94,15 +105,53 @@ export interface UserProgress {
 export interface LessonListItem extends Lesson { order: number; progress: LessonProgress }
 /** `exerciseBests`: the learner's best score per exercise in this lesson (absent = never attempted). */
 export interface LessonDetail { lesson: Lesson; progress: LessonProgress | null; exercises: MidiExercise[]; exerciseBests: Record<string, number> }
-/** `daily_goal_minutes` / `timezone` / `experience_mode` come with GET and PATCH /users/me (not with login). */
-export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin"; daily_goal_minutes?: number; timezone?: string | null; experience_mode?: "simple" | "advanced" | null; google_linked?: boolean }
+/** `daily_goal_minutes` / `timezone` / `experience_mode` / `tuner_a4_hz` come with GET and PATCH /users/me (not with login). */
+export interface AuthUser { id: string; email: string; display_name: string; narration_voice_id: string | null; role: "user" | "admin"; daily_goal_minutes?: number; timezone?: string | null; experience_mode?: "simple" | "advanced" | null; played_instruments?: PlayedInstrument[]; active_instrument?: PlayedInstrument | null; google_linked?: boolean; tuner_a4_hz?: number | null }
 export interface AuthResponse { accessToken: string; user: AuthUser }
 export interface AssessmentPlacement { completedLessonCount: number; placementScore: number }
 export interface AssessmentPlacementPayload { scores: number[] }
-export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct }
+/** `clientAttemptId` / `playedAt`: set by the offline outbox so a replay is stored once and dated when it was played. */
+export interface ExerciseAttemptPayload { rawEvents?: RawMidiEvent[]; performedNotes?: PerformedNote[]; tempoPct?: ExerciseTempoPct; clientAttemptId?: string; playedAt?: string }
+/** GET /content/offline: every live lesson with its exercises, versioned by a content hash (also the ETag). */
+export interface OfflineLessonEntry { lesson: Lesson; order: number; exercises: MidiExercise[] }
+export interface OfflineContentBundle { contentHash: string; generatedAt: string; lessons: OfflineLessonEntry[] }
 export interface QuizAnswerPayload { selectedAnswer: number }
 export interface QuizAnswerResponse { correct: boolean; explanation?: string; correctIndex?: number }
 export interface AttemptSummary { id: string; exerciseId: string; lessonId: string; lessonTitle: string; score: number; createdAt: string }
 export interface AttemptsResponse { attempts: AttemptSummary[] }
 export interface ApiErrorResponse { error: { code: string; message: string; details?: unknown } }
 export * from "./sentry.js";
+
+// --- Music Portal: mic grading (M4). Additive; see docs/specs/MUSIC-PORTAL.md 2.4 and 4. ---
+// `MidiExercise.instrument` (absent = piano), `input` (absent = "midi") and
+// `intonationToleranceCents` (mic-mono only: a pitch-correct note further than this from
+// equal temperament is sharp/flat) are declared on MidiExercise above.
+/**
+ * Mic-only data rides in optional fields, so the scorer and the server re-score treat a
+ * mic note exactly like a MIDI note. `centsOffset`: the steady part's median offset from
+ * `note` in equal temperament at the learner's A4. `pitchConfidence`: 0-1.
+ */
+export interface PerformedNote { centsOffset?: number; pitchConfidence?: number; source?: "midi" | "mic" }
+/** Summary of pitch-correct mic notes: mean absolute cents and the share inside the tolerance. */
+export interface IntonationResult { meanAbsCents: number; withinTolerancePct: number; toleranceCents: number; measuredNotes: number; score: number }
+export interface ScoringResult { intonation?: IntonationResult }
+// --- Music Portal: guitar (M5) and chord grading (M6). Additive; see docs/specs/MUSIC-PORTAL.md 2.4. ---
+export type ExerciseInput = "midi" | "mic-mono" | "mic-chord" | "any";
+/** A guitar fretting: string 1 = high e ... 6 = low E; fret 0 = open. */
+export interface GuitarHint { string: 1 | 2 | 3 | 4 | 5 | 6; fret: number; finger?: 0 | 1 | 2 | 3 | 4 }
+/** Guitar hints number their strings (1-6); violin hints name them ("G" | "D" | "A" | "E"). */
+export const isGuitarHint = (hint: GuitarHint | ViolinHint | null | undefined): hint is GuitarHint =>
+  typeof hint?.string === "number";
+export const isViolinHint = (hint: GuitarHint | ViolinHint | null | undefined): hint is ViolinHint =>
+  typeof hint?.string === "string";
+/** One chord to strum. `pitchClasses` come from the shared chord dictionary, so what is drawn is what is graded. */
+export interface ChordTarget { id: string; symbol: string; pitchClasses: number[]; bassPitchClass?: number; startBeat: number; durationBeats: number }
+/** What the chord detector heard for one strum (labels only, never audio). */
+export interface ChordDetection { onsetMs: number; label: string | null; confidence: number; runnerUp?: { label: string; confidence: number } | null }
+export interface MidiExercise {
+  chordTargets?: ChordTarget[];
+  techniqueHints?: Record<string, GuitarHint | ViolinHint>;
+}
+export interface ChordResult { targetId: string; symbol: string; outcome: "right" | "wrong-chord" | "no-strum"; heard: string | null; timing: "on-time" | "early" | "late" | null }
+export interface ScoringResult { chordResults?: ChordResult[] }
+export * from "./violin.js";

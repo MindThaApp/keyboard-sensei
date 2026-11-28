@@ -1,0 +1,72 @@
+name: Windows
+
+# Builds the Windows app (apps/windows): the web bundle, the host's unit tests,
+# and an unsigned x64 + arm64 .msixupload for the Microsoft Store. The Store
+# signs on submission; submission itself stays manual (docs/windows.md).
+#
+# Package identity comes from repository secrets or variables (secrets win):
+#   MUSICPORTAL_IDENTITY_NAME, MUSICPORTAL_PUBLISHER, MUSICPORTAL_PUBLISHER_DISPLAY_NAME
+# and the API the bundle talks to from the variable MUSICPORTAL_API_URL. Without
+# them the build uses placeholders, which is fine for CI but not for the Store.
+
+on:
+  push:
+    branches: [master, mp/integration]
+    paths: ["apps/windows/**", "apps/web/**", "packages/**", ".github/workflows/windows.yml", "pnpm-lock.yaml"]
+  pull_request:
+    paths: ["apps/windows/**", "apps/web/**", "packages/**", ".github/workflows/windows.yml", "pnpm-lock.yaml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Midi bridge (page side) tests
+        run: pnpm --filter @keyboard-sensei/midi-engine test
+
+      - name: Build the web bundle for the app
+        shell: pwsh
+        env:
+          MUSICPORTAL_API_URL: ${{ vars.MUSICPORTAL_API_URL || 'https://api.musicportal.invalid' }}
+        run: ./apps/windows/scripts/build-web.ps1 -ApiUrl $env:MUSICPORTAL_API_URL
+
+      - name: Host unit tests
+        run: dotnet test apps/windows/MusicPortal.Tests/MusicPortal.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      - name: Package (x64 + arm64, unsigned .msixupload)
+        shell: pwsh
+        env:
+          MUSICPORTAL_IDENTITY_NAME: ${{ secrets.MUSICPORTAL_IDENTITY_NAME || vars.MUSICPORTAL_IDENTITY_NAME || 'MusicPortal.LocalBuild' }}
+          MUSICPORTAL_PUBLISHER: ${{ secrets.MUSICPORTAL_PUBLISHER || vars.MUSICPORTAL_PUBLISHER || 'CN=MusicPortalLocalBuild' }}
+          MUSICPORTAL_PUBLISHER_DISPLAY_NAME: ${{ secrets.MUSICPORTAL_PUBLISHER_DISPLAY_NAME || vars.MUSICPORTAL_PUBLISHER_DISPLAY_NAME || 'Music Portal (local build)' }}
+          MUSICPORTAL_VERSION: 1.0.${{ github.run_number }}.0
+        run: ./apps/windows/scripts/package-store.ps1 -Version $env:MUSICPORTAL_VERSION -OutDir out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: music-portal-windows-msixupload
+          path: out/*.msixupload
+          if-no-files-found: error
+          retention-days: 14

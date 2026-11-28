@@ -8,9 +8,12 @@ import { coveredNoteIds, groupByStart } from "./exerciseCoverage";
 import type { FocusModeApi } from "../../hooks/useFocusMode";
 import NotationRenderer from "../notation/NotationRenderer";
 import { COUNT_IN_BEATS, useExerciseAttempt, type RecordingClock } from "./useExerciseAttempt";
-import { engrave, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { engrave, type EngravedStaff, type EngraveInputNote, type StaffName } from "../../utils/engraving";
+import { applyViolinHints } from "../../utils/violinNotation";
 import { estimateKey, type KeyInfo } from "../../utils/keySignature";
 import { loadHighlightEnabled, saveHighlightEnabled } from "../../utils/notationHighlight";
+import ExerciseInputControls from "../mic/ExerciseInputControls";
+import { useExerciseInput } from "../mic/useExerciseInput";
 
 /** Score a lesson exercise must reach for the lesson to count as passed (mirrors the API's threshold). */
 export const PASS_SCORE = 70;
@@ -82,7 +85,8 @@ export function notationFor(exercise: MidiExerciseDef, key?: KeyInfo) {
   const input: EngraveInputNote[] = exercise.expected.map((event) => ({
     id: event.id,
     midi: event.note,
-    staff: event.note >= 60 ? "treble" : "bass",
+    // A violin reads one treble staff all the way down to G3, on ledger lines.
+    staff: event.note >= 60 || exercise.instrument === "violin" ? "treble" : "bass",
     startBeat: event.startBeat * quartersPerBeat,
     endBeat: (event.startBeat + event.durationBeats) * quartersPerBeat,
   }));
@@ -96,7 +100,10 @@ export function notationFor(exercise: MidiExerciseDef, key?: KeyInfo) {
     showKeySignature: key !== undefined,
   });
   if (staves.length === 2) return { grandStaff: true, treble: engraved.treble, bass: engraved.bass };
-  return { ...engraved[staves[0]] };
+  const single = { ...engraved[staves[0]] };
+  return exercise.instrument === "violin" && exercise.techniqueHints
+    ? (applyViolinHints(single as EngravedStaff, exercise.techniqueHints) as typeof single)
+    : single;
 }
 
 function SubmetricBar({ label, value }: { label: string; value: number }) {
@@ -149,6 +156,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
   const chosenBpm = Math.min(sliderMaxBpm, Math.max(sliderMinBpm, tempoBpm ?? writtenBpm));
   const effectiveBpm = chosenBpm;
   const tempoPct = (chosenBpm / writtenBpm) * 100;
+  // Keyboard or microphone (docs/specs/MUSIC-PORTAL.md 2.2); MIDI-only exercises are unaffected.
+  const input = useExerciseInput(exercise);
 
   const {
     phase,
@@ -179,6 +188,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
     metronomeSettings,
     onCompleted,
     onRecordingClock,
+    micSource: input.micSource,
   });
 
   const notation = useMemo(() => (exercise ? notationFor(exercise, notationKey) : null), [exercise, notationKey]);
@@ -251,7 +261,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
       </Button>,
     );
     main = (
-      <Button key="start" variant="filled" onClick={begin}>
+      <Button key="start" variant="filled" onClick={begin} disabled={input.blocked}>
         {phase === "scored" ? "Try again" : "Start"}
       </Button>
     );
@@ -389,6 +399,8 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
           </div>
         )}
 
+        {!inFocus && <ExerciseInputControls input={input} locked={running} />}
+
         {notation && (
           <div className="shrink-0 overflow-x-auto" role="img" aria-label={`Sheet music: ${title}`}>
             <div style={{ transform: `scale(${sheetScale})`, transformOrigin: "top left", width: `${100 / sheetScale}%` }}>
@@ -465,6 +477,7 @@ export default function MidiExercise({ exerciseId, title, instructions, lessonId
               {!untimed && <SubmetricBar label="Rhythm" value={result.rhythmAccuracy} />}
               {(!untimed || hasChords) && <SubmetricBar label="Chords" value={result.chordAccuracy} />}
               {result.dynamics && <SubmetricBar label="Dynamics" value={result.dynamics.score} />}
+              {result.intonation && <SubmetricBar label="In tune" value={result.intonation.withinTolerancePct} />}
             </div>
             {result.dynamics && (
               <p className="mt-2 text-xs tabular-nums text-slate-500" aria-label="Dynamics">

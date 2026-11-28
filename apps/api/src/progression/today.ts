@@ -1,4 +1,5 @@
 import { LESSON_PASS_SCORE, resolveLessonStatus } from "@keyboard-sensei/lesson-engine";
+import { DEFAULT_PLAYED_INSTRUMENT, lessonInstrument } from "@keyboard-sensei/shared-types";
 import { ESSENTIALS } from "../essentials/manifest.js";
 import { CURRICULUM_SONGS, curriculumSongId } from "./curriculum-songs.js";
 import { dayKey, daysBetween } from "./days.js";
@@ -30,8 +31,10 @@ export function bestsByExercise(attempts: readonly ExerciseAttemptRow[]): Map<st
 
 export function pickContinue(snapshot: Snapshot): ContinuePick | null {
   const completed = new Set([...snapshot.progress].filter(([, row]) => row.status === "completed").map(([id]) => id));
+  // Like Learn, Today continues the active instrument's course only (spec 2.1).
+  const active = snapshot.activeInstrument ?? DEFAULT_PLAYED_INSTRUMENT;
   const next = snapshot.lessons.find(
-    (lesson) => resolveLessonStatus(lesson, snapshot.progress.get(lesson.id)?.status, completed) === "unlocked",
+    (lesson) => lessonInstrument(lesson) === active && resolveLessonStatus(lesson, snapshot.progress.get(lesson.id)?.status, completed) === "unlocked",
   );
   if (!next) return null;
   const bests = bestsByExercise(snapshot.exerciseAttempts);

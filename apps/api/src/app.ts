@@ -10,11 +10,13 @@ import type {
   Lesson,
   MidiExercise,
   PerformedNote,
+  PlayedInstrument,
   SkillChip,
   TierId,
   RawMidiEvent,
 } from "@keyboard-sensei/shared-types";
-import { pairRawMidiEvents, scoreMidiExercise } from "@keyboard-sensei/midi-engine";
+import { pairRawMidiEvents, scoreExercise } from "@keyboard-sensei/midi-engine";
+import { chordDetectionsSchema, detectionsAsPerformedNotes, isChordExercise, scoreChordAttempt } from "./chord-attempts.js";
 import {
   calculateAssessmentPlacement,
   lessonCompletion,
@@ -48,6 +50,7 @@ import { createSentryTunnelRouter, parseAllowedDsns } from "./sentry-tunnel.js";
 import { reportServerError } from "./sentry.js";
 import { instrumentUploadRateLimit, omrUploadRateLimit, songUploadRateLimit } from "./rate-limits.js";
 import { omrRouter } from "./omr/omr-routes.js";
+import { offlineContentRouter, resolvePlayedAt } from "./offline-content.js";
 
 const updateProfileSchema = z
   .object({
@@ -56,6 +59,9 @@ const updateProfileSchema = z
     daily_goal_minutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
     timezone: z.string().max(64).refine(isValidTimeZone, "Unknown timezone").optional(),
     experience_mode: z.enum(["simple", "advanced"]).optional(),
+    played_instruments: z.array(z.enum(["piano", "guitar", "violin"])).max(3).optional(),
+    active_instrument: z.enum(["piano", "guitar", "violin"]).nullable().optional(),
+    tuner_a4_hz: z.number().min(415).max(466).nullable().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), "Supply at least one profile field");
 
@@ -68,6 +74,9 @@ const PROFILE_SELECT = {
   daily_goal_minutes: true,
   timezone: true,
   experience_mode: true,
+  played_instruments: true,
+  active_instrument: true,
+  tuner_a4_hz: true,
   google_sub: true,
 } as const;
 
@@ -113,6 +122,11 @@ const performedSchema = z.object({
   startTimestampMs: z.number().nonnegative(),
   endTimestampMs: z.number().nonnegative().nullable(),
   durationMs: z.number().nonnegative().nullable(),
+  // Mic attempts (docs/specs/MUSIC-PORTAL.md 2.4): derived pitch data only, never audio.
+  // Listed here because zod strips unknown keys and the re-score needs them.
+  centsOffset: z.number().min(-100).max(100).optional(),
+  pitchConfidence: z.number().min(0).max(1).optional(),
+  source: z.enum(["midi", "mic"]).optional(),
 });
 
 // Continuous since 2026-07-12 (was the literal union 25|50|75|100). Lessons drive
@@ -123,12 +137,29 @@ const performanceSchema = z
   .object({
     rawEvents: z.array(rawEventSchema).optional(),
     performedNotes: z.array(performedSchema).optional(),
+    chordDetections: chordDetectionsSchema.optional(),
     tempoPct: tempoPctSchema.optional(),
+    // Offline outbox (spec 8.5): a client-generated id makes a replay idempotent, and
+    // playedAt is when the attempt really happened (clamped server-side).
+    clientAttemptId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
+    playedAt: z.string().datetime({ offset: true }).optional(),
   })
   .refine(
-    (value) => (value.rawEvents === undefined) !== (value.performedNotes === undefined),
-    "Supply exactly one of rawEvents or performedNotes",
+    (value) => [value.rawEvents, value.performedNotes, value.chordDetections].filter((part) => part !== undefined).length === 1,
+    "Supply exactly one of rawEvents, performedNotes or chordDetections",
   );
+
+/** Score an attempt: strums (mic-chord exercises) by their chord detections, everything else by notes. */
+function scoreAttempt(exercise: MidiExercise, input: z.infer<typeof performanceSchema>) {
+  if (isChordExercise(exercise) !== (input.chordDetections !== undefined)) {
+    throw Object.assign(new Error("Strum exercises take chordDetections; note exercises take rawEvents or performedNotes"), { statusCode: 400 });
+  }
+  if (input.chordDetections) {
+    return { performedNotes: detectionsAsPerformedNotes(input.chordDetections), result: scoreChordAttempt(exercise, input.chordDetections, input.tempoPct) };
+  }
+  const performedNotes = (input.performedNotes ?? pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
+  return { performedNotes, result: scoreExercise({ exercise, performedNotes, tempoPct: input.tempoPct }) };
+}
 
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 
@@ -155,8 +186,9 @@ const sanitizeLesson = (lesson: Lesson): Lesson => ({
 });
 
 /** The tier and skills columns are authoritative; stored lesson JSON from before they existed lacks them. */
-const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[] }): Lesson => ({
+const withTierColumns = (lesson: Lesson, row: { tier: number; skills: string[]; instrument?: string }): Lesson => ({
   ...lesson,
+  instrument: (row.instrument ?? "piano") as PlayedInstrument,
   tier: row.tier as TierId,
   skills: row.skills as SkillChip[],
 });
@@ -247,6 +279,7 @@ app.use(adminCatalogueRouter());
 app.use(progressionRouter);
 app.use(challengeRouter);
 app.use(gamesRouter);
+app.use(offlineContentRouter((lesson, row) => sanitizeLesson(withTierColumns(lesson, row))));
 
 app.get("/users/me", async (req, res, next) => {
   try {
@@ -313,14 +346,17 @@ async function completedLessonIdsFor(uid: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.lesson_id));
 }
 
+const lessonsQuerySchema = z.object({ instrument: z.enum(["piano", "guitar", "violin"]).optional() });
+
 app.get("/lessons", async (req, res, next) => {
   try {
     const uid = userId(req);
+    const { instrument } = lessonsQuerySchema.parse(req.query);
     const [admin, completedIds, rows] = await Promise.all([
       isAdmin(uid),
       completedLessonIdsFor(uid),
       prisma.lesson.findMany({
-        where: { retired_at: null },
+        where: { retired_at: null, ...(instrument ? { instrument } : {}) },
         orderBy: { order: "asc" },
         include: { progress: { where: { user_id: uid } } },
       }),
@@ -435,9 +471,38 @@ app.post("/lessons/:lessonId/sections/:sectionIndex/narrate", async (req, res, n
   }
 });
 
+async function findReplayedAttempt(db: typeof prisma, uid: string, clientAttemptId: string | undefined) {
+  if (!clientAttemptId) return null;
+  return db.exerciseAttempt.findUnique({
+    where: { user_id_client_attempt_id: { user_id: uid, client_attempt_id: clientAttemptId } },
+    select: { exercise_id: true, result: true },
+  });
+}
+
+function sendReplayedAttempt(res: Response, stored: { exercise_id: string; result: unknown }, exerciseId: string) {
+  if (stored.exercise_id !== exerciseId) {
+    res.status(409).json({
+      error: { code: "client_attempt_id_conflict", message: "This attempt id was already used for another exercise" },
+    });
+    return;
+  }
+  res.status(200).json({ ...(stored.result as object), rewards: null, duplicate: true });
+}
+
+const isUniqueViolation = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
 app.post("/exercises/:id/attempts", async (req, res, next) => {
   try {
     const input = performanceSchema.parse(req.body);
+    const uid = userId(req);
+    // An outbox replay of an attempt already stored: answer with the stored result and
+    // no rewards (XP is keyed by attempt id, so it could never pay twice anyway).
+    const replayed = await findReplayedAttempt(prisma, uid, input.clientAttemptId);
+    if (replayed) {
+      sendReplayedAttempt(res, replayed, req.params.id);
+      return;
+    }
     const row = await prisma.exercise.findUnique({
       where: { id: req.params.id },
       include: { lesson: true },
@@ -447,40 +512,52 @@ app.post("/exercises/:id/attempts", async (req, res, next) => {
       return;
     }
     const exercise = validateMidiExercise(row.exercise_json);
-    const performedNotes = (input.performedNotes ??
-      pairRawMidiEvents(input.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    const result = scoreMidiExercise({ exercise, performedNotes, tempoPct: input.tempoPct });
-    const uid = userId(req);
+    const { performedNotes, result } = scoreAttempt(exercise, input);
+    const playedAt = resolvePlayedAt(input.playedAt, new Date());
 
     const lesson = validateLesson(row.lesson.lesson_json);
     const lessonExerciseIds = lesson.sections.flatMap((section) =>
       section.type === "midi-exercise" ? [section.exerciseId] : [],
     );
 
-    const attempt = await prisma.$transaction(async (tx) => {
-      const created = await tx.exerciseAttempt.create({
-        data: {
-          user_id: uid,
-          exercise_id: row.id,
-          submitted_events: json(input),
-          performed_notes: json(performedNotes),
-          result: json(result),
-        },
+    let attempt;
+    try {
+      attempt = await prisma.$transaction(async (tx) => {
+        const created = await tx.exerciseAttempt.create({
+          data: {
+            user_id: uid,
+            exercise_id: row.id,
+            submitted_events: json(input),
+            performed_notes: json(performedNotes),
+            result: json(result),
+            ...(input.clientAttemptId ? { client_attempt_id: input.clientAttemptId, created_at: playedAt } : {}),
+          },
+        });
+        // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
+        const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
+        await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
+        return created;
       });
-      // A lesson is passed when EVERY one of its exercises has been passed (see lessonCompletion).
-      const bests = await exerciseBestsFor(tx, uid, lessonExerciseIds);
-      await recordLessonOutcome(tx, uid, row.lesson_id, lessonCompletion(lesson, bests));
-      return created;
-    });
+    } catch (error) {
+      // Two replays of the same attempt raced; the other one stored it.
+      const raced = isUniqueViolation(error) ? await findReplayedAttempt(prisma, uid, input.clientAttemptId) : null;
+      if (!raced) throw error;
+      sendReplayedAttempt(res, raced, row.id);
+      return;
+    }
 
     const rewards = await rewardsOrNull(() =>
-      rewardExerciseAttempt(prisma, {
-        userId: uid,
-        attemptId: attempt.id,
-        exerciseId: row.id,
-        lessonId: row.lesson_id,
-        practiceSeconds: exerciseSeconds(performedNotes),
-      }),
+      rewardExerciseAttempt(
+        prisma,
+        {
+          userId: uid,
+          attemptId: attempt.id,
+          exerciseId: row.id,
+          lessonId: row.lesson_id,
+          practiceSeconds: exerciseSeconds(performedNotes),
+        },
+        playedAt,
+      ),
     );
     res.status(201).json({ ...result, rewards });
   } catch (e) {
@@ -681,14 +758,13 @@ app.post("/practice/score", async (req, res, next) => {
         exercise: z.unknown(),
         rawEvents: z.array(rawEventSchema).optional(),
         performedNotes: z.array(performedSchema).optional(),
+        chordDetections: chordDetectionsSchema.optional(),
         tempoPct: tempoPctSchema.optional(),
       })
       .parse(req.body);
     const performance = performanceSchema.parse(body);
     const exercise = validateMidiExercise(body.exercise) as MidiExercise;
-    const performedNotes = (performance.performedNotes ??
-      pairRawMidiEvents(performance.rawEvents as RawMidiEvent[])) as PerformedNote[];
-    res.json(scoreMidiExercise({ exercise, performedNotes, tempoPct: performance.tempoPct }));
+    res.json(scoreAttempt(exercise, performance).result);
   } catch (e) {
     next(e);
   }

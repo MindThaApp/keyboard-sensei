@@ -10,9 +10,12 @@ COPY apps/api/package.json apps/api/package.json
 COPY packages/shared-types/package.json packages/shared-types/package.json
 COPY packages/midi-engine/package.json packages/midi-engine/package.json
 COPY packages/music-theory/package.json packages/music-theory/package.json
+COPY packages/audio-analysis/package.json packages/audio-analysis/package.json
+COPY packages/piano-check/package.json packages/piano-check/package.json
 COPY packages/lesson-engine/package.json packages/lesson-engine/package.json
 COPY packages/playalong-core/package.json packages/playalong-core/package.json
 COPY packages/challenge-gen/package.json packages/challenge-gen/package.json
+COPY packages/piano-tuning/package.json packages/piano-tuning/package.json
 COPY patches patches
 
 RUN pnpm install --no-frozen-lockfile
