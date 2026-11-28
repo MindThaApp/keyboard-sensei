@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Accidental, Annotation, Formatter, GhostNote, Renderer, Stave, StaveConnector, StaveNote, TabNote, TabStave, Voice } from "vexflow";
 import { fretToMidi } from "@keyboard-sensei/music-theory";
+import { t } from "../../i18n";
 
 /**
  * Guitar notation: standard staff (treble clef with the octave-below marking) stacked over tab,
@@ -134,5 +135,5 @@ export default function GuitarNotation({ data, title }: { data: GuitarNotationDa
   useEffect(() => {
     if (ref.current) renderInto(ref.current, data);
   }, [data]);
-  return <div ref={ref} role="img" aria-label={`Guitar ${data.view === "tab" ? "tab" : "staff and tab"}${title ? `: ${title}` : ""}`} className="overflow-x-auto" data-testid="guitar-notation" />;
+  return <div ref={ref} role="img" aria-label={`${t(data.view === "tab" ? "guitar.tab" : "guitar.staffAndTab")}${title ? `: ${title}` : ""}`} className="overflow-x-auto" data-testid="guitar-notation" />;
 }

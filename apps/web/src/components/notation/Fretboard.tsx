@@ -1,4 +1,5 @@
 import { STANDARD_TUNING, STRING_NAMES, fretToMidi } from "@keyboard-sensei/music-theory";
+import { t } from "../../i18n";
 
 /**
  * Display-only fretboard (the guitar's counterpart of the on-screen piano): lights target
@@ -39,7 +40,7 @@ export default function Fretboard({ frets = 12, targets = [], detectedMidi, clas
   const targetKeys = new Set(targets.map(key));
   const spot = (p: FretPosition) => ({ cx: p.fret === 0 ? W.left - 16 : fretX(p.fret), cy: stringY(p.string) });
   return (
-    <svg className={className} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Guitar fretboard" fill="none" stroke="currentColor" data-testid="fretboard">
+    <svg className={className} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t("guitar.fretboard")} fill="none" stroke="currentColor" data-testid="fretboard">
       <line x1={W.left} x2={W.left} y1={W.top} y2={stringY(6)} strokeWidth={4} />
       {Array.from({ length: frets }, (_, i) => (
         <line key={`f${i}`} x1={W.left + (i + 1) * W.fretWidth} x2={W.left + (i + 1) * W.fretWidth} y1={W.top} y2={stringY(6)} strokeWidth={1} opacity={0.5} />

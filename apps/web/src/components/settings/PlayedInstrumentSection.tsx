@@ -1,6 +1,7 @@
 import { PLAYED_INSTRUMENTS, type PlayedInstrument } from "@keyboard-sensei/shared-types";
 import { useInstrument } from "../../contexts/InstrumentContext";
 import { INSTRUMENT_LABEL } from "../../utils/playedInstrument";
+import { t } from "../../i18n";
 
 /** "What do you play?": any number of instruments, one active (it scopes Learn and Today). */
 export function InstrumentChoice({ onDone }: { onDone?: () => void }) {
@@ -32,7 +33,7 @@ export function InstrumentChoice({ onDone }: { onDone?: () => void }) {
                   aria-pressed={isActive}
                   onClick={() => choose(selected, instrument)}
                 >
-                  {isActive ? "Learning now" : "Switch to this"}
+                  {isActive ? t("played.learningNow") : t("played.switchTo")}
                 </button>
               )}
             </li>
@@ -41,7 +42,7 @@ export function InstrumentChoice({ onDone }: { onDone?: () => void }) {
       </ul>
       {onDone && (
         <button type="button" className="primary-button" onClick={onDone}>
-          Done
+          {t("common.done")}
         </button>
       )}
     </div>
@@ -53,10 +54,10 @@ export default function PlayedInstrumentSection() {
     <section className="card space-y-3 p-5" aria-labelledby="played-instrument-heading">
       <div>
         <h3 id="played-instrument-heading" className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-          What do you play?
+          {t("played.question")}
         </h3>
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Pick every instrument you learn. The one you are learning now sets the lessons on Learn and Today. Your streak and XP stay shared.
+          {t("played.intro")}
         </p>
       </div>
       <InstrumentChoice />

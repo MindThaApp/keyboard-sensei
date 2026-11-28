@@ -25,6 +25,7 @@ import {
   type TuningSession,
 } from "@keyboard-sensei/piano-tuning";
 import { Button, Card } from "../ui";
+import { t, tRich, useT } from "../../i18n";
 import FineDisplay from "./FineDisplay";
 import SafetyNote, { TechnicianRecommendation } from "./SafetyNote";
 import { createMicSampleSource, type SampleSource } from "./sampleSource";
@@ -58,44 +59,37 @@ function loadSession(): TuningSession {
   return createSession({ a4Hz: readReferenceA4() });
 }
 
-const STOP_REASON_TEXT: Record<StopReason, string> = {
-  "will-not-hold": "the note will not hold its pitch",
-  "pin-too-loose": "the tuning pin turns too easily",
-  "pitch-jumps": "the pitch jumps unpredictably",
-  other: "something did not feel right",
+const STOP_REASON_KEY: Record<StopReason, string> = {
+  "will-not-hold": "willNotHold",
+  "pin-too-loose": "pinTooLoose",
+  "pitch-jumps": "pitchJumps",
+  other: "other",
 };
+const stopReasonText = (reason: StopReason) => t(`tuningAid.reason.${STOP_REASON_KEY[reason]}`);
 
 const VERDICT_TEXT: Record<CheckVerdict, string> = {
-  clean: "Clean: no beats.",
-  "slow-beat": "Nearly there: a very slow beat.",
-  beating: "Beating: keep adjusting in very small movements.",
+  get clean() { return t("tuningAid.verdict.clean"); },
+  get "slow-beat"() { return t("tuningAid.verdict.slowBeat"); },
+  get beating() { return t("tuningAid.verdict.beating"); },
 };
 
-function instructions(step: Substep, t: CurrentTarget): string {
-  const name = noteName(t.midi);
-  const partner = t.partnerMidi !== undefined ? noteName(t.partnerMidi) : "";
-  switch (step) {
-    case "rough":
-      return `Pitch raise, rough pass: bring every string of ${name} up to the rough target shown. Stop at the target; never go above it.`;
-    case "mute":
-      return t.strings === 3
-        ? `${name} has three strings. Mute the left and right strings (a felt strip or rubber mutes) so only the centre string sounds.`
-        : `${name} has two strings. Mute one of them so only one string sounds.`;
-    case "centre":
-      return `Play ${name} and turn the pin of the centre string until the display stands still. Come up to the target from slightly below and finish with a tiny movement to set the pin.`;
-    case "first":
-      return `Play ${name} and tune the open string until the display stands still. Come up to the target from slightly below.`;
-    case "single":
-      return `${name} has one string. Tune it until the display stands still. Come up to the target from slightly below.`;
-    case "unison-left":
-      return `Remove the mute from the left string. Play ${name} and turn the left string's pin until the beats slow down and disappear. Do not move the centre string.`;
-    case "unison-right":
-      return `Remove the last mute. Play ${name} and bring the right string in until all three sound as one, with no beats.`;
-    case "unison":
-      return `Remove the mute. Play ${name} and bring the second string in until the beats disappear. Do not move the first string.`;
-    case "octave":
-      return `Play ${partner} and ${name} together and let them ring. A good octave has no beats.`;
-  }
+const STEP_KEY: Record<Substep, string> = {
+  rough: "rough",
+  mute: "mute",
+  centre: "centre",
+  first: "first",
+  single: "single",
+  "unison-left": "unisonLeft",
+  "unison-right": "unisonRight",
+  unison: "unison",
+  octave: "octave",
+};
+
+function instructions(step: Substep, target: CurrentTarget): string {
+  const name = noteName(target.midi);
+  const partner = target.partnerMidi !== undefined ? noteName(target.partnerMidi) : "";
+  const key = step === "mute" ? (target.strings === 3 ? "muteThree" : "muteTwo") : STEP_KEY[step];
+  return t(`tuningAid.step.${key}`, { note: name, partner });
 }
 
 export interface PianoTuningAidPageProps {
@@ -118,6 +112,7 @@ function TuningAid({
   readingIntervalMs = 250,
   onRestart,
 }: PianoTuningAidPageProps & { onRestart: () => void }) {
+  useT();
   const [session, dispatch] = useReducer(tuningReducer, undefined, loadSession);
   const sourceRef = useRef<SampleSource | null>(givenSource ?? null);
   const [micError, setMicError] = useState<string | null>(null);
@@ -142,7 +137,7 @@ function TuningAid({
       setMicError(null);
       return sourceRef.current;
     } catch {
-      setMicError("Microphone access was blocked. Allow the microphone for Music Portal in your browser or system settings, then try again.");
+      setMicError(t("tuningAid.micBlocked"));
       return null;
     }
   }, []);
@@ -186,7 +181,7 @@ function TuningAid({
       const samples = await src.capture(MEASURE_MS, 300);
       const m = analyzer(samples, src.sampleRate, midi, { a4Hz: session.a4Hz, searchCents: 200 });
       if (m && m.confidence >= MIN_SAMPLE_CONFIDENCE) act({ type: "RECORD_SAMPLE", measurement: m });
-      else setMeasureError(`Could not hear ${noteName(midi)} clearly. Play it a bit louder, let it ring, and try again.`);
+      else setMeasureError(t("tuningAid.notHeard", { note: noteName(midi) }));
     } finally {
       setBusy(false);
     }
@@ -226,10 +221,10 @@ function TuningAid({
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
       <header className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Piano tuning aid</h1>
+        <h1 className="text-2xl font-semibold">{t("tuningAid.title")}</h1>
         {session.acknowledged && (
           <Button size="sm" variant="plain" onClick={startOver}>
-            Start over
+            {t("tuningAid.startOver")}
           </Button>
         )}
       </header>
@@ -246,64 +241,61 @@ function TuningAid({
 
           {session.stopNotice ? (
             <Card as="section" role="alert" className="space-y-3">
-              <h2 className="text-lg font-semibold">Stopped guiding {noteName(session.stopNotice.midi)}</h2>
+              <h2 className="text-lg font-semibold">{t("tuningAid.stoppedTitle", { note: noteName(session.stopNotice.midi) })}</h2>
               <p className="text-sm">
-                The tuning aid has stopped on this note because {STOP_REASON_TEXT[session.stopNotice.reason]}. Do not keep turning
-                the pin. This usually needs a technician's hands (for example a loose pin or a pin block problem).
+                {t(`tuningAid.stopBecause.${STOP_REASON_KEY[session.stopNotice.reason]}`)} {t("tuningAid.stopAdvice")}
               </p>
               <TechnicianRecommendation />
               <Button variant="filled" onClick={() => act({ type: "DISMISS_STOP_NOTICE" })}>
-                Leave this note and continue
+                {t("tuningAid.leaveNote")}
               </Button>
             </Card>
           ) : session.phase === "measure" ? (
             <MeasureStep session={session} busy={busy} error={measureError} onMeasure={measureSample} dispatch={dispatch} />
           ) : session.phase === "plan" && plan ? (
             <Card as="section" className="space-y-3">
-              <h2 className="text-lg font-semibold">Your piano's tuning plan</h2>
+              <h2 className="text-lg font-semibold">{t("tuningAid.plan.title")}</h2>
               <p className="text-sm">
-                Based on {plan.usableSamples} measured notes{plan.usableSamples < 3 ? " (too few: using a typical piano's curve)" : ""}, the
-                app has computed a stretch curve for this piano. On average it is{" "}
-                <strong>
-                  {Math.abs(plan.pitchLevelCents).toFixed(0)} cents {plan.pitchLevelCents < 0 ? "flat" : "sharp"}
-                </strong>{" "}
-                of that curve at A4 = {session.a4Hz} Hz.
+                {tRich(plan.usableSamples < 3 ? "tuningAid.plan.basedFew" : "tuningAid.plan.based", {
+                  count: plan.usableSamples,
+                  offset: t(plan.pitchLevelCents < 0 ? "tuner.centsFlat" : "tuner.centsSharp", { cents: Math.abs(plan.pitchLevelCents).toFixed(0) }),
+                  a4: session.a4Hz,
+                  strong: (c) => <strong>{c}</strong>,
+                })}
               </p>
               <p className="text-sm opacity-80">
-                Order: A4 and the temperament octave first, then up the treble by octaves, then down the bass.
+                {t("tuningAid.plan.order")}
               </p>
               {plan.advice === "professional" ? (
                 <div className="space-y-2 text-sm">
                   <p className="font-semibold">
-                    This piano is far below pitch. Raising it that far puts heavy extra load on strings and frame and should be done
-                    by a technician, sometimes over several visits. The tuning aid will not guide it.
+                    {t("tuningAid.plan.professional")}
                   </p>
                   <TechnicianRecommendation />
                 </div>
               ) : plan.advice === "pitch-raise" ? (
                 <div className="space-y-2 text-sm">
                   <p>
-                    A <strong>pitch raise</strong> is needed: a rough pass with a small overpull, then a fine pass.
+                    {tRich("tuningAid.plan.pitchRaise", { strong: (c) => <strong>{c}</strong> })}
                   </p>
                   <p className="font-semibold">
-                    Warning: a pitch raise adds a lot of stress to old strings. Strings can break. Wear eye protection and consider a
-                    technician.
+                    {t("tuningAid.plan.warning")}
                   </p>
                   <Button variant="filled" onClick={() => act({ type: "CHOOSE_MODE", mode: "pitch-raise" })}>
-                    Start pitch raise (two passes)
+                    {t("tuningAid.plan.startRaise")}
                   </Button>
                 </div>
               ) : (
                 <Button variant="filled" onClick={() => act({ type: "CHOOSE_MODE", mode: "fine" })}>
-                  Start fine tuning
+                  {t("tuningAid.plan.startFine")}
                 </Button>
               )}
               {plan.pitchLevelCents < -5 && (
                 <div className="text-sm">
                   <Button variant="tinted" onClick={() => act({ type: "CHOOSE_MODE", mode: "own-pitch" })}>
-                    Tune at the piano's current pitch instead
+                    {t("tuningAid.plan.ownPitch")}
                   </Button>
-                  <p className="mt-1 opacity-80">Evens the piano out without raising it; it will not match other instruments at A4 = {session.a4Hz} Hz.</p>
+                  <p className="mt-1 opacity-80">{t("tuningAid.plan.ownPitchHint", { a4: session.a4Hz })}</p>
                 </div>
               )}
             </Card>
@@ -346,21 +338,19 @@ function MeasureStep({
   const total = session.sampleNotes.length;
   return (
     <Card as="section" className="space-y-3">
-      <h2 className="text-lg font-semibold">Step 1: measure your piano</h2>
+      <h2 className="text-lg font-semibold">{t("tuningAid.measure.title")}</h2>
       <p className="text-sm">
-        The app measures how much this piano's strings stretch their partials (inharmonicity) on a few keys across the keyboard, and
-        computes a tuning curve made for this piano. Music Portal listens through the microphone; sound is analysed on this device and
-        never recorded or uploaded.
+        {t("tuningAid.measure.intro")}
       </p>
       {midi !== undefined ? (
         <>
           <p className="text-sm" data-testid="measure-progress">
-            Key {session.measureIndex + 1} of {total}
+            {t("tuningAid.measure.progress", { n: session.measureIndex + 1, total })}
           </p>
           <p className="text-3xl font-semibold" data-testid="measure-note">
             {noteName(midi)}
           </p>
-          <p className="text-sm">Play {noteName(midi)} firmly (mezzo-forte), then tap Listen and let the note ring.</p>
+          <p className="text-sm">{t("tuningAid.measure.play", { note: noteName(midi) })}</p>
           {error && (
             <p role="alert" className="text-sm">
               {error}
@@ -368,18 +358,18 @@ function MeasureStep({
           )}
           <div className="flex flex-wrap gap-2">
             <Button variant="filled" loading={busy} onClick={onMeasure}>
-              Listen
+              {t("tuningAid.measure.listen")}
             </Button>
-            <Button onClick={() => dispatch({ type: "SKIP_SAMPLE" })}>Skip this key</Button>
-            {session.measureIndex > 0 && <Button onClick={() => dispatch({ type: "REDO_SAMPLE" })}>Redo previous</Button>}
+            <Button onClick={() => dispatch({ type: "SKIP_SAMPLE" })}>{t("tuningAid.measure.skipKey")}</Button>
+            {session.measureIndex > 0 && <Button onClick={() => dispatch({ type: "REDO_SAMPLE" })}>{t("tuningAid.measure.redoPrevious")}</Button>}
           </div>
         </>
       ) : (
-        <p className="text-sm">All keys measured.</p>
+        <p className="text-sm">{t("tuningAid.measure.allDone")}</p>
       )}
       {(midi === undefined || session.samples.length >= 3) && (
         <Button variant={midi === undefined ? "filled" : "gray"} onClick={() => dispatch({ type: "FINISH_MEASURE" })}>
-          {midi === undefined ? "See the tuning plan" : "Finish measuring now"}
+          {midi === undefined ? t("tuningAid.measure.seePlan") : t("tuningAid.measure.finishNow")}
         </Button>
       )}
     </Card>
@@ -387,10 +377,10 @@ function MeasureStep({
 }
 
 const REPORT_OPTIONS: { reason: StopReason; label: string }[] = [
-  { reason: "will-not-hold", label: "It will not stay in tune" },
-  { reason: "pin-too-loose", label: "The pin turns too easily" },
-  { reason: "pitch-jumps", label: "The pitch jumps" },
-  { reason: "other", label: "Something feels wrong" },
+  { reason: "will-not-hold", get label() { return t("tuningAid.report.willNotHold"); } },
+  { reason: "pin-too-loose", get label() { return t("tuningAid.report.pinTooLoose"); } },
+  { reason: "pitch-jumps", get label() { return t("tuningAid.report.pitchJumps"); } },
+  { reason: "other", get label() { return t("tuningAid.report.other"); } },
 ];
 
 function TuneStep({
@@ -418,10 +408,10 @@ function TuneStep({
     <Card as="section" className="space-y-4">
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <span data-testid="tune-progress">
-          {session.pass === "rough" ? "Rough pass" : "Fine pass"}: note {session.index + 1} of {session.order.length}
+          {t(session.pass === "rough" ? "tuningAid.tune.roughProgress" : "tuningAid.tune.fineProgress", { n: session.index + 1, total: session.order.length })}
         </span>
         <span>
-          Step {stepNo} of {target.substeps.length}
+          {t("tuningAid.tune.step", { n: stepNo, total: target.substeps.length })}
         </span>
       </div>
       <div className="flex items-baseline gap-3">
@@ -429,8 +419,8 @@ function TuneStep({
           {noteName(target.midi)}
         </h2>
         <span className="text-sm opacity-80 tabular-nums">
-          target {target.aimHz.toFixed(2)} Hz
-          {target.overpullCents > 0 ? ` (includes +${target.overpullCents.toFixed(1)} c overpull)` : ""}
+          {t("tuningAid.tune.target", { hz: target.aimHz.toFixed(2) })}
+          {target.overpullCents > 0 ? ` ${t("tuningAid.tune.overpull", { cents: target.overpullCents.toFixed(1) })}` : ""}
         </span>
       </div>
       <p className="text-sm" data-testid="tune-instructions">
@@ -442,12 +432,12 @@ function TuneStep({
       {(isUnison || step === "octave") && (
         <div className="space-y-2">
           <Button loading={busy} onClick={() => onCheck(step === "octave" ? "octave" : "unison")}>
-            {step === "octave" ? "Check octave" : "Check unison"}
+            {step === "octave" ? t("tuningAid.tune.checkOctave") : t("tuningAid.tune.checkUnison")}
           </Button>
           {check && (
             <p className="text-sm" data-testid="check-result">
               {VERDICT_TEXT[check.verdict]}
-              {check.verdict !== "clean" && check.beatHz > 0 ? ` About ${check.beatHz.toFixed(1)} beats per second.` : ""}
+              {check.verdict !== "clean" && check.beatHz > 0 ? ` ${t("tuningAid.tune.beats", { beats: check.beatHz.toFixed(1) })}` : ""}
             </p>
           )}
         </div>
@@ -455,7 +445,7 @@ function TuneStep({
 
       {step === "mute" && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>Strings on this note:</span>
+          <span>{t("tuningAid.tune.stringsOnNote")}</span>
           {([1, 2, 3] as const).map((n) => (
             <Button
               key={n}
@@ -472,15 +462,15 @@ function TuneStep({
 
       <div className="flex flex-wrap gap-2">
         <Button variant={!pitchStep || inTune ? "filled" : "gray"} onClick={() => dispatch({ type: "NEXT_SUBSTEP" })}>
-          {stepNo === target.substeps.length ? "Note done" : "Next step"}
+          {stepNo === target.substeps.length ? t("tuningAid.tune.noteDone") : t("tuningAid.tune.nextStep")}
         </Button>
-        <Button onClick={() => dispatch({ type: "SKIP_NOTE" })}>Skip note</Button>
+        <Button onClick={() => dispatch({ type: "SKIP_NOTE" })}>{t("tuningAid.tune.skipNote")}</Button>
         <Button variant="plain" onClick={() => setReporting((r) => !r)} aria-expanded={reporting}>
-          Report a problem
+          {t("tuningAid.tune.report")}
         </Button>
       </div>
       {reporting && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="What went wrong">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("tuningAid.tune.whatWrong")}>
           {REPORT_OPTIONS.map((o) => (
             <Button key={o.reason} size="sm" onClick={() => dispatch({ type: "REPORT_PROBLEM", reason: o.reason })}>
               {o.label}
@@ -496,18 +486,17 @@ function DoneStep({ session }: { session: TuningSession }) {
   const summary = summarizeSession(session);
   return (
     <Card as="section" className="space-y-3">
-      <h2 className="text-lg font-semibold">Tuning finished</h2>
+      <h2 className="text-lg font-semibold">{t("tuningAid.done.title")}</h2>
       <p className="text-sm">
-        {summary.done} notes tuned{summary.skipped ? `, ${summary.skipped} skipped` : ""}. A fresh tuning settles over the next days;
-        run the Piano check in a week or two to see how it is holding.
+        {t(summary.skipped ? "tuningAid.done.summarySkipped" : "tuningAid.done.summary", { done: summary.done, skipped: summary.skipped })}
       </p>
       {summary.stopped.length > 0 && (
         <div className="space-y-1 text-sm">
-          <p className="font-semibold">Notes that need a technician:</p>
+          <p className="font-semibold">{t("tuningAid.done.needTechnician")}</p>
           <ul className="list-disc pl-5">
             {summary.stopped.map((s) => (
               <li key={s.midi}>
-                {noteName(s.midi)}: {STOP_REASON_TEXT[s.reason]}
+                {noteName(s.midi)}: {stopReasonText(s.reason)}
               </li>
             ))}
           </ul>

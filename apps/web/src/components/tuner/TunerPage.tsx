@@ -1,3 +1,4 @@
+import { t, useT } from "../../i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchString, midiToFrequency } from "@keyboard-sensei/audio-analysis";
 import {
@@ -15,18 +16,41 @@ import { DriftTrace, StrobeBand, TunerNeedle } from "./TunerDisplay";
 import { activeStrings, saveTunerSettings, useTunerSettings, type TunerSettings } from "./tunerSettings";
 import { useTuner, type TunerSignal } from "./useTuner";
 
-const INSTRUMENT_LABELS: Record<TuningInstrument, string> = { guitar: "Guitar", violin: "Violin", piano: "Piano" };
-const SIGNAL_TEXT: Record<TunerSignal, string> = {
-  listening: "Listening",
-  "too-quiet": "Too quiet: play a little louder or move closer",
-  "too-noisy": "Too noisy: move closer or find a quieter room",
+const INSTRUMENT_LABELS: Record<TuningInstrument, string> = {
+  get guitar() { return t("tuner.instrument.guitar"); },
+  get violin() { return t("tuner.instrument.violin"); },
+  get piano() { return t("tuner.instrument.piano"); },
 };
+const SIGNAL_TEXT: Record<TunerSignal, string> = {
+  get listening() { return t("tuner.signal.listening"); },
+  get "too-quiet"() { return t("tuner.signal.tooQuiet"); },
+  get "too-noisy"() { return t("tuner.signal.tooNoisy"); },
+};
+
+/** Preset names come from music-theory in English; "guitar-drop-d" reads tuner.preset.dropD. */
+function presetName(preset: { id: string; name: string }): string {
+  const key = `tuner.preset.${preset.id.replace(/^(guitar|violin|piano)-/, "").replace(/-(\w)/g, (_, c: string) => c.toUpperCase())}`;
+  const text = t(key);
+  return text === key ? preset.name : text;
+}
+
+/** validateCustomTuning's messages are English; shown through the catalogue. */
+function tuningError(error: string): string {
+  if (error === "Give the tuning a name.") return t("tuner.error.noName");
+  if (error === "A tuning has 1 to 12 strings.") return t("tuner.error.stringCount");
+  const range = /^(.*) is outside the tuner's range\.$/.exec(error);
+  if (range) return t("tuner.error.outOfRange", { note: range[1] });
+  const bad = /^"(.*)" is not a note/.exec(error);
+  if (bad) return t("tuner.error.notANote", { note: bad[1] });
+  return error;
+}
 
 /**
  * The tuner (spec section 5): chromatic mode, guitar/violin/piano presets,
  * adjustable A4 and a reference tone. Works offline and without an account.
  */
 export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }) {
+  useT();
   const settings = useTunerSettings();
   const mic = useMicSession("tuner");
   const session = mic.state.status === "listening" ? mic.state.session : null;
@@ -50,35 +74,35 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 py-4">
-      {!hideTitle && <h1 className="text-2xl font-semibold">Tuner</h1>}
+      {!hideTitle && <h1 className="text-2xl font-semibold">{t("tuner.title")}</h1>}
 
       {!session && (
         <MicPermissionNotice
-          purpose="The tuner listens through your microphone to show which note you are playing and how far it is from in tune."
+          purpose={t("tuner.micPurpose")}
           onAllow={() => void mic.start()}
           busy={mic.state.status === "starting"}
           error={mic.state.status === "error" ? mic.state : null}
         />
       )}
 
-      <section className="card space-y-3 p-4 text-center" aria-label="Reading">
+      <section className="card space-y-3 p-4 text-center" aria-label={t("tuner.reading")}>
         <div className="flex items-center justify-between text-xs">
           <span className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800" data-testid="tuner-status" role="status">
-            {session ? (hold ? "Hold" : SIGNAL_TEXT[view.signal]) : "Microphone off"}
+            {session ? (hold ? t("tuner.hold") : SIGNAL_TEXT[view.signal]) : t("tuner.micOff")}
           </span>
-          <span className="tabular-nums text-slate-500">A4 = {settings.a4Hz.toFixed(1)} Hz</span>
+          <span className="tabular-nums text-slate-500">{t("tuner.a4Value", { hz: settings.a4Hz.toFixed(1) })}</span>
         </div>
         <div className="text-6xl font-bold tabular-nums" data-testid="tuner-note" aria-live="polite">
           {targetLabel ?? "–"}
         </div>
         <div className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
-          <span data-testid="tuner-frequency">{reading ? `${reading.frequency.toFixed(1)} Hz` : "– Hz"}</span>
+          <span data-testid="tuner-frequency">{t("tuner.hz", { hz: reading ? reading.frequency.toFixed(1) : "–" })}</span>
           {" · "}
-          <span data-testid="tuner-cents">{cents === null ? "– cents" : `${cents > 0 ? "+" : ""}${cents.toFixed(1)} cents`}</span>
+          <span data-testid="tuner-cents">{t("tuner.cents", { cents: cents === null ? "–" : `${cents > 0 ? "+" : ""}${cents.toFixed(1)}` })}</span>
         </div>
         {match && reading && reading.name !== match.string.label && (
           <p className="text-sm text-slate-600 dark:text-slate-300" data-testid="tuner-playing">
-            You're playing {reading.name}: {match.cents < 0 ? "tune up" : "tune down"} towards {match.string.label}
+            {t(match.cents < 0 ? "tuner.playingTuneUp" : "tuner.playingTuneDown", { played: reading.name, target: match.string.label })}
           </p>
         )}
         <TunerNeedle cents={cents} greenZone={settings.greenZoneCents} active={reading !== null} />
@@ -86,7 +110,7 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
         <DriftTrace history={view.history} now={view.history[view.history.length - 1]?.time ?? 0} greenZone={settings.greenZoneCents} />
         <div className="flex flex-wrap justify-center gap-2">
           <button type="button" className="secondary-button" aria-pressed={hold} onClick={() => setHold(h => !h)} disabled={!session}>
-            {hold ? "Release hold" : "Hold"}
+            {hold ? t("tuner.releaseHold") : t("tuner.hold")}
           </button>
           <ReferenceToneButton
             frequency={midiToFrequency(
@@ -98,7 +122,7 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
           />
           {session && (
             <button type="button" className="secondary-button" onClick={mic.stop}>
-              Stop listening
+              {t("tuner.stopListening")}
             </button>
           )}
         </div>
@@ -107,10 +131,10 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
       <TuningPicker settings={settings} />
 
       {strings && (
-        <section className="card space-y-2 p-4" aria-label="Strings">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Pick a string or let the tuner find it">
+        <section className="card space-y-2 p-4" aria-label={t("tuner.strings")}>
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("tuner.pickString")}>
             <button type="button" className="secondary-button" aria-pressed={lockedIndex === null} onClick={() => setLockedIndex(null)}>
-              Auto
+              {t("tuner.auto")}
             </button>
             {strings.map((s, i) => (
               <button
@@ -127,11 +151,11 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
           </div>
           {settings.instrument === "guitar" && (
             <label className="flex items-center gap-2 text-sm">
-              Capo
-              <select value={settings.capo} onChange={e => saveTunerSettings({ capo: Number(e.target.value) })} aria-label="Capo fret">
+              {t("tuner.capo")}
+              <select value={settings.capo} onChange={e => saveTunerSettings({ capo: Number(e.target.value) })} aria-label={t("tuner.capoFretLabel")}>
                 {Array.from({ length: 13 }, (_, i) => (
                   <option key={i} value={i}>
-                    {i === 0 ? "None" : `Fret ${i}`}
+                    {i === 0 ? t("tuner.capoNone") : t("tuner.capoFret", { n: i })}
                   </option>
                 ))}
               </select>
@@ -142,22 +166,22 @@ export default function TunerPage({ hideTitle = false }: { hideTitle?: boolean }
 
       <ReferencePitchControl a4={settings.a4Hz} />
 
-      <section className="card grid gap-3 p-4 text-sm sm:grid-cols-2" aria-label="Display">
+      <section className="card grid gap-3 p-4 text-sm sm:grid-cols-2" aria-label={t("tuner.display")}>
         <label className="flex items-center gap-2">
-          In-tune zone
-          <select value={settings.greenZoneCents} onChange={e => saveTunerSettings({ greenZoneCents: Number(e.target.value) })} aria-label="In-tune zone in cents">
+          {t("tuner.inTuneZone")}
+          <select value={settings.greenZoneCents} onChange={e => saveTunerSettings({ greenZoneCents: Number(e.target.value) })} aria-label={t("tuner.inTuneZoneCents")}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map(c => (
               <option key={c} value={c}>
-                ±{c} cents
+                {t("tuner.plusMinusCents", { cents: c })}
               </option>
             ))}
           </select>
         </label>
         <label className="flex items-center gap-2">
-          Reference sound
+          {t("tuner.referenceSound")}
           <select value={settings.referenceTimbre} onChange={e => saveTunerSettings({ referenceTimbre: e.target.value === "warm" ? "warm" : "sine" })}>
-            <option value="sine">Pure (sine)</option>
-            <option value="warm">Warm</option>
+            <option value="sine">{t("tuner.timbre.sine")}</option>
+            <option value="warm">{t("tuner.timbre.warm")}</option>
           </select>
         </label>
       </section>
@@ -171,8 +195,8 @@ function TuningPicker({ settings }: { settings: TunerSettings }) {
   const presets = tuningPresetsFor(settings.instrument);
   const customs = settings.customTunings.filter(t => t.instrument === settings.instrument);
   return (
-    <section className="card space-y-3 p-4" aria-label="Instrument and tuning">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Instrument">
+    <section className="card space-y-3 p-4" aria-label={t("tuner.instrumentAndTuning")}>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("tuner.instrumentLabel")}>
         {(Object.keys(INSTRUMENT_LABELS) as TuningInstrument[]).map(instrument => (
           <button
             key={instrument}
@@ -191,12 +215,12 @@ function TuningPicker({ settings }: { settings: TunerSettings }) {
         ))}
       </div>
       <label className="flex items-center gap-2 text-sm">
-        Tuning
-        <select value={settings.tuningId} onChange={e => saveTunerSettings({ tuningId: e.target.value })} aria-label="Tuning">
-          <option value="chromatic">Chromatic (any note)</option>
+        {t("tuner.tuning")}
+        <select value={settings.tuningId} onChange={e => saveTunerSettings({ tuningId: e.target.value })} aria-label={t("tuner.tuning")}>
+          <option value="chromatic">{t("tuner.chromaticAny")}</option>
           {presets.map(p => (
             <option key={p.id} value={p.id}>
-              {p.name} ({p.strings.map(s => s.label).join(" ")})
+              {presetName(p)} ({p.strings.map(s => s.label).join(" ")})
             </option>
           ))}
           {customs.map(t => (
@@ -208,7 +232,7 @@ function TuningPicker({ settings }: { settings: TunerSettings }) {
       </label>
       {settings.instrument === "piano" && (
         <p className="text-xs text-slate-500">
-          Piano: play any key; the tuner shows the nearest note across all 88 keys against equal temperament.
+          {t("tuner.pianoHint")}
         </p>
       )}
     </section>
@@ -219,23 +243,23 @@ function TuningPicker({ settings }: { settings: TunerSettings }) {
 function ReferencePitchControl({ a4 }: { a4: number }) {
   const set = (hz: number) => saveTunerSettings({ a4Hz: clampReferencePitch(hz) });
   return (
-    <section className="card space-y-2 p-4" aria-label="Reference pitch">
+    <section className="card space-y-2 p-4" aria-label={t("tuner.referencePitchLabel")}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span>Reference A4</span>
-        <StepButton label="Lower A4" text="−" onStep={fine => set(a4 - (fine ? REFERENCE_PITCH.fineStepHz : REFERENCE_PITCH.stepHz))} />
+        <span>{t("tuner.referenceA4")}</span>
+        <StepButton label={t("tuner.lowerA4")} text="−" onStep={fine => set(a4 - (fine ? REFERENCE_PITCH.fineStepHz : REFERENCE_PITCH.stepHz))} />
         <strong className="w-24 text-center tabular-nums" data-testid="tuner-a4">
-          {a4.toFixed(1)} Hz
+          {t("tuner.hz", { hz: a4.toFixed(1) })}
         </strong>
-        <StepButton label="Raise A4" text="+" onStep={fine => set(a4 + (fine ? REFERENCE_PITCH.fineStepHz : REFERENCE_PITCH.stepHz))} />
+        <StepButton label={t("tuner.raiseA4")} text="+" onStep={fine => set(a4 + (fine ? REFERENCE_PITCH.fineStepHz : REFERENCE_PITCH.stepHz))} />
       </div>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Common reference pitches">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("tuner.commonPitches")}>
         {REFERENCE_PITCH.quickPicksHz.map(hz => (
           <button key={hz} type="button" className="secondary-button text-xs" aria-pressed={a4 === hz} onClick={() => set(hz)}>
             {hz}
           </button>
         ))}
       </div>
-      <p className="text-xs text-slate-500">Tap ± for 0.5 Hz steps; press and hold for 0.1 Hz. The same A4 is used to grade intonation in lessons.</p>
+      <p className="text-xs text-slate-500">{t("tuner.a4Help")}</p>
     </section>
   );
 }
@@ -307,7 +331,7 @@ function ReferenceToneButton({ frequency, label, timbre }: { frequency: number; 
         }
       }}
     >
-      {playing ? `Stop ${label}` : `Play ${label}`}
+      {playing ? t("tuner.stopToneNote", { note: label }) : t("tuner.playToneNote", { note: label })}
     </button>
   );
 }
@@ -319,26 +343,26 @@ function CustomTuningEditor({ settings }: { settings: TunerSettings }) {
   const mine = settings.customTunings.filter(t => t.instrument === settings.instrument);
   if (settings.instrument === "piano") return null;
   return (
-    <section className="card space-y-2 p-4 text-sm" aria-label="Custom tunings">
-      <h2 className="font-semibold">Your tunings</h2>
+    <section className="card space-y-2 p-4 text-sm" aria-label={t("tuner.customTunings")}>
+      <h2 className="font-semibold">{t("tuner.yourTunings")}</h2>
       {mine.length > 0 && (
         <ul className="space-y-1">
-          {mine.map(t => (
-            <li key={t.id} className="flex items-center justify-between gap-2">
+          {mine.map(tuning => (
+            <li key={tuning.id} className="flex items-center justify-between gap-2">
               <span>
-                {t.name}: {t.strings.map(s => s.label).join(" ")}
+                {tuning.name}: {tuning.strings.map(s => s.label).join(" ")}
               </span>
               <button
                 type="button"
                 className="secondary-button text-xs"
                 onClick={() =>
                   saveTunerSettings({
-                    customTunings: settings.customTunings.filter(x => x.id !== t.id),
-                    ...(settings.tuningId === t.id ? { tuningId: tuningPresetsFor(settings.instrument)[0]?.id ?? "chromatic" } : {}),
+                    customTunings: settings.customTunings.filter(x => x.id !== tuning.id),
+                    ...(settings.tuningId === tuning.id ? { tuningId: tuningPresetsFor(settings.instrument)[0]?.id ?? "chromatic" } : {}),
                   })
                 }
               >
-                Remove
+                {t("tuner.remove")}
               </button>
             </li>
           ))}
@@ -350,7 +374,7 @@ function CustomTuningEditor({ settings }: { settings: TunerSettings }) {
           e.preventDefault();
           const result = validateCustomTuning(name, notes.split(/[\s,]+/).filter(Boolean));
           if (!result.ok) {
-            setError(result.error);
+            setError(tuningError(result.error));
             return;
           }
           const id = `custom-${Date.now().toString(36)}`;
@@ -364,15 +388,15 @@ function CustomTuningEditor({ settings }: { settings: TunerSettings }) {
         }}
       >
         <label className="flex flex-col">
-          Name
+          {t("tuner.nameLabel")}
           <input value={name} onChange={e => setName(e.target.value)} className="rounded border px-2 py-1 dark:bg-slate-900" />
         </label>
         <label className="flex flex-col">
-          Notes, low to high
+          {t("tuner.notesLowToHigh")}
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="D2 A2 D3 G3 B3 E4" className="rounded border px-2 py-1 dark:bg-slate-900" />
         </label>
         <button type="submit" className="secondary-button">
-          Save tuning
+          {t("tuner.saveTuning")}
         </button>
       </form>
       {error && (

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { t } from "../../i18n";
 
 const NEEDLE_RANGE = 50;
 
@@ -21,11 +22,11 @@ export function TunerNeedle({ cents, greenZone, active }: { cents: number | null
       viewBox="0 0 200 110"
       className="mx-auto w-full max-w-sm"
       role="meter"
-      aria-label="Tuning needle"
+      aria-label={t("tuner.needle")}
       aria-valuemin={-NEEDLE_RANGE}
       aria-valuemax={NEEDLE_RANGE}
       aria-valuenow={cents === null ? undefined : Math.round(cents * 10) / 10}
-      aria-valuetext={cents === null ? "No note" : inZone ? "In tune" : cents < 0 ? `${Math.abs(cents).toFixed(1)} cents flat` : `${cents.toFixed(1)} cents sharp`}
+      aria-valuetext={cents === null ? t("tuner.noNote") : inZone ? t("tuner.inTune") : cents < 0 ? t("tuner.centsFlat", { cents: Math.abs(cents).toFixed(1) }) : t("tuner.centsSharp", { cents: cents.toFixed(1) })}
       data-in-tune={inZone ? "true" : "false"}
     >
       <path d={`M ${arc(-60)} A 80 80 0 0 1 ${arc(60)}`} fill="none" stroke="currentColor" strokeOpacity={0.2} strokeWidth={10} />
@@ -85,7 +86,7 @@ export function DriftTrace({ history, now, greenZone }: { history: { time: numbe
   const y = (c: number) => height / 2 - (clampCents(c) / NEEDLE_RANGE) * (height / 2);
   const points = history.map(h => `${(width * (1 - (now - h.time) / span)).toFixed(1)},${y(h.cents).toFixed(1)}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-16 w-full" role="img" aria-label="Pitch drift over the last 8 seconds">
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-16 w-full" role="img" aria-label={t("tuner.driftTrace")}>
       <rect x={0} y={y(greenZone)} width={width} height={Math.max(1, y(-greenZone) - y(greenZone))} className="text-emerald-500" fill="currentColor" fillOpacity={0.15} />
       <line x1={0} x2={width} y1={height / 2} y2={height / 2} stroke="currentColor" strokeOpacity={0.3} />
       {history.length > 1 && <polyline points={points} fill="none" stroke="currentColor" strokeWidth={1.5} />}

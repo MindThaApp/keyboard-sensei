@@ -5,8 +5,13 @@ import {
   PLAYED_INSTRUMENTS,
   type PlayedInstrument,
 } from "@keyboard-sensei/shared-types";
+import { t } from "../i18n";
 
-export const INSTRUMENT_LABEL: Record<PlayedInstrument, string> = { piano: "Piano", guitar: "Guitar", violin: "Violin" };
+export const INSTRUMENT_LABEL: Record<PlayedInstrument, string> = {
+  get piano() { return t("played.piano"); },
+  get guitar() { return t("played.guitar"); },
+  get violin() { return t("played.violin"); },
+};
 
 /** Learn, Today and the gym show only the lessons for the instrument being played; a lesson with no instrument is piano. */
 export function filterByInstrument<T extends { instrument?: PlayedInstrument }>(lessons: readonly T[], active: PlayedInstrument): T[] {

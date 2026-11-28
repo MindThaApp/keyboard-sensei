@@ -1,4 +1,5 @@
 import { findGuitarChord, type GuitarChordShape } from "@keyboard-sensei/music-theory";
+import { t } from "../../i18n";
 
 /**
  * Guitar chord box: 6 strings (low E on the left), 4-5 frets, dots with finger numbers,
@@ -62,9 +63,14 @@ export default function ChordDiagram({ chord, frets, className }: ChordDiagramPr
   const model = diagramModel(shape, frets ?? 4);
   const bottom = GEOMETRY.top + model.rows * GEOMETRY.fretGap;
   const height = bottom + 12;
-  const description = `${shape.name} chord diagram: ${shape.frets
-    .map((fret, i) => `string ${6 - i} ${fret === null ? "muted" : fret === 0 ? "open" : `fret ${fret}`}`)
-    .join(", ")}`;
+  const description = t("guitar.chordDiagram", {
+    name: shape.name,
+    strings: shape.frets
+      .map((fret, i) =>
+        fret === null ? t("guitar.stringMuted", { n: 6 - i }) : fret === 0 ? t("guitar.stringOpen", { n: 6 - i }) : t("guitar.stringFret", { n: 6 - i, fret }),
+      )
+      .join(", "),
+  });
   return (
     <svg
       className={className}

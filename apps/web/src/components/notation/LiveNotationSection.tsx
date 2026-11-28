@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../i18n";
 import { midiToVexKey } from "../../utils/measureNotation";
 import { useMidiContext } from "../midi/MidiContext";
 import NotationRenderer from "./NotationRenderer";
@@ -94,7 +95,7 @@ export default function LiveNotationSection({ data, title }: { data: Record<stri
   if (fingerboard) {
     return (
       <div className="py-2">
-        <ViolinFingerboard marks={fingerboard.marks} pattern={fingerboard.pattern} title={title ?? "Violin fingerboard"} />
+        <ViolinFingerboard marks={fingerboard.marks} pattern={fingerboard.pattern} title={title ?? t("violin.fingerboard")} />
       </div>
     );
   }

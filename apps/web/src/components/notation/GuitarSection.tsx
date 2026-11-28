@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import ChordDiagram from "./ChordDiagram";
 import Fretboard, { type FretPosition } from "./Fretboard";
 import GuitarNotation, { isGuitarNotation, type GuitarNotationData } from "./GuitarNotation";
@@ -19,7 +20,7 @@ export default function GuitarSection({ data, title }: { data: Record<string, un
   if (data.kind === "chord-diagrams") {
     const chords = Array.isArray(data.chords) ? (data.chords as string[]) : [];
     return (
-      <div className="flex flex-wrap gap-4" role="group" aria-label={title ?? "Chord diagrams"}>
+      <div className="flex flex-wrap gap-4" role="group" aria-label={title ?? t("guitar.chordDiagrams")}>
         {chords.map((symbol) => <ChordDiagram key={symbol} chord={symbol} />)}
       </div>
     );
