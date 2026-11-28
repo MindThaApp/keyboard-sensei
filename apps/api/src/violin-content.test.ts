@@ -6,7 +6,10 @@ import { violinExercises, violinLessons } from "./content/violin.js";
 import { violinDrill, violinNotation } from "./content/violin-helpers.js";
 
 const exerciseById = new Map(exercises.map((exercise) => [exercise.exerciseId, exercise]));
-const violin = lessons.filter((lesson) => lesson.instrument === "violin");
+const allViolin = lessons.filter((lesson) => lesson.instrument === "violin");
+// The content checks below the id freeze are for tiers 0-2; tiers 3-4 have their own in content/violin-tier34.test.ts.
+const violin = allViolin.filter((lesson) => lesson.tier <= 2);
+const exerciseIdsOf = (lesson: (typeof lessons)[number]) => lesson.sections.flatMap((s) => (s.type === "midi-exercise" ? [s.exerciseId] : []));
 const violinHint = (hint: GuitarHint | ViolinHint | undefined): ViolinHint => {
   if (!isViolinHint(hint)) throw new Error("expected a violin hint");
   return hint;
@@ -20,11 +23,109 @@ const FROZEN_VIOLIN_LESSON_IDS = [
   "violin-first-steps", "violin-open-string-bowing", "violin-first-finger-pattern", "violin-simple-tunes-d-a",
   "violin-low-second-finger", "violin-g-string-g-major", "violin-e-string-high-notes", "violin-slurs-and-strokes",
   "violin-dotted-rhythms",
+  // Tiers 3-4 (violin-technique)
+  "violin-g-major-two-octaves", "violin-d-and-a-major-scales", "violin-fourth-finger", "violin-minor-scales",
+  "violin-bow-speed-tone", "violin-dynamics-phrases", "violin-tier-3-checkpoint",
+  "violin-shifting-first-third", "violin-third-position-scales", "violin-third-position-etudes", "violin-vibrato-basics",
+  "violin-double-stops-intro", "violin-ode-to-joy", "violin-minuet-in-g", "violin-greensleeves-arrangement",
+  "violin-tier-4-checkpoint",
 ];
+
+/** Exercise id -> owning lesson, in course order. Same rule: append, never edit. */
+const FROZEN_VIOLIN_EXERCISE_OWNERS: Record<string, string> = {
+  "violin-open-strings-gdae": "violin-first-steps",
+  "violin-open-a-lengths": "violin-open-string-bowing",
+  "violin-open-d-a-crossing": "violin-open-string-bowing",
+  "violin-open-four-strings": "violin-first-steps",
+  "violin-open-a-and-e": "violin-first-steps",
+  "violin-open-g-and-d": "violin-open-string-bowing",
+  "violin-a-string-0123": "violin-first-finger-pattern",
+  "violin-d-string-0123": "violin-first-finger-pattern",
+  "violin-d-major-scale": "violin-first-finger-pattern",
+  "violin-tune-morning-walk": "violin-simple-tunes-d-a",
+  "violin-tune-little-bridge": "violin-simple-tunes-d-a",
+  "violin-tune-two-strings": "violin-simple-tunes-d-a",
+  "violin-a-string-low2": "violin-low-second-finger",
+  "violin-d-string-low2": "violin-low-second-finger",
+  "violin-c-major-scale": "violin-low-second-finger",
+  "violin-g-string-0123": "violin-g-string-g-major",
+  "violin-g-major-scale": "violin-g-string-g-major",
+  "violin-tune-hilltop": "violin-g-string-g-major",
+  "violin-e-string-notes": "violin-e-string-high-notes",
+  "violin-tune-high-window": "violin-e-string-high-notes",
+  "violin-e-string-0123": "violin-e-string-high-notes",
+  "violin-slur-pairs": "violin-slurs-and-strokes",
+  "violin-slur-fours": "violin-slurs-and-strokes",
+  "violin-detache-fifths": "violin-slurs-and-strokes",
+  "violin-staccato-notes": "violin-slurs-and-strokes",
+  "violin-dotted-rhythm": "violin-dotted-rhythms",
+  "violin-dotted-waltz": "violin-dotted-rhythms",
+  "violin-dotted-march": "violin-dotted-rhythms",
+  "violin-g-major-2oct-up": "violin-g-major-two-octaves",
+  "violin-g-major-2oct-down": "violin-g-major-two-octaves",
+  "violin-g-major-2oct-arpeggio": "violin-g-major-two-octaves",
+  "violin-d-major-up": "violin-d-and-a-major-scales",
+  "violin-d-major-down": "violin-d-and-a-major-scales",
+  "violin-d-major-arpeggio": "violin-d-and-a-major-scales",
+  "violin-a-major-octave": "violin-d-and-a-major-scales",
+  "violin-fourth-finger-unisons": "violin-fourth-finger",
+  "violin-fourth-finger-g-string": "violin-fourth-finger",
+  "violin-fourth-finger-d-string": "violin-fourth-finger",
+  "violin-a-minor-2oct-up": "violin-minor-scales",
+  "violin-a-minor-2oct-down": "violin-minor-scales",
+  "violin-e-minor-octave": "violin-minor-scales",
+  "violin-tone-long-notes": "violin-bow-speed-tone",
+  "violin-tone-even-halves": "violin-bow-speed-tone",
+  "violin-tone-string-crossings": "violin-bow-speed-tone",
+  "violin-dynamics-phrase-piano": "violin-dynamics-phrases",
+  "violin-dynamics-phrase-forte": "violin-dynamics-phrases",
+  "violin-dynamics-phrase-pair": "violin-dynamics-phrases",
+  "violin-t3-check-thirds": "violin-tier-3-checkpoint",
+  "violin-t3-check-minor-tune": "violin-tier-3-checkpoint",
+  "violin-t3-check-d-major": "violin-tier-3-checkpoint",
+  "violin-shift-a-string": "violin-shifting-first-third",
+  "violin-shift-d-and-e-strings": "violin-shifting-first-third",
+  "violin-shift-slurred": "violin-shifting-first-third",
+  "violin-third-g-major-a-and-e": "violin-third-position-scales",
+  "violin-third-g-and-d-strings": "violin-third-position-scales",
+  "violin-third-e-string-connect": "violin-third-position-scales",
+  "violin-etude-third-position": "violin-third-position-etudes",
+  "violin-etude-shifting": "violin-third-position-etudes",
+  "violin-vibrato-long-notes": "violin-vibrato-basics",
+  "violin-vibrato-centre-pitch": "violin-vibrato-basics",
+  "violin-vibrato-in-a-melody": "violin-vibrato-basics",
+  "violin-double-stop-strings-one-at-a-time": "violin-double-stops-intro",
+  "violin-double-stop-drone-melody": "violin-double-stops-intro",
+  "violin-ode-to-joy": "violin-ode-to-joy",
+  "violin-ode-to-joy-first-phrase": "violin-ode-to-joy",
+  "violin-minuet-in-g": "violin-minuet-in-g",
+  "violin-minuet-in-g-bars-1-2": "violin-minuet-in-g",
+  "violin-greensleeves-first-four-bars": "violin-greensleeves-arrangement",
+  "violin-greensleeves-arrangement": "violin-greensleeves-arrangement",
+  "violin-t4-check-shifting": "violin-tier-4-checkpoint",
+  "violin-t4-check-third-position": "violin-tier-4-checkpoint",
+  "violin-t4-check-sustained-vibrato": "violin-tier-4-checkpoint",
+};
 
 describe("violin ids are stable database keys", () => {
   it("lesson ids are unchanged", () => {
-    expect(violin.map((lesson) => lesson.id).sort()).toEqual([...FROZEN_VIOLIN_LESSON_IDS].sort());
+    expect(allViolin.map((lesson) => lesson.id).sort()).toEqual([...FROZEN_VIOLIN_LESSON_IDS].sort());
+  });
+
+  it("exercise ids and their owning lessons are unchanged", () => {
+    expect(exercises.filter((e) => e.instrument === "violin").map((e) => e.exerciseId)).toEqual(Object.keys(FROZEN_VIOLIN_EXERCISE_OWNERS));
+    const owners = Object.fromEntries(allViolin.flatMap((lesson) => exerciseIdsOf(lesson).map((id) => [id, lesson.id])));
+    expect(owners).toEqual(FROZEN_VIOLIN_EXERCISE_OWNERS);
+  });
+
+  it("ships tiers 0-2 on violin-foundations and tiers 3-4 on violin-technique, one chain from the first lesson", () => {
+    for (const lesson of allViolin) expect(lesson.path).toBe(lesson.tier <= 2 ? "violin-foundations" : "violin-technique");
+    expect(allViolin[0]!.unlockCriteria.requiresLessonIds).toEqual([]);
+    allViolin.slice(1).forEach((lesson, index) => {
+      expect(lesson.unlockCriteria.requiresLessonIds).toEqual([allViolin[index]!.id]);
+      expect(allViolin[index]!.tier).toBeLessThanOrEqual(lesson.tier);
+    });
+    expect(allViolin.find((l) => l.id === "violin-g-major-two-octaves")!.unlockCriteria.requiresLessonIds).toEqual(["violin-dotted-rhythms"]);
   });
 
   it("exercise and quiz ids are unique across the whole course", () => {
@@ -67,8 +168,9 @@ describe("violin content", () => {
     });
     for (const lesson of violin) for (const id of lesson.unlockCriteria.requiresLessonIds) expect(ids.has(id)).toBe(true);
     // And a piano lesson never requires a violin lesson.
+    const allIds = new Set(allViolin.map((lesson) => lesson.id));
     for (const lesson of lessons.filter((item) => !item.instrument)) {
-      for (const id of lesson.unlockCriteria.requiresLessonIds) expect(ids.has(id), `${lesson.id} requires ${id}`).toBe(false);
+      for (const id of lesson.unlockCriteria.requiresLessonIds) expect(allIds.has(id), `${lesson.id} requires ${id}`).toBe(false);
     }
   });
 

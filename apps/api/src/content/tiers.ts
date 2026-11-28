@@ -1,6 +1,8 @@
 import type { Lesson, SkillChip, TierId } from "@keyboard-sensei/shared-types";
 import { GUITAR_LESSON_TIERS } from "./guitar-tiers.js";
 import { VIOLIN_LESSON_TIERS } from "./violin.js";
+import { guitarAdvancedLessons } from "./guitar-advanced.js";
+import { violinTier34Lessons } from "./violin-tier34.js";
 
 interface TierAssignment {
   tier: TierId;
@@ -91,6 +93,9 @@ export const LESSON_TIERS: Record<string, TierAssignment> = {
 
   // Guitar (see guitar-tiers.ts)
   ...GUITAR_LESSON_TIERS,
+
+  // Guitar and violin tiers 3-4: each lesson declares its own tier and skills.
+  ...Object.fromEntries([...guitarAdvancedLessons, ...violinTier34Lessons()].map((lesson) => [lesson.id, at(lesson.tier, [...lesson.skills])])),
 };
 
 /** The tier of a lesson id; throws if the lesson has no assignment. */
