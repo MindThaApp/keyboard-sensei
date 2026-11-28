@@ -316,3 +316,58 @@ export function pluckSequence(midiNotes: number[], options: { startS?: number; n
   }));
   return { samples: mix(sounds, startS + midiNotes.length * noteS + 0.3, sampleRate), onsets: sounds.map(s => s.startS) };
 }
+
+export interface MelodyNote {
+  midi: number;
+  startS: number;
+  durationS: number;
+  /** Detune from equal temperament at `a4`. */
+  cents?: number;
+  /** Peak amplitude (default 0.3). */
+  amplitude?: number;
+}
+
+export interface MelodyOptions {
+  /** "bowed" (sustained, soft attack), "plucked" (Karplus-Strong) or "piano" (inharmonic, decaying). Default "bowed". */
+  voice?: "bowed" | "plucked" | "piano";
+  a4?: number;
+  sampleRate?: number;
+  /** Total length; default the last note's end plus 0.3 s. */
+  durationS?: number;
+  /** Room noise under the melody: white noise at this RMS level, dBFS (default none). */
+  noiseDb?: number;
+  seed?: number;
+}
+
+/**
+ * A line of notes at given times on one voice, with optional room noise: the
+ * shape of a played exercise, for end-to-end tests of the note path.
+ */
+export function renderMelody(notes: readonly MelodyNote[], options: MelodyOptions = {}): Float32Array {
+  const { voice = "bowed", a4 = 440, sampleRate = DEFAULT_SAMPLE_RATE, seed = 1 } = options;
+  const durationS = options.durationS ?? Math.max(0, ...notes.map(n => n.startS + n.durationS)) + 0.3;
+  const sounds = notes.map((note, i) => {
+    const frequency = detune(a4 * 2 ** ((note.midi - 69) / 12), note.cents ?? 0);
+    const tone = { frequency, durationS: note.durationS, sampleRate, amplitude: note.amplitude ?? 0.3 };
+    let samples: Float32Array;
+    if (voice === "plucked") samples = karplusStrong({ ...tone, seed: seed + i });
+    else if (voice === "piano") samples = pianoTone(tone);
+    else samples = bowedTone({ ...tone, attackS: Math.min(0.05, note.durationS / 3), seed: seed + i });
+    // Plucked and struck notes are damped at their end; bowed tones release by themselves.
+    if (voice !== "bowed") releaseTail(samples, 0.02, sampleRate);
+    return { startS: note.startS, samples };
+  });
+  const out = mix(sounds, durationS, sampleRate);
+  if (options.noiseDb !== undefined) {
+    const level = 10 ** (options.noiseDb / 20);
+    const noise = seededGaussian(seed + 1000);
+    for (let i = 0; i < out.length; i++) out[i]! += level * noise();
+  }
+  return out;
+}
+
+/** Linear fade over the last `releaseS` seconds. */
+function releaseTail(signal: Float32Array, releaseS: number, sampleRate: number): void {
+  const fade = Math.min(Math.round(releaseS * sampleRate), signal.length);
+  for (let i = 0; i < fade; i++) signal[signal.length - 1 - i]! *= i / fade;
+}

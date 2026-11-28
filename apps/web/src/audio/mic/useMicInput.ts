@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { startMicCapture, MicUnavailableError, type MicCapture, type MicProfileId } from "./micCapture";
+import { startMicCapture, type MicCapture, type MicProfileId } from "./micCapture";
 import { MicNoteSource, type MicListenState } from "./micNoteSource";
 import { checkMicPermission, requestMicPermission } from "./micPermission";
-import { loadA4Hz, loadMicCalibration } from "./micSettings";
+import { MicError } from "./micPipeline";
+import { loadA4Hz } from "./micSettings";
 
 /**
  * One mic input for a screen: explanation first (once per device), permission,
@@ -71,8 +72,8 @@ export function useMicInput(profile: MicProfileId): MicInput {
     try {
       const capture = await startMicCapture(profile, (frame) => noteSource?.push(frame));
       if (run !== runRef.current) { capture.stop(); return }
-      const calibration = loadMicCalibration(capture.deviceId);
-      noteSource = new MicNoteSource({ a4Hz: loadA4Hz(), gateDb: calibration.gateDb, inputLatencyMs: calibration.latencyMs });
+      const { calibration } = capture;
+      noteSource = new MicNoteSource({ profile, a4Hz: loadA4Hz(), gateDb: calibration.gateDb, inputLatencyMs: calibration.latencyMs });
       noteSource.onStateChange(setListenState);
       captureRef.current = capture;
       setProcessingOn(capture.processingOn);
@@ -80,8 +81,8 @@ export function useMicInput(profile: MicProfileId): MicInput {
       setStatus("on");
     } catch (e) {
       if (run !== runRef.current) return;
-      const reason = e instanceof MicUnavailableError ? e.reason : "failed";
-      setStatus(reason === "denied" ? "denied" : reason === "unsupported" ? "unsupported" : "error");
+      const kind = e instanceof MicError ? e.kind : "failed";
+      setStatus(kind === "denied" ? "denied" : kind === "unsupported" || kind === "insecure" ? "unsupported" : "error");
       setError(e instanceof Error ? e.message : "The microphone could not be opened.");
     }
   }, [profile]);
